@@ -1,0 +1,14 @@
+{{!-- Core Stats --}}
+<div class="stats-grid">
+  {{#each statEntries as |entry|}}
+  <div class="stat-row">
+    <label class="stat-label" title="{{localize entry.fullLabel}}">{{#if entry.isFavored}}⚝{{/if}}{{localize entry.abbrLabel}}</label>
+    <input type="number" name="system.{{entry.key}}" value="{{entry.base}}" min="0" max="40" class="stat-base" />
+    <span class="stat-bonus" {{#if entry.bonus}}data-tooltip="{{entry.bonusTooltip}}" data-tooltip-direction="UP"{{/if}}>{{#if entry.bonus}}+{{entry.bonus}}{{else}}&mdash;{{/if}}</span>
+    <span class="stat-total">=&nbsp;{{entry.total}}</span>
+    <span class="stat-tn clickable" data-action="rollCheck" data-tn="{{entry.tn}}" data-label="{{localize entry.fullLabel}}">
+      TN: {{entry.tn}}%
+    </span>
+  </div>
+  {{/each}}
+</div>

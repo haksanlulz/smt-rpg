@@ -1,0 +1,136 @@
+<section class="smt-item-sheet consumable">
+  <header class="sheet-header">
+    <img class="profile-img" src="{{item.img}}" data-action="editImage" title="{{item.name}}" />
+    <div class="header-fields">
+      <h1><input name="name" type="text" value="{{item.name}}" placeholder="{{localize 'SMT.ItemName'}}" /></h1>
+    </div>
+  </header>
+
+  <section class="sheet-body">
+    <div class="form-group">
+      <label>{{localize "SMT.ConsumableType.Label"}}</label>
+      <select name="system.consumableType">
+        {{#each consumableTypeChoices as |label key|}}
+          <option value="{{key}}" {{#if (eq key ../system.consumableType)}}selected{{/if}}>{{localize label}}</option>
+        {{/each}}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>{{localize "SMT.Quantity"}}</label>
+        <input type="number" name="system.quantity" value="{{system.quantity}}" min="0" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.Price"}}</label>
+        <input type="number" name="system.price" value="{{system.price}}" min="0" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.ItemReusable"}}</label>
+        <input type="checkbox" name="system.reusable" {{checked system.reusable}} />
+      </div>
+    </div>
+
+    <div class="form-group full-width">
+      <label>{{localize "SMT.Effect"}}</label>
+      <textarea name="system.effect" rows="2">{{system.effect}}</textarea>
+    </div>
+
+    {{!-- Healing (medicine/gem/bead) --}}
+    {{#if showHealing}}
+    <fieldset>
+      <legend>{{localize "SMT.ItemHealing"}}</legend>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{localize "SMT.ItemHealHP"}}</label>
+          <input type="number" name="system.healHP" value="{{system.healHP}}" min="0" />
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.ItemHealMP"}}</label>
+          <input type="number" name="system.healMP" value="{{system.healMP}}" min="0" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{localize "SMT.ItemHealFull"}}</label>
+          <input type="checkbox" name="system.healFull" {{checked system.healFull}} />
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.ItemHealAllAllies"}}</label>
+          <input type="checkbox" name="system.healAllAllies" {{checked system.healAllAllies}} />
+        </div>
+      </div>
+    </fieldset>
+
+    {{!-- Ailment Cure / Revival (medicine/gem/bead) --}}
+    <fieldset>
+      <legend>{{localize "SMT.ItemCureRevive"}}</legend>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{localize "SMT.ItemCuresAilment"}}</label>
+          <select name="system.curesAilment">
+            <option value="none" {{#if (eq system.curesAilment "none")}}selected{{/if}}>{{localize "SMT.None"}}</option>
+            <option value="all" {{#if (eq system.curesAilment "all")}}selected{{/if}}>All</option>
+            {{#each @root.ailmentChoices as |label key|}}
+              <option value="{{key}}" {{#if (eq key ../system.curesAilment)}}selected{{/if}}>{{localize label}}</option>
+            {{/each}}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.ItemRevive"}}</label>
+          <input type="checkbox" name="system.revive" {{checked system.revive}} />
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.ItemReviveFull"}}</label>
+          <input type="checkbox" name="system.reviveFull" {{checked system.reviveFull}} />
+        </div>
+      </div>
+    </fieldset>
+    {{/if}}
+
+    {{!-- Attack (Rock items) --}}
+    {{#if showAttack}}
+    <fieldset>
+      <legend>{{localize "SMT.ItemAttack"}}</legend>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{localize "SMT.Power"}}</label>
+          <input type="number" name="system.attackPower" value="{{system.attackPower}}" min="0" />
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.Element.Label"}}</label>
+          <select name="system.attackElement">
+            {{#each @root.elementChoices as |label key|}}
+              <option value="{{key}}" {{#if (eq key ../system.attackElement)}}selected{{/if}}>{{localize label}}</option>
+            {{/each}}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.ItemAttackAll"}}</label>
+          <input type="checkbox" name="system.attackAll" {{checked system.attackAll}} />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{localize "SMT.AilmentType"}}</label>
+          <select name="system.attackAilment.type">
+            <option value="none" {{#if (eq system.attackAilment.type "none")}}selected{{/if}}>{{localize "SMT.None"}}</option>
+            {{#each @root.ailmentChoices as |label key|}}
+              <option value="{{key}}" {{#if (eq key ../system.attackAilment.type)}}selected{{/if}}>{{localize label}}</option>
+            {{/each}}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{localize "SMT.AilmentRate"}}</label>
+          <input type="number" name="system.attackAilment.rate" value="{{system.attackAilment.rate}}" min="0" max="100" />
+        </div>
+      </div>
+    </fieldset>
+    {{/if}}
+
+    <div class="form-group full-width">
+      <label>{{localize "SMT.Description"}}</label>
+      <textarea name="system.description" rows="3">{{system.description}}</textarea>
+    </div>
+  </section>
+</section>

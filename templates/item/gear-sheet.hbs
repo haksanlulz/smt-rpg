@@ -1,0 +1,65 @@
+<section class="smt-item-sheet gear">
+  <header class="sheet-header">
+    <img class="profile-img" src="{{item.img}}" data-action="editImage" title="{{item.name}}" />
+    <div class="header-fields">
+      <h1><input name="name" type="text" value="{{item.name}}" placeholder="{{localize 'SMT.GearName'}}" /></h1>
+    </div>
+  </header>
+
+  <section class="sheet-body">
+    <div class="form-group">
+      <label>{{localize "SMT.GearType.Label"}}</label>
+      <select name="system.gearType">
+        {{#each gearTypeChoices as |label key|}}
+          <option value="{{key}}" {{#if (eq key ../system.gearType)}}selected{{/if}}>{{localize label}}</option>
+        {{/each}}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>{{localize "SMT.PowerBonus"}}</label>
+        <input type="number" name="system.powerBonus" value="{{system.powerBonus}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.Price"}}</label>
+        <input type="number" name="system.price" value="{{system.price}}" min="0" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>{{localize "SMT.PhysResistBonus"}}</label>
+        <input type="number" name="system.resistBonus.physical" value="{{system.resistBonus.physical}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.MagResistBonus"}}</label>
+        <input type="number" name="system.resistBonus.magical" value="{{system.resistBonus.magical}}" />
+      </div>
+    </div>
+
+    {{!-- Ammo section (ranged weapons only) --}}
+    <div class="form-row">
+      <div class="form-group">
+        <label>{{localize "SMT.AmmoMax"}}</label>
+        <input type="number" name="system.ammo.max" value="{{system.ammo.max}}" min="0" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.AmmoCurrent"}}</label>
+        <input type="number" name="system.ammo.value" value="{{system.ammo.value}}" min="0" />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="system.equipped" {{#if system.equipped}}checked{{/if}} />
+        {{localize "SMT.Equipped"}}
+      </label>
+    </div>
+
+    <div class="form-group full-width">
+      <label>{{localize "SMT.Description"}}</label>
+      <textarea name="system.description" rows="3">{{system.description}}</textarea>
+    </div>
+  </section>
+</section>

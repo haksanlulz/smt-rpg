@@ -1,0 +1,9 @@
+<div class="smt-roll item-use">
+  <h3>{{userName}} — {{itemName}}</h3>
+  {{#if effect}}
+    <div class="roll-effect">{{effect}}</div>
+  {{/if}}
+  {{#each results as |line|}}
+    <div class="roll-breakdown"><span>{{line}}</span></div>
+  {{/each}}
+</div>

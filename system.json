@@ -1,0 +1,54 @@
+{
+  "type": "system",
+  "id": "smt-rpg",
+  "title": "Shin Megami Tensei: Tokyo Conception",
+  "description": "A Foundry VTT system for the Shin Megami Tensei: The Roleplaying Game - Tokyo Conception tabletop RPG. A d100 percentile-based system featuring Fiends, Demons, and Humans in the post-apocalyptic Vortex World.",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "14"
+  },
+  "authors": [
+    {
+      "name": "Abishai James"
+    }
+  ],
+  "esmodules": ["smt-rpg.mjs"],
+  "styles": ["styles/smt-rpg.css"],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "documentTypes": {
+    "Actor": {
+      "fiend": {
+        "htmlFields": ["background1", "background2", "goal", "contacts", "bonds", "notes"]
+      },
+      "demon": {
+        "htmlFields": ["background1", "background2", "goal", "contacts", "bonds", "notes"]
+      },
+      "human": {
+        "htmlFields": ["background1", "background2", "goal", "contacts", "bonds", "notes"]
+      },
+      "npc": {
+        "htmlFields": ["background1", "background2", "goal", "contacts", "bonds", "notes"]
+      }
+    },
+    "Item": {
+      "skill": {},
+      "magatama": {},
+      "gear": {},
+      "consumable": {}
+    }
+  },
+  "grid": {
+    "distance": 2,
+    "units": "m"
+  },
+  "primaryTokenAttribute": "hp",
+  "secondaryTokenAttribute": "mp",
+  "initiative": "1d10x10 + @agilityTotal"
+}

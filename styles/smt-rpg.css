@@ -1,0 +1,790 @@
+/* ============================================
+   SMT: Tokyo Conception - Foundry VTT System
+   ============================================ */
+
+:root {
+  --smt-primary: #1a1a2e;
+  --smt-secondary: #16213e;
+  --smt-accent: #e94560;
+  --smt-accent-dim: #c23152;
+  --smt-text: #eee;
+  --smt-text-dim: #aaa;
+  --smt-bg: #0f0f23;
+  --smt-bg-light: #1a1a3e;
+  --smt-border: #333;
+  --smt-success: #4caf50;
+  --smt-failure: #f44336;
+  --smt-critical: #ff9800;
+  --smt-fumble: #9c27b0;
+  --smt-weak: #f44336;
+  --smt-strong: #2196f3;
+  --smt-null: #607d8b;
+  --smt-drain: #4caf50;
+  --smt-repel: #ff9800;
+  --smt-hp: #e94560;
+  --smt-mp: #4a90d9;
+  --smt-fate: #f5c542;
+}
+
+/* ---- Sheet Container ---- */
+.smt-rpg.actor-sheet,
+.smt-rpg.item-sheet {
+  background: var(--smt-bg);
+  color: var(--smt-text);
+  font-family: "Signika", sans-serif;
+}
+
+/* Ensure the window-content fills the application and allows scrolling */
+.smt-rpg .window-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.smt-actor-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.smt-actor-sheet .sheet-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.smt-item-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.smt-item-sheet .sheet-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ---- Sheet Header ---- */
+.smt-actor-sheet .sheet-header,
+.smt-item-sheet .sheet-header {
+  display: flex;
+  gap: 12px;
+  padding: 8px;
+  background: var(--smt-secondary);
+  border-bottom: 2px solid var(--smt-accent);
+}
+
+.smt-actor-sheet .profile-img,
+.smt-item-sheet .profile-img {
+  width: 80px;
+  height: 80px;
+  border: 2px solid var(--smt-accent);
+  border-radius: 4px;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.smt-actor-sheet .header-fields,
+.smt-item-sheet .header-fields {
+  flex: 1;
+}
+
+.smt-item-sheet h1 input {
+  font-weight: bold;
+  color: var(--smt-text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--smt-border);
+  width: 100%;
+}
+
+.smt-actor-sheet .actor-class {
+  color: var(--smt-accent);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.smt-actor-sheet .header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.smt-actor-sheet .resource-row {
+  margin-top: 4px;
+}
+
+.smt-actor-sheet .resource {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.smt-actor-sheet .resource label {
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  text-transform: uppercase;
+}
+
+.smt-actor-sheet .resource input {
+  width: 60px;
+  text-align: center;
+}
+
+/* ---- Tabs ---- */
+.smt-actor-sheet .sheet-tabs {
+  display: flex;
+  background: var(--smt-primary);
+  border-bottom: 1px solid var(--smt-border);
+}
+
+.smt-actor-sheet .sheet-tabs .item {
+  padding: 6px 14px;
+  color: var(--smt-text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.5px;
+}
+
+.smt-actor-sheet .sheet-tabs .item.active {
+  color: var(--smt-accent);
+  border-bottom-color: var(--smt-accent);
+}
+
+.smt-actor-sheet .sheet-tabs .item:hover {
+  color: var(--smt-text);
+}
+
+/* ---- Sheet Body ---- */
+.smt-actor-sheet .sheet-body {
+  padding: 8px;
+}
+
+.smt-actor-sheet .sheet-body .tab {
+  display: none;
+}
+
+.smt-actor-sheet .sheet-body .tab.active {
+  display: block;
+}
+
+/* ---- Combat Resources ---- */
+.combat-resources {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.resource-bar {
+  flex: 1;
+}
+
+.resource-bar label {
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+.resource-bar.hp-bar label { color: var(--smt-hp); }
+.resource-bar.mp-bar label { color: var(--smt-mp); }
+.resource-bar.fate-bar label { color: var(--smt-fate); }
+
+.bar-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bar-container input {
+  width: 50px;
+  text-align: center;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+.bar-container .separator {
+  color: var(--smt-text-dim);
+}
+
+.bar-container .max-value {
+  font-weight: bold;
+  color: var(--smt-text-dim);
+}
+
+/* ---- Resistances & Base Power ---- */
+.resistances,
+.base-power,
+.derived-tns {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.resistance,
+.power-value,
+.tn-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.resistance label,
+.power-value label,
+.tn-value label {
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+}
+
+.resistance span,
+.power-value span {
+  font-weight: bold;
+}
+
+/* ---- Stats Grid ---- */
+.stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--smt-bg-light);
+  border-radius: 3px;
+}
+
+.stat-label {
+  width: 40px;
+  font-weight: bold;
+  text-transform: uppercase;
+  text-align: right;
+  color: var(--smt-accent);
+}
+
+.stat-base {
+  width: 40px;
+  text-align: center;
+}
+
+.stat-bonus {
+  color: var(--smt-success);
+  font-size: 0.85em;
+  width: 30px;
+  text-align: center;
+}
+
+.stat-total {
+  font-weight: bold;
+  width: 40px;
+}
+
+.stat-tn {
+  margin-left: auto;
+  color: var(--smt-text-dim);
+}
+
+/* ---- Affinities Grid ---- */
+.affinities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.affinity-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  border-radius: 3px;
+  background: var(--smt-bg-light);
+  font-size: 0.85em;
+}
+
+.affinity-cell label {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  color: var(--smt-text-dim);
+  margin-bottom: 2px;
+}
+
+.affinity-cell select {
+  width: 80px;
+  font-size: 0.8em;
+  text-align: center;
+}
+
+.affinity-cell.weak { border-left: 3px solid #f44336; }
+.affinity-cell.strong { border-left: 3px solid #4caf50; }
+.affinity-cell.null { border-left: 3px solid #9e9e9e; }
+.affinity-cell.drain { border-left: 3px solid #2196f3; }
+.affinity-cell.repel { border-left: 3px solid #ff9800; }
+
+/* ---- Skills Table ---- */
+.skill-count {
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin-bottom: 4px;
+}
+
+.items-list {
+  font-size: 0.85em;
+}
+
+.items-header {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--smt-secondary);
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  border-bottom: 1px solid var(--smt-accent);
+}
+
+.items-list .item {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--smt-border);
+}
+
+.items-list .item:hover {
+  background: var(--smt-bg-light);
+}
+
+.items-list .item-name {
+  flex: 2;
+}
+
+.items-list .item-detail {
+  flex: 1;
+  text-align: center;
+}
+
+.items-list .item-detail.effect {
+  flex: 3;
+  text-align: left;
+  font-size: 0.9em;
+  color: var(--smt-text-dim);
+}
+
+.items-list .item-controls {
+  display: flex;
+  gap: 4px;
+  width: 50px;
+  justify-content: flex-end;
+}
+
+.item-control {
+  cursor: pointer;
+  color: var(--smt-text-dim);
+}
+
+.item-control:hover {
+  color: var(--smt-accent);
+}
+
+.skill-row.passive {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ---- Basic Strike ---- */
+.basic-strike {
+  margin: 8px 0;
+  padding: 8px;
+  background: var(--smt-bg-light);
+  border-radius: 4px;
+  border-left: 3px solid var(--smt-accent);
+}
+
+.basic-strike h3 {
+  margin: 0 0 4px 0;
+  font-size: 0.9em;
+  color: var(--smt-accent);
+}
+
+.strike-row {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9em;
+}
+
+/* ---- Ailment ---- */
+.ailment-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ailment-status select {
+  width: 120px;
+}
+
+/* ---- Bio Fields ---- */
+.bio-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bio-fields .form-group {
+  width: 100%;
+}
+
+.bio-fields .form-group.full-width {
+  width: 100%;
+}
+
+.bio-fields label {
+  display: block;
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* Rich text editor containers */
+.editor-container {
+  min-height: 80px;
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+}
+
+.editor-container.large {
+  min-height: 160px;
+}
+
+.editor-container .editor {
+  min-height: inherit;
+}
+
+.editor-container .editor-content {
+  min-height: inherit;
+  padding: 4px;
+  color: var(--smt-text);
+}
+
+/* ---- Form Inputs (global) ---- */
+.smt-rpg input[type="text"],
+.smt-rpg input[type="number"],
+.smt-rpg select,
+.smt-rpg textarea {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--smt-border);
+  color: var(--smt-text);
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+
+/* Fix dropdown/select styling — dark background and light text for options */
+.smt-rpg select {
+  background-color: var(--smt-bg-light);
+  color: var(--smt-text);
+}
+
+.smt-rpg select option {
+  background-color: var(--smt-bg);
+  color: var(--smt-text);
+}
+
+.smt-rpg input:focus,
+.smt-rpg select:focus,
+.smt-rpg textarea:focus {
+  border-color: var(--smt-accent);
+  outline: none;
+}
+
+/* ---- Name Input Fix ---- */
+.smt-actor-sheet .actor-name {
+  margin: 0;
+}
+
+.smt-actor-sheet .actor-name input,
+.smt-item-sheet h1 input {
+  font-size: 1.1em;
+  padding: 2px 4px;
+  height: auto;
+  line-height: 1.3;
+}
+
+/* ---- Portrait / Token Image ---- */
+.smt-actor-sheet .profile-img,
+.smt-item-sheet .profile-img {
+  cursor: pointer;
+}
+
+/* ---- Add Item Buttons ---- */
+.add-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  background: var(--smt-bg-light);
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  color: var(--smt-text-dim);
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.add-item-btn:hover {
+  color: var(--smt-accent);
+  border-color: var(--smt-accent);
+}
+
+/* ---- Item Sheet ---- */
+.smt-item-sheet .sheet-body {
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.smt-item-sheet .form-group {
+  margin-bottom: 8px;
+}
+
+.smt-item-sheet .form-group label {
+  display: block;
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.smt-item-sheet .form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.smt-item-sheet .form-row .form-group {
+  flex: 1;
+}
+
+.smt-item-sheet .form-group.full-width {
+  width: 100%;
+}
+
+.smt-item-sheet .form-group input,
+.smt-item-sheet .form-group select,
+.smt-item-sheet .form-group textarea {
+  width: 100%;
+}
+
+/* ---- Magatama skill list editor ---- */
+.skill-list-editor .skill-entry {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.skill-list-editor .skill-entry input[type="text"] {
+  flex: 2;
+}
+
+.skill-list-editor .skill-entry input[type="number"] {
+  width: 50px;
+}
+
+/* ---- Stat Bonuses Grid (magatama) ---- */
+.stat-bonuses-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stat-bonuses-grid .form-group {
+  flex: 1 1 80px;
+}
+
+.stat-bonuses-grid input {
+  width: 50px;
+}
+
+/* ---- NPC sheet ---- */
+.npc-behavior,
+.npc-drops {
+  margin: 12px 0;
+  padding: 8px;
+  background: var(--smt-bg-light);
+  border-radius: 4px;
+}
+
+.npc-behavior h3,
+.npc-drops h3 {
+  color: var(--smt-accent);
+  margin: 0 0 8px 0;
+}
+
+/* ---- Clickable Elements ---- */
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  color: var(--smt-accent);
+  text-decoration: underline;
+}
+
+/* ---- Chat Roll Messages ---- */
+.smt-roll {
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--smt-bg);
+  color: var(--smt-text);
+}
+
+.smt-roll h3 {
+  margin: 0 0 4px 0;
+  font-size: 1em;
+  color: var(--smt-text);
+}
+
+.smt-roll .roll-result {
+  font-size: 1.3em;
+  font-weight: bold;
+  margin: 4px 0;
+}
+
+.smt-roll .roll-tn {
+  color: var(--smt-text-dim);
+  font-weight: normal;
+}
+
+.smt-roll .roll-outcome {
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.smt-roll .roll-outcome.success { background: var(--smt-success); color: #fff; }
+.smt-roll .roll-outcome.critical { background: var(--smt-critical); color: #000; }
+.smt-roll .roll-outcome.failure { background: var(--smt-failure); color: #fff; }
+.smt-roll .roll-outcome.auto-fail { background: var(--smt-failure); color: #fff; }
+.smt-roll .roll-outcome.fumble { background: var(--smt-fumble); color: #fff; }
+
+.smt-roll.power .roll-breakdown {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin: 4px 0;
+}
+
+.smt-roll .roll-effect {
+  font-style: italic;
+  color: var(--smt-text-dim);
+  margin-top: 4px;
+}
+
+/* ---- Damage Result Cards ---- */
+.smt-roll.damage .damage-breakdown {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin: 4px 0;
+}
+
+.smt-roll.damage .damage-breakdown .critical {
+  color: var(--smt-critical);
+  font-weight: bold;
+}
+
+.smt-roll.damage .roll-outcome.weak { background: var(--smt-weak); color: #fff; }
+.smt-roll.damage .roll-outcome.strong { background: var(--smt-strong); color: #fff; }
+.smt-roll.damage .roll-outcome.null { background: var(--smt-null); color: #fff; }
+.smt-roll.damage .roll-outcome.drain { background: var(--smt-drain); color: #fff; }
+.smt-roll.damage .roll-outcome.repel { background: var(--smt-repel); color: #000; }
+
+.smt-roll.damage .roll-result .roll-label {
+  display: block;
+  font-size: 0.7em;
+  font-weight: normal;
+  color: var(--smt-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ---- Pending Attack & Dodge Cards ---- */
+.smt-roll.attack-pending .attack-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.smt-roll.attack-pending .attack-buttons button {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  background: var(--smt-bg-light);
+  color: var(--smt-text);
+  cursor: pointer;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+.smt-roll.attack-pending .attack-buttons button:hover {
+  background: var(--smt-accent);
+  border-color: var(--smt-accent);
+  color: #fff;
+}
+
+.smt-roll.dodge .roll-outcome.miss { background: var(--smt-success); color: #fff; }
+.smt-roll.dodge .roll-outcome.downgrade { background: var(--smt-strong); color: #fff; }
+.smt-roll.dodge .roll-outcome.fumble { background: var(--smt-fumble); color: #fff; }
+.smt-roll.dodge .roll-outcome.fail { background: var(--smt-failure); color: #fff; }
+
+/* ---- Ailment Result Cards ---- */
+.smt-roll.ailment.inflicted .roll-outcome { background: var(--smt-fumble); color: #fff; }
+.smt-roll.ailment.resisted .roll-outcome { background: var(--smt-success); color: #fff; }
+
+/* ---- Fate Point Buttons ---- */
+.smt-roll .fate-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.smt-roll .fate-buttons:empty {
+  display: none;
+}
+
+.smt-roll .fate-buttons button {
+  flex: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--smt-fate);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--smt-fate);
+  cursor: pointer;
+  font-size: 0.75em;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.smt-roll .fate-buttons button:hover {
+  background: var(--smt-fate);
+  color: #000;
+}

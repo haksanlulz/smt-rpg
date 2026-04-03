@@ -1,0 +1,40 @@
+<div class="smt-roll damage {{affinity}}">
+  <h3>{{skillName}} — {{targetName}}</h3>
+
+  {{#if isNull}}
+    <div class="roll-outcome null">{{localize "SMT.Damage.Null"}}</div>
+  {{else if isDrain}}
+    <div class="roll-outcome drain">{{localize "SMT.Damage.Drain"}}</div>
+    <div class="damage-breakdown">
+      <span>{{localize "SMT.Damage.Healed"}}: +{{healedAmount}} HP</span>
+    </div>
+  {{else if isRepel}}
+    <div class="roll-outcome repel">{{localize "SMT.Damage.Repel"}}</div>
+    <div class="damage-breakdown">
+      <span>{{localize "SMT.Damage.Reflected"}}: {{reflectedAmount}} → {{attackerName}}</span>
+    </div>
+  {{else}}
+    {{#if (ne affinity "normal")}}
+      <div class="roll-outcome {{affinity}}">
+        {{#if (eq affinity "weak")}}{{localize "SMT.Damage.Weak"}}{{/if}}
+        {{#if (eq affinity "strong")}}{{localize "SMT.Damage.Strong"}}{{/if}}
+      </div>
+    {{/if}}
+    <div class="damage-breakdown">
+      <span>{{localize "SMT.Damage.Raw"}}: {{rawPower}}</span>
+      {{#if (ne affinity "normal")}}
+        <span>{{localize "SMT.Damage.AfterAffinity"}}: {{afterAffinity}}</span>
+      {{/if}}
+      {{#if isCritical}}
+        <span class="critical">{{localize "SMT.Damage.ResistIgnored"}}</span>
+      {{else if resistanceApplied}}
+        <span>{{localize "SMT.Damage.Resistance"}}: -{{resistanceApplied}}</span>
+      {{/if}}
+    </div>
+    <div class="roll-result">
+      <span class="roll-value">{{finalDamage}}</span>
+      <span class="roll-label">{{localize "SMT.Damage.Final"}}</span>
+    </div>
+  {{/if}}
+  <div class="fate-buttons"></div>
+</div>

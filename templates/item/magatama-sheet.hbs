@@ -1,0 +1,62 @@
+<section class="smt-item-sheet magatama">
+  <header class="sheet-header">
+    <img class="profile-img" src="{{item.img}}" data-action="editImage" title="{{item.name}}" />
+    <div class="header-fields">
+      <h1><input name="name" type="text" value="{{item.name}}" placeholder="{{localize 'SMT.MagatamaName'}}" /></h1>
+    </div>
+  </header>
+
+  <section class="sheet-body">
+    <div class="form-group">
+      <label>{{localize "SMT.Acquisition"}}</label>
+      <input type="text" name="system.acquisition" value="{{system.acquisition}}" />
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="system.isStarter" {{#if system.isStarter}}checked{{/if}} />
+        {{localize "SMT.Starter"}}
+      </label>
+    </div>
+
+    <h3>{{localize "SMT.StatBonuses"}}</h3>
+    <div class="stat-bonuses-grid">
+      {{#each statKeys as |stat|}}
+      <div class="form-group">
+        <label>{{localize (lookup @root.statLabels stat)}}</label>
+        <input type="number" name="system.statBonuses.{{stat}}" value="{{lookup ../system.statBonuses stat}}" />
+      </div>
+      {{/each}}
+    </div>
+
+    <h3>{{localize "SMT.Affinities"}}</h3>
+    <div class="affinities-grid">
+      {{#each affinityEntries as |entry|}}
+      <div class="affinity-cell {{entry.rating}}">
+        <label>{{localize entry.label}}</label>
+        <select name="system.affinities.{{entry.key}}">
+          {{#each @root.affinityChoices as |label key|}}
+            <option value="{{key}}" {{#if (eq key entry.rating)}}selected{{/if}}>{{localize label}}</option>
+          {{/each}}
+        </select>
+      </div>
+      {{/each}}
+    </div>
+
+    <h3>{{localize "SMT.SkillList"}}</h3>
+    <div class="skill-list-editor">
+      {{#each system.skillList as |entry idx|}}
+      <div class="skill-entry">
+        <input type="text" name="system.skillList.{{idx}}.skillName" value="{{entry.skillName}}" placeholder="Skill Name" />
+        <label>Lv</label>
+        <input type="number" name="system.skillList.{{idx}}.learnLevel" value="{{entry.learnLevel}}" min="1" />
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="form-group full-width">
+      <label>{{localize "SMT.Description"}}</label>
+      <textarea name="system.description" rows="3">{{system.description}}</textarea>
+    </div>
+  </section>
+</section>
