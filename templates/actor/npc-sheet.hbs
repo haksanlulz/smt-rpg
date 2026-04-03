@@ -1,0 +1,74 @@
+<section class="smt-actor-sheet npc">
+  <header class="sheet-header">
+    <img class="profile-img" src="{{actor.img}}" title="{{actor.name}}" data-action="editImage" />
+    <div class="header-fields">
+      <h1 class="actor-name">
+        <input name="name" type="text" value="{{actor.name}}" placeholder="{{localize 'SMT.Name'}}" />
+      </h1>
+      <div class="header-row">
+        <div class="resource">
+          <label>{{localize "SMT.Clan"}}</label>
+          <input type="text" name="system.clan" value="{{system.clan}}" />
+        </div>
+        <div class="resource">
+          <label>{{localize "SMT.Level"}}</label>
+          <input type="number" name="system.level" value="{{system.level}}" />
+        </div>
+        <div class="resource">
+          <label>
+            <input type="checkbox" name="system.isBoss" {{#if system.isBoss}}checked{{/if}} />
+            {{localize "SMT.Boss"}}
+          </label>
+        </div>
+        <div class="resource">
+          <label>
+            <input type="checkbox" name="system.negotiable" {{#if system.negotiable}}checked{{/if}} />
+            {{localize "SMT.Negotiable"}}
+          </label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="sheet-body" style="overflow-y: auto; flex: 1;">
+    {{!-- Resources --}}
+    {{> "systems/smt-rpg/templates/actor/partials/combat.hbs"}}
+    {{> "systems/smt-rpg/templates/actor/partials/stats.hbs"}}
+    {{> "systems/smt-rpg/templates/actor/partials/affinities.hbs"}}
+    {{> "systems/smt-rpg/templates/actor/partials/skills.hbs"}}
+
+    {{!-- Behavior --}}
+    <div class="npc-behavior">
+      <h3>{{localize "SMT.Behavior"}}</h3>
+      <div class="form-group">
+        <label>{{localize "SMT.Personality"}}</label>
+        <input type="text" name="system.behavior.personality" value="{{system.behavior.personality}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.Gender"}}</label>
+        <input type="text" name="system.behavior.gender" value="{{system.behavior.gender}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.Age"}}</label>
+        <input type="text" name="system.behavior.age" value="{{system.behavior.age}}" />
+      </div>
+    </div>
+
+    {{!-- Drops --}}
+    <div class="npc-drops">
+      <h3>{{localize "SMT.Drops"}}</h3>
+      <div class="form-group">
+        <label>{{localize "SMT.Items"}}</label>
+        <input type="text" name="system.drops.normalItems" value="{{system.drops.normalItems}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.Macca"}}</label>
+        <input type="number" name="system.drops.macca" value="{{system.drops.macca}}" />
+      </div>
+      <div class="form-group">
+        <label>{{localize "SMT.EXP"}}</label>
+        <input type="number" name="system.drops.exp" value="{{system.drops.exp}}" />
+      </div>
+    </div>
+  </section>
+</section>

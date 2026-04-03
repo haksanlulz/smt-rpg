@@ -1,0 +1,30 @@
+{{!-- Affinities Grid --}}
+<div class="affinities-section">
+  <h3>{{localize "SMT.Affinities"}}</h3>
+  <div class="affinities-grid">
+    {{#each affinityEntries as |entry|}}
+    <div class="affinity-cell {{entry.rating}}">
+      <label>{{localize entry.label}}</label>
+      <select name="system.affinities.{{entry.key}}">
+        {{#each @root.affinityChoices as |label key|}}
+          <option value="{{key}}" {{#if (eq key entry.rating)}}selected{{/if}}>{{localize label}}</option>
+        {{/each}}
+      </select>
+    </div>
+    {{/each}}
+  </div>
+
+  <h3>{{localize "SMT.AilmentAffinities"}}</h3>
+  <div class="affinities-grid">
+    {{#each ailmentAffinityEntries as |entry|}}
+    <div class="affinity-cell {{entry.rating}}">
+      <label>{{localize entry.label}}</label>
+      <select name="system.ailmentAffinities.{{entry.key}}">
+        {{#each @root.ailmentAffinityChoices as |label key|}}
+          <option value="{{key}}" {{#if (eq key entry.rating)}}selected{{/if}}>{{localize label}}</option>
+        {{/each}}
+      </select>
+    </div>
+    {{/each}}
+  </div>
+</div>

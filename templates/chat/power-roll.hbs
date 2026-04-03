@@ -1,0 +1,17 @@
+<div class="smt-roll power {{#if isCritical}}critical{{/if}}">
+  <h3>{{label}}</h3>
+  <div class="roll-breakdown">
+    <span>{{localize "SMT.Roll.BasePower"}}: {{basePower}}</span>
+    {{#if skillPower}}
+      <span>{{localize "SMT.Roll.SkillPower"}}: +{{skillPower}}</span>
+    {{/if}}
+    <span>{{localize "SMT.Roll.DiceRoll"}}: +{{diceTotal}}</span>
+    {{#if isCritical}}
+      <span class="roll-outcome critical">{{localize "SMT.Roll.Critical"}} (x2)</span>
+    {{/if}}
+  </div>
+  <div class="roll-result">
+    <span class="roll-value">{{total}}</span>
+    <span class="roll-label">{{localize "SMT.Roll.TotalPower"}}</span>
+  </div>
+</div>

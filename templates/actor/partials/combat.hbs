@@ -1,0 +1,107 @@
+{{!-- HP / MP / Fate Bars --}}
+<div class="combat-resources">
+  <div class="resource-bar hp-bar">
+    <label>{{localize "SMT.HP"}}</label>
+    <div class="bar-container">
+      <input type="number" name="system.hp.value" value="{{system.hp.value}}" min="0" max="{{system.hp.max}}" />
+      <span class="separator">/</span>
+      <span class="max-value">{{system.hp.max}}</span>
+    </div>
+  </div>
+
+  <div class="resource-bar mp-bar">
+    <label>{{localize "SMT.MP"}}</label>
+    <div class="bar-container">
+      <input type="number" name="system.mp.value" value="{{system.mp.value}}" min="0" max="{{system.mp.max}}" />
+      <span class="separator">/</span>
+      <span class="max-value">{{system.mp.max}}</span>
+    </div>
+  </div>
+
+  <div class="resource-bar fate-bar">
+    <label>{{localize "SMT.Fate"}}</label>
+    <div class="bar-container">
+      <input type="number" name="system.fatePoints.value" value="{{system.fatePoints.value}}" min="0" max="{{system.fatePoints.max}}" />
+      <span class="separator">/</span>
+      <span class="max-value">{{system.fatePoints.max}}</span>
+    </div>
+  </div>
+</div>
+
+{{!-- Resistances --}}
+<div class="resistances">
+  <div class="resistance">
+    <label>{{localize "SMT.PhysResist"}}</label>
+    <span>{{system.physicalResistance}}</span>
+  </div>
+  <div class="resistance">
+    <label>{{localize "SMT.MagResist"}}</label>
+    <span>{{system.magicalResistance}}</span>
+  </div>
+</div>
+
+{{!-- Base Power --}}
+<div class="base-power">
+  <div class="power-value">
+    <label>{{localize "SMT.BasePhysPower"}}</label>
+    <span>{{system.basePhysicalPower}}</span>
+  </div>
+  <div class="power-value">
+    <label>{{localize "SMT.BaseMagPower"}}</label>
+    <span>{{system.baseMagicalPower}}</span>
+  </div>
+</div>
+
+{{!-- Derived TNs --}}
+<div class="derived-tns">
+  <div class="tn-value">
+    <label>{{localize "SMT.DodgeTN"}}</label>
+    <span class="clickable" data-action="rollCheck" data-tn="{{system.dodgeTN}}" data-label="Dodge">{{system.dodgeTN}}%</span>
+  </div>
+  <div class="tn-value">
+    <label>{{localize "SMT.NegotiationTN"}}</label>
+    <span class="clickable" data-action="rollCheck" data-tn="{{system.negotiationTN}}" data-label="Negotiation">{{system.negotiationTN}}%</span>
+  </div>
+  <div class="tn-value">
+    <label>{{localize "SMT.SaveTN"}}</label>
+    <span class="clickable" data-action="rollCheck" data-tn="{{system.saveTN}}" data-label="Save">{{system.saveTN}}%</span>
+  </div>
+</div>
+
+{{!-- Ailment --}}
+<div class="ailment-status">
+  <label>{{localize "SMT.Ailment.Label"}}</label>
+  <select name="system.ailment">
+    <option value="none" {{#if (eq system.ailment "none")}}selected{{/if}}>{{localize "SMT.None"}}</option>
+    {{#each ailmentChoices as |label key|}}
+      <option value="{{key}}" {{#if (eq key ../system.ailment)}}selected{{/if}}>{{localize label}}</option>
+    {{/each}}
+  </select>
+</div>
+
+{{!-- Basic Attack (Strike) --}}
+<div class="basic-strike">
+  <h3>{{localize "SMT.BasicAttack"}}</h3>
+  <div class="strike-row">
+    <span class="clickable" data-action="strike">
+      {{localize "SMT.HitCheck"}}: {{system.strengthTN}}%
+    </span>
+    <span>{{localize "SMT.Power"}}: {{system.basePhysicalPower}}</span>
+    <span>{{localize "SMT.Element.Phys"}}</span>
+  </div>
+</div>
+
+{{!-- Shoot (Ranged Weapon — Human only) --}}
+{{#if system.hasRangedWeapon}}
+<div class="basic-strike">
+  <h3>{{localize "SMT.Shoot"}} ({{system.rangedWeapon.name}})</h3>
+  <div class="strike-row">
+    <span class="clickable" data-action="shoot">
+      {{localize "SMT.HitCheck"}}: {{system.rangedWeapon.tn}}%
+    </span>
+    <span>{{localize "SMT.Power"}}: {{system.rangedWeapon.power}}</span>
+    <span>{{localize "SMT.Element.Phys"}}</span>
+    <span>{{localize "SMT.Ammo"}}: {{system.rangedWeapon.ammo.value}} / {{system.rangedWeapon.ammo.max}}</span>
+  </div>
+</div>
+{{/if}}

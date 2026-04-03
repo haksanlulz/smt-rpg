@@ -1,0 +1,13 @@
+<div class="smt-roll attack-pending {{#if isCritical}}critical{{/if}}">
+  <h3>{{skillName}} → {{targetName}}</h3>
+  <div class="roll-breakdown">
+    <span>{{localize "SMT.Damage.Raw"}}: {{rawPower}}</span>
+    {{#if isCritical}}
+      <span class="roll-outcome critical">{{localize "SMT.Roll.Critical"}}</span>
+    {{/if}}
+  </div>
+  <div class="attack-buttons">
+    <button type="button" data-action="dodge">{{localize "SMT.DodgeButton"}}</button>
+    <button type="button" data-action="apply-damage">{{localize "SMT.DodgeApplyDamage"}}</button>
+  </div>
+</div>

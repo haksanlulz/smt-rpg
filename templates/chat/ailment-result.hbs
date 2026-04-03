@@ -1,0 +1,13 @@
+<div class="smt-roll ailment {{#if success}}inflicted{{else}}resisted{{/if}}">
+  <h3>{{targetName}} — {{localize "SMT.AilmentCheck"}}</h3>
+  <div class="roll-breakdown">
+    <span>{{ailmentLabel}}: {{roll}} / {{rate}}%</span>
+  </div>
+  <div class="roll-outcome {{#if success}}failure{{else}}success{{/if}}">
+    {{#if success}}
+      {{localize "SMT.AilmentInflicted"}}
+    {{else}}
+      {{localize "SMT.AilmentResisted"}}
+    {{/if}}
+  </div>
+</div>
