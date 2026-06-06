@@ -23,44 +23,43 @@ export default class NPCData extends SMTBaseActorData {
     };
   }
 
-  get hpMultiplier() {
-    return 6;
-  }
-
-  get mpMultiplier() {
-    return 3;
-  }
+  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
+  // (CONFIG.SMT.hpMultipliers.npc = 6, mpMultipliers.npc = 3, p.36).
 
   prepareDerivedData() {
     super.prepareDerivedData();
 
     // Boss trait: double HP and MP (p.123)
     if (this.isBoss) {
-      this.hp.max = Math.floor(this.hp.max * 2);
-      this.mp.max = Math.floor(this.mp.max * 2);
+      const boss = CONFIG.SMT.bossHpMpMultiplier;
+      this.hp.max = Math.floor(this.hp.max * boss);
+      this.mp.max = Math.floor(this.mp.max * boss);
     }
     this._clampCurrentValues();
   }
 
-  // Scale current HP/MP when boss trait is toggled to preserve ratio
-  _preUpdate(changed, options, userId) {
-    super._preUpdate(changed, options, userId);
+  // Scale current HP/MP when boss trait is toggled to preserve ratio (p.123).
+  // v14: _preUpdate(changes, options, user) is async; returning false vetoes.
+  async _preUpdate(changed, options, user) {
+    // Honor a veto from the parent pre-update workflow.
+    const result = await super._preUpdate(changed, options, user);
+    if (result === false) return false;
+
     if (!("isBoss" in changed)) return;
 
     const wasBoss = this.isBoss;
     const willBeBoss = changed.isBoss;
     if (willBeBoss === wasBoss) return;
 
+    const boss = CONFIG.SMT.bossHpMpMultiplier;
+    changed.hp ??= {};
+    changed.mp ??= {};
     if (willBeBoss) {
-      changed.hp ??= {};
-      changed.mp ??= {};
-      changed.hp.value = this.hp.value * 2;
-      changed.mp.value = this.mp.value * 2;
+      changed.hp.value = this.hp.value * boss;
+      changed.mp.value = this.mp.value * boss;
     } else {
-      changed.hp ??= {};
-      changed.mp ??= {};
-      changed.hp.value = Math.floor(this.hp.value / 2);
-      changed.mp.value = Math.floor(this.mp.value / 2);
+      changed.hp.value = Math.floor(this.hp.value / boss);
+      changed.mp.value = Math.floor(this.mp.value / boss);
     }
   }
 }

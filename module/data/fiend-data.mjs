@@ -12,13 +12,8 @@ export default class FiendData extends SMTBaseActorData {
     };
   }
 
-  get hpMultiplier() {
-    return 6;
-  }
-
-  get mpMultiplier() {
-    return 3;
-  }
+  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
+  // (CONFIG.SMT.hpMultipliers.fiend = 6, mpMultipliers.fiend = 3, p.36).
 
   prepareDerivedData() {
     this._applyActiveMagatama();

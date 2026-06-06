@@ -7,7 +7,7 @@ export default class ConsumableData extends foundry.abstract.TypeDataModel {
       consumableType: new StringField({
         required: true,
         initial: "medicine",
-        choices: ["medicine", "gem", "rock", "bead", "key"]
+        choices: Object.keys(CONFIG.SMT.consumableTypes)
       }),
       effect: new StringField({ initial: "" }),
       quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),

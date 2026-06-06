@@ -100,35 +100,30 @@ export default class SMTItem extends Item {
     const stat = this.system.checkStat;
     const label = `${this.name} (${game.i18n.localize(`SMT.Stat.${stat.charAt(0).toUpperCase() + stat.slice(1)}`)})`;
 
-    // Might passive: crit threshold TN/5 instead of TN/10
-    const hasMight = this.isPhysicalSkill && actor.items.some(i => i.type === "skill" && i.name === "Might");
+    // Might passive: crit threshold TN/5 instead of TN/10 (getter, physical only)
+    const hasMight = this.isPhysicalSkill && actor.system.hasMightPassive;
     const checkResult = await actor.rollPercentile(tn, label, { hasMight });
 
-    // Store for FP reroll/boost buttons
+    // Store for FP reroll/boost buttons (shared checkData builder)
     if (actor.system.fatePoints.value > 0) {
-      const { getTokenUuid } = await import("../helpers/combat.mjs");
+      const { buildCheckData } = await import("../helpers/combat.mjs");
       const msg = game.messages.get(checkResult.messageId);
       if (msg) {
-        await msg.setFlag("smt-rpg", "checkData", {
-          actorTokenUuid: getTokenUuid(actor) ?? actor.id,
-          rollResult: checkResult.result,
-          isSuccess: checkResult.isSuccess,
-          isCritical: checkResult.isCritical,
-          currentTN: tn,
-          originalTN: tn,
+        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+          actor,
+          checkResult,
+          tn,
           hasPowerRoll: this.hasPowerRoll,
           basePower: this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower,
           skillPower: this.system.power,
           element: this.system.element,
           isPhysical: this.isPhysicalSkill,
           skillName: this.name,
-          targetTokenUuids: Array.from(game.user.targets).map(t => t.document?.uuid).filter(Boolean),
           targetsString: this.system.targets,
           ailmentType: this.system.ailment?.type ?? "none",
           ailmentRate: this.system.ailment?.rate ?? 0,
-          hasMight,
-          resolved: false
-        });
+          hasMight
+        }));
       }
     }
 
@@ -159,36 +154,43 @@ export default class SMTItem extends Item {
     }
   }
 
-  // Post pending attack cards per target. Damage applied later via Dodge/Apply buttons.
+  /**
+   * Post pending-attack cards for this skill's targets; damage is applied later via the
+   * Dodge/Apply buttons. Delegates the per-target loop, token-UUID resolution, and the
+   * no-target notification to combat.postAttacksToTargets.
+   *
+   * @param {SMTActor} attacker        - the attacking actor.
+   * @param {{total:number,isCritical:boolean}} powerResult - result from actor.rollPower.
+   * @param {?string}  [checkMessageId] - id of the originating check card (FP cascade), or undefined.
+   * @returns {Promise<void>}
+   */
   async _postPendingAttacks(attacker, powerResult, checkMessageId) {
-    const { postPendingAttack, getTokenUuid, resolveTargets } = await import("../helpers/combat.mjs");
-    const targets = resolveTargets(attacker, this.system.targets);
-    if (!targets.length) {
-      ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
-      return;
-    }
-
-    const attackerTokenUuid = getTokenUuid(attacker) ?? attacker.id;
-    for (const token of targets) {
-      if (!token.actor) continue;
-      await postPendingAttack({
-        attacker,
-        target: token.actor,
-        attackerTokenUuid,
-        targetTokenUuid: token.document.uuid,
-        rawPower: powerResult.total,
-        element: this.system.element,
-        isPhysical: this.isPhysicalSkill,
-        isCritical: powerResult.isCritical,
-        skillName: this.name,
-        checkMessageId,
-        ailmentType: this.system.ailment?.type ?? "none",
-        ailmentRate: this.system.ailment?.rate ?? 0
-      });
-    }
+    const { postAttacksToTargets, resolveTargets } = await import("../helpers/combat.mjs");
+    await postAttacksToTargets({
+      attacker,
+      targets: resolveTargets(attacker, this.system.targets),
+      rawPower: powerResult.total,
+      element: this.system.element,
+      isPhysical: this.isPhysicalSkill,
+      isCritical: powerResult.isCritical,
+      skillName: this.name,
+      checkMessageId,
+      ailmentType: this.system.ailment?.type ?? "none",
+      ailmentRate: this.system.ailment?.rate ?? 0
+    });
   }
 
-  // Use a consumable: healing, cures, revival, attack items
+  /**
+   * Use a consumable: healing, ailment cures, revival, or attack items.
+   *
+   * quantity is only decremented once an effect is confirmed to take effect,
+   * so a pure-revive consumable used on a living target (or any item with no applicable
+   * effect) no longer silently burns a charge. healAllAllies now resolves disposition-
+   * based ally targets (self + same-disposition tokens, mirroring combat.getAutoTargets)
+   * instead of falling back to self-only.
+   *
+   * @returns {Promise<void>}
+   */
   async useConsumable() {
     const actor = this.parent;
     if (!actor) return;
@@ -200,70 +202,76 @@ export default class SMTItem extends Item {
       return;
     }
 
+    const isAttackItem = sys.attackPower > 0 || sys.attackElement !== "none";
+    const reviveTarget = sys.revive ? (game.user.targets.first()?.actor ?? actor) : null;
+
+    // confirm at least one effect will actually apply before spending a charge.
+    // Heal/cure/attack are effective whenever configured; revive only applies to a
+    // downed target. A pure-revive on a living target therefore must NOT decrement.
+    const willHeal = sys.healFull || sys.healHP > 0 || sys.healMP > 0;
+    const willCure = sys.curesAilment && sys.curesAilment !== "none";
+    const willRevive = sys.revive && reviveTarget && reviveTarget.system.hp.value <= 0;
+    if (!willHeal && !willCure && !willRevive && !isAttackItem) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoEffect"));
+      return;
+    }
+
     if (!sys.reusable) {
       await this.update({ "system.quantity": sys.quantity - 1 });
     }
 
     const results = [];
 
-    if (sys.healFull || sys.healHP > 0 || sys.healMP > 0) {
+    if (willHeal) {
       if (sys.healAllAllies) {
-        // TODO: heal all allies (needs party tracking) — heal self for now
-        results.push(await this._applyHealing(actor, sys));
+        for (const ally of await this._getAllyTargets(actor)) {
+          results.push(await this._applyHealing(ally, sys));
+        }
       } else {
         const target = game.user.targets.first()?.actor ?? actor;
         results.push(await this._applyHealing(target, sys));
       }
     }
 
-    if (sys.curesAilment && sys.curesAilment !== "none") {
-      const target = game.user.targets.first()?.actor ?? actor;
+    if (willCure) {
       if (sys.healAllAllies) {
-        // TODO: cure all allies — self only for now
-        await this._applyAilmentCure(actor, sys.curesAilment);
-        results.push(`${actor.name}: ${game.i18n.localize("SMT.AilmentCured")}`);
+        for (const ally of await this._getAllyTargets(actor)) {
+          await this._applyAilmentCure(ally, sys.curesAilment);
+          results.push(`${ally.name}: ${game.i18n.localize("SMT.AilmentCured")}`);
+        }
       } else {
+        const target = game.user.targets.first()?.actor ?? actor;
         await this._applyAilmentCure(target, sys.curesAilment);
         results.push(`${target.name}: ${game.i18n.localize("SMT.AilmentCured")}`);
       }
     }
 
-    if (sys.revive) {
-      const target = game.user.targets.first()?.actor ?? actor;
-      if (target.system.hp.value <= 0) {
-        const newHp = sys.reviveFull ? target.system.hp.max : 1;
-        await target.update({ "system.hp.value": newHp, "system.ailment": "none" });
-        results.push(`${target.name}: ${game.i18n.localize("SMT.Revived")} (${newHp} HP)`);
-      }
+    if (willRevive) {
+      const newHp = sys.reviveFull ? reviveTarget.system.hp.max : 1;
+      await reviveTarget.update({ "system.hp.value": newHp, "system.ailment": "none" });
+      results.push(`${reviveTarget.name}: ${game.i18n.localize("SMT.Revived")} (${newHp} HP)`);
     }
 
     // Attack item (Rock) — base magical power + item potency
-    if (sys.attackPower > 0 || sys.attackElement !== "none") {
-      const { postPendingAttack, getTokenUuid } = await import("../helpers/combat.mjs");
+    if (isAttackItem) {
+      const { postAttacksToTargets } = await import("../helpers/combat.mjs");
       const baseMagPower = actor.system.baseMagicalPower;
       const powerResult = await actor.rollPower(
         baseMagPower, sys.attackPower,
         `${this.name} — ${game.i18n.localize("SMT.Power")}`
       );
-      const targets = game.user.targets;
-      if (targets.size) {
-        const attackerTokenUuid = getTokenUuid(actor) ?? actor.id;
-        for (const token of targets) {
-          if (!token.actor) continue;
-          await postPendingAttack({
-            attacker: actor, target: token.actor,
-            attackerTokenUuid, targetTokenUuid: token.document.uuid,
-            rawPower: powerResult.total,
-            element: sys.attackElement,
-            isPhysical: false, isCritical: false,
-            skillName: this.name,
-            ailmentType: sys.attackAilment?.type ?? "none",
-            ailmentRate: sys.attackAilment?.rate ?? 0
-          });
-        }
-      } else {
-        ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
-      }
+      // shared per-target poster (also emits the no-target notification).
+      await postAttacksToTargets({
+        attacker: actor,
+        targets: Array.from(game.user.targets),
+        rawPower: powerResult.total,
+        element: sys.attackElement,
+        isPhysical: false,
+        isCritical: false,
+        skillName: this.name,
+        ailmentType: sys.attackAilment?.type ?? "none",
+        ailmentRate: sys.attackAilment?.rate ?? 0
+      });
       return;
     }
 
@@ -277,21 +285,55 @@ export default class SMTItem extends Item {
     });
   }
 
-  // Apply HP/MP healing
+  /**
+   * Resolve the "all allies" target set for a party consumable: the user plus
+   * every same-disposition token in scope, mirroring combat.getAutoTargets (which excludes
+   * the actor's own token, so self is unioned back in). Deduped by actor id.
+   *
+   * @param {SMTActor} actor - the actor using the consumable.
+   * @returns {Promise<SMTActor[]>} the actors to affect (always includes the user).
+   */
+  async _getAllyTargets(actor) {
+    const { getAutoTargets } = await import("../helpers/combat.mjs");
+    const allyActors = getAutoTargets(actor, "All Allies")
+      .map(token => token.actor)
+      .filter(Boolean);
+
+    const seen = new Set();
+    const out = [];
+    for (const a of [actor, ...allyActors]) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        out.push(a);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Apply HP/MP healing to a target. Writes HP and MP in a single update so a
+   * combined HP+MP restore is one document write rather than two.
+   *
+   * @param {SMTActor} target - the actor to heal.
+   * @param {object}   sys    - this consumable's system data (healFull/healHP/healMP).
+   * @returns {Promise<string>} a per-target result line for the chat card.
+   */
   async _applyHealing(target, sys) {
     let hpHealed = 0, mpHealed = 0;
+    const update = {};
     if (sys.healFull || sys.healHP > 0) {
       const hpAmount = sys.healFull ? target.system.hp.max : sys.healHP;
       const newHp = Math.min(target.system.hp.value + hpAmount, target.system.hp.max);
       hpHealed = newHp - target.system.hp.value;
-      await target.update({ "system.hp.value": newHp });
+      update["system.hp.value"] = newHp;
     }
     if (sys.healFull || sys.healMP > 0) {
       const mpAmount = sys.healFull ? target.system.mp.max : sys.healMP;
       const newMp = Math.min(target.system.mp.value + mpAmount, target.system.mp.max);
       mpHealed = newMp - target.system.mp.value;
-      await target.update({ "system.mp.value": newMp });
+      update["system.mp.value"] = newMp;
     }
+    if (Object.keys(update).length) await target.update(update);
     const parts = [];
     if (hpHealed > 0) parts.push(`+${hpHealed} HP`);
     if (mpHealed > 0) parts.push(`+${mpHealed} MP`);

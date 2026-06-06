@@ -95,23 +95,42 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindFateDamageButtons(message, html);
 });
 
-function _bindAttackButtons(message, html) {
+async function _bindAttackButtons(message, html) {
   const attackData = message.getFlag("smt-rpg", "attackData");
   if (!attackData) return;
   if (attackData.resolved) {
     html.querySelector(".attack-buttons")?.remove();
     return;
   }
-  html.querySelector("[data-action='dodge']")?.addEventListener("click", async (event) => {
+  const { resolveAttack, getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
+
+  // Only the GM or an owner of the target (whose HP/ailment/dodge this mutates) may
+  // resolve the attack. Flags are author-forgeable, so this gate is the access control
+  // until a GM-socket relay lands (later). Non-permitted users see disabled buttons.
+  const target = getActorFromTokenUuid(attackData.targetTokenUuid);
+  const dodgeBtn = html.querySelector("[data-action='dodge']");
+  const applyBtn = html.querySelector("[data-action='apply-damage']");
+  if (!target || !(game.user.isGM || target.canUserModify(game.user, "update"))) {
+    if (dodgeBtn) dodgeBtn.disabled = true;
+    if (applyBtn) applyBtn.disabled = true;
+    return;
+  }
+
+  // Disable BOTH buttons on the first click so the in-flight dodge roll cannot be
+  // raced against Apply-damage (resolveAttack also re-checks the resolved flag).
+  const disableBoth = () => {
+    if (dodgeBtn) dodgeBtn.disabled = true;
+    if (applyBtn) applyBtn.disabled = true;
+  };
+
+  dodgeBtn?.addEventListener("click", async (event) => {
     event.preventDefault();
-    event.currentTarget.disabled = true;
-    const { resolveAttack } = await import("./module/helpers/combat.mjs");
+    disableBoth();
     await resolveAttack(message, attackData, false);
   });
-  html.querySelector("[data-action='apply-damage']")?.addEventListener("click", async (event) => {
+  applyBtn?.addEventListener("click", async (event) => {
     event.preventDefault();
-    event.currentTarget.disabled = true;
-    const { resolveAttack } = await import("./module/helpers/combat.mjs");
+    disableBoth();
     await resolveAttack(message, attackData, true);
   });
 }
@@ -122,6 +141,8 @@ async function _bindFateCheckButtons(message, html) {
   const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
   const actor = getActorFromTokenUuid(checkData.actorTokenUuid);
   if (!actor || actor.system.fatePoints.value <= 0) return;
+  // Only the GM or an owner of the acting actor may spend its Fate Points.
+  if (!(game.user.isGM || actor.canUserModify(game.user, "update"))) return;
   const container = html.querySelector(".fate-buttons");
   if (!container || container.hasChildNodes()) return;
 
@@ -154,6 +175,8 @@ async function _bindFateDamageButtons(message, html) {
   const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
   const target = getActorFromTokenUuid(damageData.targetTokenUuid);
   if (!target || target.system.fatePoints.value <= 0 || damageData.currentDamage <= 0) return;
+  // Only the GM or an owner of the damaged target may spend its Fate Points.
+  if (!(game.user.isGM || target.canUserModify(game.user, "update"))) return;
   const container = html.querySelector(".fate-buttons");
   if (!container || container.hasChildNodes()) return;
 
