@@ -49,12 +49,19 @@ SMT.ailments = {
   curse: "SMT.Ailment.Curse"
 };
 
-// Lower number = higher priority (p.68)
+// Lower number = higher priority (p.68). Only the single highest-priority
+// common ailment occupies the one shared slot. Death and Curse are special
+// (p.67) and are NOT listed here — they stack as separate flags (see below).
 SMT.ailmentPriority = {
-  death: 0, stone: 1, fly: 2, stun: 3, charm: 4,
+  stone: 1, fly: 2, stun: 3, charm: 4,
   poison: 5, mute: 6, restrain: 7, freeze: 8,
-  sleep: 9, panic: 10, shock: 11, curse: -1
+  sleep: 9, panic: 10, shock: 11
 };
+
+// Death and Curse (p.67) are tracked as separate boolean flags OUTSIDE the
+// single common-ailment priority slot, so they stack alongside the one
+// highest-priority common ailment rather than displacing it.
+SMT.specialAilments = ["death", "curse"];
 
 // Elements that use ailment affinities instead of damage affinities
 SMT.ailmentElements = new Set(["mind", "nerve", "ruin", "dark"]);
@@ -153,14 +160,82 @@ SMT.consumableTypes = {
   key: "SMT.ConsumableType.Key"
 };
 
+// HP/MP = (vitality|magic + level) x multiplier (p.36). Authoritative source:
+// SMTBaseActorData.get hpMultiplier()/mpMultiplier() read these keyed by actor type.
 SMT.hpMultipliers = {
   fiend: 6,
   demon: 6,
-  human: 4
+  human: 4,
+  npc: 6
 };
 
 SMT.mpMultipliers = {
   fiend: 3,
   demon: 3,
-  human: 2
+  human: 2,
+  npc: 3
 };
+
+// Passive skill HP/MP multiplier bonuses (Amplify Group, p.109). Highest tier
+// only — similar abilities do not stack. Data-model-owned; read via
+// SMTBaseActorData._getPassiveMultiplierBonuses().
+// TODO: key off skill.system.passiveEffect enum instead of skill name.
+SMT.passiveBonuses = {
+  hp: {
+    "Life Bonus": 1,
+    "Life Gain": 2,
+    "Life Surge": 3
+  },
+  mp: {
+    "Mana Bonus": 1,
+    "Mana Gain": 2,
+    "Mana Surge": 3
+  }
+};
+
+// Passive skill that widens the crit threshold for basic strikes / physical
+// attack skills to TN/mightCritDivisor (p.110). Detected by skill name today.
+// TODO: move to skill.system.passiveEffect enum.
+SMT.mightPassiveName = "Might";
+
+// ═══════════════════════════════════════════════
+// Rules constants (config-authoritative source of truth)
+// Logic reads CONFIG.SMT.*; values must stay identical to current inline numerics.
+// ═══════════════════════════════════════════════
+
+// Percentile check thresholds (actor.rollPercentile / combat._evaluatePercentile)
+SMT.check = {
+  fumble: 100,        // d100 == 100 is always a fumble
+  autoFailMin: 96,    // d100 >= 96 auto-fails
+  critDivisor: 10,    // crit if roll <= floor(TN / 10)
+  mightCritDivisor: 5 // with Might, crit if roll <= floor(TN / 5)
+};
+
+// Fate Point mechanics (combat.mjs resolve* + base-actor.mjs fatePoints.max)
+SMT.fate = {
+  boostTN: 20,         // Boost TN: +20 to TN, re-evaluate same roll
+  halveDivisor: 2,     // Halve Damage: floor(damage / 2)
+  cost: 1,             // FP spent per reroll/boost/halve
+  maxBase: 5,          // fatePoints.max = floor(luck / maxLuckDivisor) + maxBase
+  maxLuckDivisor: 5
+};
+
+// Ailment infliction rate clamp (resolveAilment, p.67)
+SMT.ailmentRate = {
+  min: 5,
+  max: 95
+};
+
+// Derived stat modifiers (base-actor.mjs prepareDerivedData)
+SMT.tnPerStat = 5;     // TN = (stat x tnPerStat) + level
+SMT.dodgeBonus = 10;   // dodgeTN = agilityTN + dodgeBonus
+SMT.negotiation = {    // negotiationTN = (luck x multiplier) + bonus
+  multiplier: 2,
+  bonus: 20
+};
+
+// Boss trait: double HP and MP (p.123)
+SMT.bossHpMpMultiplier = 2;
+
+// Max skills an actor may have (base-actor-sheet.mjs drop/create enforcement)
+SMT.skillCap = 8;

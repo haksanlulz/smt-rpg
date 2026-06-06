@@ -7,11 +7,7 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       skillType: new StringField({
         required: true,
         initial: "physical-attack",
-        choices: [
-          "physical-attack", "magical-attack", "spell",
-          "recovery", "support", "debuff", "passive",
-          "talk-approach", "talk-support"
-        ]
+        choices: Object.keys(CONFIG.SMT.skillTypes)
       }),
       cost: new SchemaField({
         value: new NumberField({ integer: true, min: 0, initial: 0 }),
@@ -26,13 +22,11 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       }),
       power: new NumberField({ integer: true, initial: 0 }),
       targets: new StringField({ initial: "1" }),
+      // Full element list incl. recovery/support/none lives in CONFIG.SMT.elements
+      // (distinct from fields.mjs ELEMENTS, which is the affinity-bearing subset).
       element: new StringField({
         initial: "phys",
-        choices: [
-          "phys", "fire", "ice", "elec", "force",
-          "mind", "nerve", "ruin", "dark", "light",
-          "almighty", "recovery", "support", "none"
-        ]
+        choices: Object.keys(CONFIG.SMT.elements)
       }),
       effectDescription: new StringField({ initial: "" }),
       ailment: new SchemaField({

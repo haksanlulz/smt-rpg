@@ -8,6 +8,8 @@ export default class DemonData extends SMTBaseActorData {
     return {
       ...super.defineSchema(),
       clan: new StringField({ initial: "fairy" }),
+      // NOTE: favoredStat / clan are free-form strings for now; a later pass may
+      // constrain favoredStat to STATS and clan to CONFIG.SMT.demonClans keys.
       favoredStat: new StringField({
         required: false,
         blank: true,
@@ -21,13 +23,8 @@ export default class DemonData extends SMTBaseActorData {
     };
   }
 
-  get hpMultiplier() {
-    return 6;
-  }
-
-  get mpMultiplier() {
-    return 3;
-  }
+  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
+  // (CONFIG.SMT.hpMultipliers.demon = 6, mpMultipliers.demon = 3, p.36).
 
   get expMultiplier() {
     return 1.3;

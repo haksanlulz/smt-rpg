@@ -7,7 +7,7 @@ export default class GearData extends foundry.abstract.TypeDataModel {
       gearType: new StringField({
         required: true,
         initial: "weapon-melee",
-        choices: ["weapon-melee", "weapon-ranged", "armor", "accessory"]
+        choices: Object.keys(CONFIG.SMT.gearTypes)
       }),
       powerBonus: new NumberField({ integer: true, initial: 0 }),
       resistBonus: new SchemaField({

@@ -73,12 +73,12 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
     return context;
   }
 
+  /** Open the v13+ FilePicker to choose the item image (replaces deprecated `new FilePicker`). */
   static #onEditImage(event, target) {
-    const fp = new FilePicker({
+    new foundry.applications.apps.FilePicker.implementation({
       type: "image",
       current: this.document.img,
       callback: (path) => this.document.update({ img: path })
-    });
-    fp.browse();
+    }).browse();
   }
 }

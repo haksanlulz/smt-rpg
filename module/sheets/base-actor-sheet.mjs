@@ -106,7 +106,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const fields = ["background1", "background2", "goal", "contacts", "bonds", "notes"];
     const enriched = {};
     for (const field of fields) {
-      enriched[field] = await foundry.applications.ux.TextEditor.implementation.enrichHTML(sys[field] ?? "", { async: true });
+      enriched[field] = await foundry.applications.ux.TextEditor.implementation.enrichHTML(sys[field] ?? "");
     }
     return enriched;
   }
@@ -115,7 +115,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
   async _onDropItem(event, item) {
     if (item.type === "skill") {
       const currentSkills = this.document.items.filter(i => i.type === "skill");
-      if (currentSkills.length >= 8) {
+      if (currentSkills.length >= CONFIG.SMT.skillCap) {
         ui.notifications.warn(game.i18n.localize("SMT.Warnings.SkillCap"));
         return;
       }
@@ -133,29 +133,29 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
+  /**
+   * Basic melee strike: percentile vs Strength TN, then power roll + pending attacks
+   * (shares buildCheckData / postAttacksToTargets with item.use and #onShoot).
+   * Might detection reads the actor getter.
+   */
   static async #onStrike() {
     const actor = this.document;
-    const { postPendingAttack, getTokenUuid, resolveTargets } = await import("../helpers/combat.mjs");
+    const { postAttacksToTargets, buildCheckData, resolveTargets } = await import("../helpers/combat.mjs");
     const skillName = game.i18n.localize("SMT.BasicAttack");
     const tn = actor.system.strengthTN;
-    const attackerTokenUuid = getTokenUuid(actor) ?? actor.id;
-    const hasMight = actor.items.some(i => i.type === "skill" && i.name === "Might");
+    const hasMight = actor.system.hasMightPassive;
     const label = `${skillName} (${game.i18n.localize("SMT.Stat.Strength")})`;
     const checkResult = await actor.rollPercentile(tn, label, { hasMight });
 
     if (actor.system.fatePoints.value > 0) {
       const msg = game.messages.get(checkResult.messageId);
       if (msg) {
-        await msg.setFlag("smt-rpg", "checkData", {
-          actorTokenUuid: attackerTokenUuid, rollResult: checkResult.result,
-          isSuccess: checkResult.isSuccess, isCritical: checkResult.isCritical,
-          currentTN: tn, originalTN: tn,
+        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+          actor, checkResult, tn,
           hasPowerRoll: true, basePower: actor.system.basePhysicalPower,
           skillPower: 0, element: "phys", isPhysical: true, skillName,
-          targetTokenUuids: Array.from(game.user.targets).map(t => t.document?.uuid).filter(Boolean),
-          hasMight, ailmentType: "none", ailmentRate: 0,
-          resolved: false
-        });
+          hasMight
+        }));
       }
     }
 
@@ -165,27 +165,27 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         `${skillName} — ${game.i18n.localize("SMT.Power")}`,
         checkResult.isCritical
       );
-      const targets = resolveTargets(actor, "1");
-      if (!targets.length) {
-        ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
-        return;
-      }
-      for (const token of targets) {
-        if (!token.actor) continue;
-        await postPendingAttack({
-          attacker: actor, target: token.actor,
-          attackerTokenUuid, targetTokenUuid: token.document.uuid,
-          rawPower: powerResult.total, element: "phys",
-          isPhysical: true, isCritical: powerResult.isCritical,
-          skillName, checkMessageId: checkResult.messageId
-        });
-      }
+      await postAttacksToTargets({
+        attacker: actor,
+        targets: resolveTargets(actor, "1"),
+        rawPower: powerResult.total,
+        element: "phys",
+        isPhysical: true,
+        isCritical: powerResult.isCritical,
+        skillName,
+        checkMessageId: checkResult.messageId
+      });
     }
   }
 
+  /**
+   * Ranged shot: spends one ammo, percentile vs the ranged-weapon TN, then power roll
+   * + pending attacks (shares buildCheckData / postAttacksToTargets). Ranged
+   * attacks do not benefit from Might, so hasMight stays at its false default.
+   */
   static async #onShoot() {
     const actor = this.document;
-    const { postPendingAttack, getTokenUuid, resolveTargets } = await import("../helpers/combat.mjs");
+    const { postAttacksToTargets, buildCheckData, resolveTargets } = await import("../helpers/combat.mjs");
     const rw = actor.system.rangedWeapon;
     if (!rw) return;
 
@@ -197,58 +197,69 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     await weapon.update({ "system.ammo.value": weapon.system.ammo.value - 1 });
 
     const skillName = game.i18n.localize("SMT.Shoot");
-    const attackerTokenUuid = getTokenUuid(actor) ?? actor.id;
     const label = `${skillName} (${game.i18n.localize("SMT.Stat.Agility")})`;
     const checkResult = await actor.rollPercentile(rw.tn, label);
 
     if (actor.system.fatePoints.value > 0) {
       const msg = game.messages.get(checkResult.messageId);
       if (msg) {
-        await msg.setFlag("smt-rpg", "checkData", {
-          actorTokenUuid: attackerTokenUuid, rollResult: checkResult.result,
-          isSuccess: checkResult.isSuccess, isCritical: checkResult.isCritical,
-          currentTN: rw.tn, originalTN: rw.tn,
+        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+          actor, checkResult, tn: rw.tn,
           hasPowerRoll: true, basePower: rw.power,
-          skillPower: 0, element: "phys", isPhysical: true, skillName,
-          targetTokenUuids: Array.from(game.user.targets).map(t => t.document?.uuid).filter(Boolean),
-          resolved: false
-        });
+          skillPower: 0, element: "phys", isPhysical: true, skillName
+        }));
       }
     }
+
     if (checkResult.isSuccess) {
       const powerResult = await actor.rollPower(
         rw.power, 0,
         `${skillName} — ${game.i18n.localize("SMT.Power")}`,
         checkResult.isCritical
       );
-      const targets = resolveTargets(actor, "1");
-      if (!targets.length) {
-        ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
-        return;
-      }
-      for (const token of targets) {
-        if (!token.actor) continue;
-        await postPendingAttack({
-          attacker: actor, target: token.actor,
-          attackerTokenUuid, targetTokenUuid: token.document.uuid,
-          rawPower: powerResult.total, element: "phys",
-          isPhysical: true, isCritical: powerResult.isCritical,
-          skillName, checkMessageId: checkResult.messageId
-        });
-      }
+      await postAttacksToTargets({
+        attacker: actor,
+        targets: resolveTargets(actor, "1"),
+        rawPower: powerResult.total,
+        element: "phys",
+        isPhysical: true,
+        isCritical: powerResult.isCritical,
+        skillName,
+        checkMessageId: checkResult.messageId
+      });
     }
   }
 
-  static #onUseSkill(event, target) {
+  /**
+   * Use a skill. Awaits the full use() flow and disables the triggering button while
+   * in-flight so a double-click cannot double-spend the skill's cost.
+   */
+  static async #onUseSkill(event, target) {
     const itemId = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(itemId);
-    if (item) item.use();
+    if (!item) return;
+    target.disabled = true;
+    try {
+      await item.use();
+    } finally {
+      target.disabled = false;
+    }
   }
 
-  static #onUseItem(event, target) {
+  /**
+   * Use a consumable. Awaits useConsumable() and disables the triggering button while
+   * in-flight so a double-click cannot consume two of the item.
+   */
+  static async #onUseItem(event, target) {
     const itemId = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(itemId);
-    if (item) item.useConsumable();
+    if (!item) return;
+    target.disabled = true;
+    try {
+      await item.useConsumable();
+    } finally {
+      target.disabled = false;
+    }
   }
 
   static #onEditItem(event, target) {
@@ -279,7 +290,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
 
     if (type === "skill") {
       const currentSkills = this.document.items.filter(i => i.type === "skill");
-      if (currentSkills.length >= 8) {
+      if (currentSkills.length >= CONFIG.SMT.skillCap) {
         ui.notifications.warn(game.i18n.localize("SMT.Warnings.SkillCap"));
         return;
       }
@@ -301,12 +312,12 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (item) item.update({ "system.quantity": parseInt(target.value) || 0 });
   }
 
+  /** Open the v13+ FilePicker to choose the actor image (replaces deprecated `new FilePicker`). */
   static #onEditImage(event, target) {
-    const fp = new FilePicker({
+    new foundry.applications.apps.FilePicker.implementation({
       type: "image",
       current: this.document.img,
       callback: (path) => this.document.update({ img: path })
-    });
-    fp.browse();
+    }).browse();
   }
 }

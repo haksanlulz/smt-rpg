@@ -1,6 +1,6 @@
 import SMTBaseActorData from "./base-actor.mjs";
 
-const { StringField, BooleanField } = foundry.data.fields;
+const { StringField } = foundry.data.fields;
 
 export default class HumanData extends SMTBaseActorData {
 
@@ -9,19 +9,15 @@ export default class HumanData extends SMTBaseActorData {
       ...super.defineSchema(),
       subclass: new StringField({
         initial: "potential",
-        choices: ["potential", "reporter", "brawler", "swordsman", "maiden", "sorcerer", "manikin", "soldier"]
-      }),
-      isManikin: new BooleanField({ initial: false })
+        choices: Object.keys(CONFIG.SMT.humanSubclasses)
+      })
+      // isManikin is NOT persisted — it is derived from subclass in
+      // prepareDerivedData (see get isManikin / assignment below, p.47).
     };
   }
 
-  get hpMultiplier() {
-    return 4;
-  }
-
-  get mpMultiplier() {
-    return 2;
-  }
+  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
+  // (CONFIG.SMT.hpMultipliers.human = 4, mpMultipliers.human = 2, p.36).
 
   get expMultiplier() {
     return 0.8;
@@ -30,7 +26,8 @@ export default class HumanData extends SMTBaseActorData {
   prepareDerivedData() {
     super.prepareDerivedData();
 
-    this.affinities.light = "null"; // Humans can't be exorcized
+    this.affinities.light = "null"; // Humans can't be exorcized (p.47)
+    // Manikins are a human subclass with extra rules (p.47); derived, not stored.
     this.isManikin = this.subclass === "manikin";
     this._applyEquippedGear();
     this._clampCurrentValues();
