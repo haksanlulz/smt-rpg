@@ -24,6 +24,7 @@
   --smt-hp: #e94560;
   --smt-mp: #4a90d9;
   --smt-fate: #f5c542;
+  --smt-defend: #4a90d9;
 }
 
 /* ---- Sheet Container ---- */
@@ -421,6 +422,140 @@
   font-size: 0.9em;
 }
 
+/* ---- Buffs / Debuffs & Combat Actions ---- */
+.effects-panel {
+  margin: 8px 0;
+  padding: 8px;
+  background: var(--smt-bg-light);
+  border-radius: 4px;
+  border-left: 3px solid var(--smt-fate);
+}
+
+.effects-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.effects-header > label {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--smt-fate);
+  font-weight: bold;
+}
+
+.effect-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.effect-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--smt-bg);
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  color: var(--smt-text-dim);
+  cursor: pointer;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: auto;
+}
+
+.effect-action-btn:hover {
+  color: var(--smt-fate);
+  border-color: var(--smt-fate);
+}
+
+.effects-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.effect-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 2px;
+  background: var(--smt-bg);
+  border: 1px solid var(--smt-border);
+  border-radius: 12px;
+  font-size: 0.8em;
+}
+
+.effect-chip.defend { border-color: var(--smt-defend); }
+.effect-chip.concentrate { border-color: var(--smt-fate); }
+
+.effect-chip img {
+  border: none;
+  border-radius: 50%;
+}
+
+.effect-chip .effect-stacks {
+  font-weight: bold;
+  color: var(--smt-fate);
+}
+
+.effect-chip .effect-remove {
+  color: var(--smt-text-dim);
+  cursor: pointer;
+}
+
+.effect-chip .effect-remove:hover {
+  color: var(--smt-accent);
+}
+
+.effects-empty {
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  font-style: italic;
+  margin: 0;
+}
+
+/* ---- Condition Pips (sheet header) ---- */
+.condition-pips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.condition-pip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.condition-pip.ailment {
+  background: var(--smt-fumble);
+  color: #fff;
+}
+
+.condition-pip.ailment.death { background: #000; }
+.condition-pip.ailment.curse { background: var(--smt-accent-dim); }
+
+.condition-pip.mark {
+  padding: 2px;
+  background: var(--smt-bg-light);
+  border: 1px solid var(--smt-border);
+}
+
+.condition-pip.mark img { border: none; border-radius: 50%; }
+
 /* ---- Ailment ---- */
 .ailment-status {
   display: flex;
@@ -788,3 +923,63 @@
   background: var(--smt-fate);
   color: #000;
 }
+
+/* ---- Target HP footer on damage cards ---- */
+.smt-roll.damage .target-hp {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--smt-border);
+  font-size: 0.85em;
+  color: var(--smt-hp);
+  font-weight: bold;
+}
+
+.smt-roll.damage .target-hp.defeated {
+  color: var(--smt-fumble);
+}
+
+.smt-roll.damage .target-hp .defeated-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--smt-fumble);
+  color: #fff;
+  text-transform: uppercase;
+  font-size: 0.9em;
+  letter-spacing: 1px;
+}
+
+/* ---- Buff / Debuff & Effect Notice Cards ---- */
+.smt-roll.buff .roll-breakdown {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin: 4px 0;
+}
+
+.smt-roll.buff .buff-die {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  background: var(--smt-bg-light);
+  text-align: center;
+  font-weight: bold;
+}
+
+.smt-roll.buff .buff-stacks {
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+}
+
+.smt-roll.buff.buff-up .roll-outcome.success { background: var(--smt-success); color: #fff; }
+.smt-roll.buff.buff-down .roll-outcome.fumble { background: var(--smt-accent); color: #fff; }
+
+.smt-roll.effect-notice {
+  font-size: 0.9em;
+  color: var(--smt-text);
+}
+
+.smt-roll.effect-notice p { margin: 0; }

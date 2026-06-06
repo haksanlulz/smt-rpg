@@ -49,6 +49,10 @@ export default class SMTActorSheet extends SMTBaseActorSheet {
       affinityEntries: this._prepareAffinityEntries(),
       ailmentAffinityEntries: this._prepareAilmentAffinityEntries(),
 
+      // Active buff/stance chips + conditions strip
+      effectChips: this._prepareEffectChips(),
+      conditions: this._prepareConditions(),
+
       // Dropdown choices
       ailmentChoices: SMT.ailments,
       affinityChoices: SMT.affinityRatings,

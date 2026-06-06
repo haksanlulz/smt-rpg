@@ -255,5 +255,49 @@
   "SMT.Warnings.NoAmmo": "Out of ammo! Use an action to reload.",
   "SMT.Warnings.SkillCap": "Cannot add more skills. Maximum of 8 skills allowed.",
   "SMT.Warnings.PassiveSkill": "Passive skills cannot be used as an action.",
-  "SMT.Warnings.InsufficientResource": "Not enough {resource}. Need {cost}."
+  "SMT.Warnings.InsufficientResource": "Not enough {resource}. Need {cost}.",
+  "SMT.Warnings.NoPermission": "You do not have permission to modify this actor.",
+  "SMT.Warnings.NoEffect": "This item has no applicable effect.",
+
+  "SMT.BuffEffect": "Buff / Debuff Effect",
+  "SMT.Buff.Tarukaja": "Tarukaja",
+  "SMT.Buff.Makakaja": "Makakaja",
+  "SMT.Buff.Rakukaja": "Rakukaja",
+  "SMT.Buff.Sukukaja": "Sukukaja",
+  "SMT.Buff.Tarunda": "Tarunda",
+  "SMT.Buff.Rakunda": "Rakunda",
+  "SMT.Buff.Sukunda": "Sukunda",
+  "SMT.Buff.Dekaja": "Dekaja",
+  "SMT.Buff.Dekunda": "Dekunda",
+  "SMT.Buff.AxisPhysicalPower": "Physical Power",
+  "SMT.Buff.AxisMagicalPower": "Magical Power",
+  "SMT.Buff.AxisResist": "Resistance",
+  "SMT.Buff.AxisAccuracy": "Accuracy",
+  "SMT.Buff.AxisDodge": "Dodge",
+  "SMT.Buff.Raised": "Raised",
+  "SMT.Buff.Lowered": "Lowered",
+  "SMT.Buff.Stacks": "Stacks",
+  "SMT.Buff.Total": "Total",
+  "SMT.Buff.Buffed": "Buffed!",
+  "SMT.Buff.Debuffed": "Debuffed!",
+  "SMT.Buff.Capped": "Already at maximum stacks.",
+
+  "SMT.Action.Concentrate": "Concentrate",
+  "SMT.Action.ConcentrateHint": "Name an action; gain +20% to its next hit check. Stacks; lost on use or on taking an ailment.",
+  "SMT.Action.ConcentratePrompt": "Which action are you concentrating on?",
+  "SMT.Action.Defend": "Defend",
+  "SMT.Action.DefendHint": "Forego your action for +20% dodge until the start of your next turn.",
+
+  "SMT.Effect.Dispelled": "{skill}: cleared {count} effect(s).",
+  "SMT.Effect.Concentrated": "Concentrates on {action} (+{amount}% to its next hit check).",
+  "SMT.Effect.Defended": "Defends (+{amount}% dodge until the start of the next turn).",
+
+  "SMT.Effects.Label": "Buffs & Actions",
+  "SMT.Effects.None": "No active effects.",
+  "SMT.Effects.Remove": "Remove",
+
+  "SMT.Defeated": "Defeated",
+  "SMT.ClearCondition": "Click to clear",
+
+  "SMT.Poison.Drain": "{name} loses {damage} HP to poison."
 }

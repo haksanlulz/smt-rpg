@@ -68,6 +68,35 @@
   </div>
 </div>
 
+{{!-- Buffs / Debuffs & Combat Actions (p.96, p.64) --}}
+<div class="effects-panel">
+  <div class="effects-header">
+    <label>{{localize "SMT.Effects.Label"}}</label>
+    <div class="effect-actions">
+      <button type="button" class="effect-action-btn" data-action="concentrate" data-tooltip="{{localize 'SMT.Action.ConcentrateHint'}}">
+        <i class="fas fa-brain"></i> {{localize "SMT.Action.Concentrate"}}
+      </button>
+      <button type="button" class="effect-action-btn" data-action="defend" data-tooltip="{{localize 'SMT.Action.DefendHint'}}">
+        <i class="fas fa-shield-alt"></i> {{localize "SMT.Action.Defend"}}
+      </button>
+    </div>
+  </div>
+  {{#if effectChips.length}}
+  <div class="effects-list">
+    {{#each effectChips as |fx|}}
+    <div class="effect-chip {{fx.kind}}" data-effect-id="{{fx.id}}">
+      <img src="{{fx.img}}" alt="" width="20" height="20" />
+      <span class="effect-name">{{fx.name}}</span>
+      {{#if fx.showStacks}}<span class="effect-stacks">×{{fx.stacks}}</span>{{/if}}
+      <a class="effect-remove" data-action="removeEffect" data-tooltip="{{localize 'SMT.Effects.Remove'}}"><i class="fas fa-times"></i></a>
+    </div>
+    {{/each}}
+  </div>
+  {{else}}
+  <p class="effects-empty">{{localize "SMT.Effects.None"}}</p>
+  {{/if}}
+</div>
+
 {{!-- Ailment --}}
 <div class="ailment-status">
   <label>{{localize "SMT.Ailment.Label"}}</label>

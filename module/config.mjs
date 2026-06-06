@@ -239,3 +239,97 @@ SMT.bossHpMpMultiplier = 2;
 
 // Max skills an actor may have (base-actor-sheet.mjs drop/create enforcement)
 SMT.skillCap = 8;
+
+// ═══════════════════════════════════════════════
+// Buffs / debuffs (p.96)
+// ═══════════════════════════════════════════════
+// Stat changes are a flat 1d10 per stack (non-exploding; base power is never
+// added). Each effect stacks at most 4 times, and effects keyed to the same
+// STAT AXIS share that one 4-stack cap — so different skills that move the same
+// axis (e.g. Sukukaja and Fog Breath) compete for the same four slots rather
+// than each getting their own. Magnitudes accumulate into the per-actor
+// system.buffs.<axis> fields (fed by ActiveEffect ADD-mode changes) and are
+// folded into the derived combat stats by SMTBaseActorData.prepareDerivedData.
+SMT.buffMaxStacks = 4;
+SMT.buffDie = "1d10"; // non-exploding
+
+// Buff axes — the schema accumulators a buff/debuff may move and the derived
+// stats each one feeds. Keys match the system.buffs.<axis> NumberFields.
+// "accuracy" covers the attack-check TNs (Strength/Magic/Agility); "dodge" is
+// the dodge TN. Sukukaja/Sukunda move BOTH, so they touch two axes (p.96).
+SMT.buffAxes = {
+  physicalPower: { label: "SMT.Buff.AxisPhysicalPower" },
+  magicalPower: { label: "SMT.Buff.AxisMagicalPower" },
+  resist: { label: "SMT.Buff.AxisResist" },
+  accuracy: { label: "SMT.Buff.AxisAccuracy" },
+  dodge: { label: "SMT.Buff.AxisDodge" }
+};
+
+// Each castable buff/debuff: which axis accumulator(s) it moves, the sign of the
+// change, the group it belongs to (kaja = buffs cleared by Dekaja, nda = debuffs
+// cleared by Dekunda), its localized label, and the token-HUD status id.
+// Keyed by the value a skill stores in system.buffEffect. Tarunda is the
+// universal attack-power debuff: it lowers BOTH physical and magical power
+// (p.96), so it spans the physicalPower and magicalPower axes.
+SMT.buffs = {
+  tarukaja: { axes: ["physicalPower"], sign: 1, group: "kaja", label: "SMT.Buff.Tarukaja", statusId: "smtBuffPower", icon: "icons/magic/control/buff-strength-muscle-damage-orange.webp" },
+  makakaja: { axes: ["magicalPower"], sign: 1, group: "kaja", label: "SMT.Buff.Makakaja", statusId: "smtBuffMagic", icon: "icons/magic/control/buff-flight-wings-blue.webp" },
+  rakukaja: { axes: ["resist"], sign: 1, group: "kaja", label: "SMT.Buff.Rakukaja", statusId: "smtBuffResist", icon: "icons/magic/defensive/shield-barrier-glowing-blue.webp" },
+  sukukaja: { axes: ["accuracy", "dodge"], sign: 1, group: "kaja", label: "SMT.Buff.Sukukaja", statusId: "smtBuffAgility", icon: "icons/magic/movement/trail-streak-zigzag-yellow.webp" },
+  tarunda: { axes: ["physicalPower", "magicalPower"], sign: -1, group: "nda", label: "SMT.Buff.Tarunda", statusId: "smtDebuffPower", icon: "icons/magic/control/debuff-energy-hold-orange.webp" },
+  rakunda: { axes: ["resist"], sign: -1, group: "nda", label: "SMT.Buff.Rakunda", statusId: "smtDebuffResist", icon: "icons/magic/defensive/shield-barrier-crack-blue.webp" },
+  sukunda: { axes: ["accuracy", "dodge"], sign: -1, group: "nda", label: "SMT.Buff.Sukunda", statusId: "smtDebuffAgility", icon: "icons/magic/movement/trail-streak-impact-blue.webp" }
+};
+
+// Dispel skills: which buff group each one strips. Dekaja clears -kaja buffs;
+// Dekunda clears -nda debuffs (p.96).
+SMT.buffDispels = {
+  dekaja: "kaja",
+  dekunda: "nda"
+};
+
+// Skill-sheet dropdown for system.buffEffect: "none" plus every castable buff
+// and dispel, each pointing at its localized label. Assembled from the maps
+// above so they remain the single source of truth.
+SMT.buffEffectChoices = {
+  none: "SMT.None",
+  tarukaja: "SMT.Buff.Tarukaja",
+  makakaja: "SMT.Buff.Makakaja",
+  rakukaja: "SMT.Buff.Rakukaja",
+  sukukaja: "SMT.Buff.Sukukaja",
+  tarunda: "SMT.Buff.Tarunda",
+  rakunda: "SMT.Buff.Rakunda",
+  sukunda: "SMT.Buff.Sukunda",
+  dekaja: "SMT.Buff.Dekaja",
+  dekunda: "SMT.Buff.Dekunda"
+};
+
+// ═══════════════════════════════════════════════
+// Combat setup actions (p.64)
+// ═══════════════════════════════════════════════
+// Concentrate: +20% to the next named action's hit check, consumed on use and
+// dropped when the holder takes an ailment. Defend: forego the turn's action for
+// +20% dodge until the start of the holder's next turn. Both are modelled as
+// ActiveEffects feeding system.concentrate.amount / system.defend.amount.
+SMT.actionEffects = {
+  concentrate: { statusId: "smtConcentrate", label: "SMT.Action.Concentrate", icon: "icons/magic/perception/eye-ringed-glow-angry-red.webp" },
+  defend: { statusId: "smtDefend", label: "SMT.Action.Defend", icon: "icons/magic/defensive/shield-barrier-flaming-diamond-blue.webp" }
+};
+
+SMT.concentrate = { bonusPct: 20 }; // +20% to the named action's hit check (p.64)
+SMT.defend = { dodgeBonus: 20 };    // +20% dodge until the start of next turn (p.64)
+
+// ═══════════════════════════════════════════════
+// Ailment combat effects
+// ═══════════════════════════════════════════════
+// Ailments that turn an incoming Phys attack into an automatic critical hit
+// (p.66). The defender's common-ailment slot is checked against this list when
+// resolving a physical attack.
+SMT.critOnPhysAilments = ["restrain", "freeze", "shock", "stone"];
+
+// Poison: the afflicted actor drains 1d10 HP for each non-reactive action it
+// takes (p.66).
+SMT.poison = { die: "1d10" };
+
+// Stun: the afflicted actor's attack hit checks are capped at <=25% (p.66).
+SMT.stun = { hitCapPct: 25 };

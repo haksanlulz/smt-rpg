@@ -33,6 +33,15 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
         type: new StringField({ initial: "none" }),
         rate: new NumberField({ integer: true, min: 0, max: 100, initial: 0 })
       }),
+      // Buff/debuff this skill casts (p.96). "none" = not a buff skill; a
+      // CONFIG.SMT.buffs key (tarukaja…sukunda) casts that buff, a
+      // CONFIG.SMT.buffDispels key (dekaja/dekunda) strips the matching group.
+      // Choices derive from CONFIG.SMT.buffEffectChoices so the config stays the
+      // single source of truth. Resolved in SMTItem.use → _castBuff.
+      buffEffect: new StringField({
+        initial: "none",
+        choices: Object.keys(CONFIG.SMT.buffEffectChoices)
+      }),
       inheritanceType: new StringField({ initial: "" })
     };
   }

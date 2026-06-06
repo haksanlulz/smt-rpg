@@ -13,6 +13,27 @@ import SMTActorSheet from "./module/sheets/actor-sheet.mjs";
 import SMTNPCSheet from "./module/sheets/npc-sheet.mjs";
 import SMTItemSheet from "./module/sheets/item-sheet.mjs";
 
+// Token-HUD icons for the single common-ailment slot and the two special
+// ailment flags (p.67-68). Presentation only — the rules state of record is
+// system.ailment / system.deathAilment / system.curseAilment, which these icons
+// merely mirror (see syncAilmentStatus). Keyed by the CONFIG.SMT.ailments id so
+// a registered status maps cleanly back onto that slot.
+const AILMENT_ICONS = {
+  death: "icons/svg/skull.svg",
+  stone: "icons/svg/paralysis.svg",
+  fly: "icons/svg/wing.svg",
+  stun: "icons/svg/daze.svg",
+  charm: "icons/svg/heal.svg",
+  poison: "icons/svg/poison.svg",
+  mute: "icons/svg/silenced.svg",
+  restrain: "icons/svg/net.svg",
+  freeze: "icons/svg/frozen.svg",
+  sleep: "icons/svg/sleep.svg",
+  panic: "icons/svg/stoned.svg",
+  shock: "icons/svg/lightning.svg",
+  curse: "icons/svg/terror.svg"
+};
+
 Hooks.once("init", () => {
   console.log("smt-rpg | Initializing Shin Megami Tensei: Tokyo Conception");
 
@@ -45,6 +66,22 @@ Hooks.once("init", () => {
   CONFIG.Actor.documentClass = SMTActor;
   CONFIG.Item.documentClass = SMTItem;
 
+  // Initiative is declared authoritatively in system.json
+  // ("1d10x10 + @agilityTotal", p.298). Mirror that one declaration onto
+  // CONFIG.Combat.initiative so any runtime roll path agrees with it without
+  // re-typing the formula here (SMTActor.getRollData exposes @agilityTotal).
+  if (game.system.initiative) {
+    CONFIG.Combat.initiative = { formula: game.system.initiative, decimals: 0 };
+  }
+
+  // Register the buff/stance and ailment statuses on the token HUD. CONCATENATE
+  // onto Foundry's defaults — never replace them — so core conditions remain
+  // available. Buff/stance ids and icons are the same ones the cast helpers use
+  // (CONFIG.SMT.buffs[*].statusId / actionEffects[*].statusId), so a HUD toggle
+  // and a cast share one definition; the ailment ids are the CONFIG.SMT.ailments
+  // keys mirrored from the system.ailment slot.
+  _registerStatusEffects();
+
   foundry.documents.collections.Actors.unregisterSheet("core", foundry.appv1.sheets.ActorSheet);
   foundry.documents.collections.Actors.registerSheet("smt-rpg", SMTActorSheet, {
     types: ["fiend", "demon", "human"],
@@ -75,6 +112,7 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/actor/partials/combat.hbs",
     "systems/smt-rpg/templates/actor/partials/skills.hbs",
     "systems/smt-rpg/templates/actor/partials/affinities.hbs",
+    "systems/smt-rpg/templates/actor/partials/conditions.hbs",
     "systems/smt-rpg/templates/chat/percentile-roll.hbs",
     "systems/smt-rpg/templates/chat/power-roll.hbs",
     "systems/smt-rpg/templates/chat/auto-success.hbs",
@@ -88,11 +126,239 @@ Hooks.once("init", () => {
   console.log("smt-rpg | System initialized");
 });
 
+/**
+ * Register the buff/debuff, Concentrate/Defend, and ailment statuses on the token
+ * HUD without discarding Foundry's defaults. Buff/stance ids are smt-prefixed and
+ * never collide with core, so they are concatenated. Ailment ids reuse the
+ * CONFIG.SMT.ailments keys (poison, stun, …) — some of which match a core status
+ * id — so for those we OVERRIDE the matching core entry's label/icon in place
+ * rather than append a duplicate, keeping exactly one HUD entry per id (the same
+ * id syncAilmentStatus mirrors). Ids with no core match are appended. The list is
+ * sourced from config so the HUD, the cast helpers, and the ailment SSoT agree.
+ */
+function _registerStatusEffects() {
+  const list = [...CONFIG.statusEffects];
+  const indexById = new Map(list.map((s, i) => [s.id, i]));
+
+  const upsert = (id, name, img) => {
+    if (indexById.has(id)) {
+      list[indexById.get(id)] = { ...list[indexById.get(id)], id, name, img };
+    } else {
+      indexById.set(id, list.length);
+      list.push({ id, name, img });
+    }
+  };
+
+  // Buff / debuff statuses (p.96) — id + icon from CONFIG.SMT.buffs (smt-prefixed).
+  for (const def of Object.values(SMT.buffs)) upsert(def.statusId, def.label, def.icon);
+  // Concentrate / Defend setup-action statuses (p.64).
+  for (const def of Object.values(SMT.actionEffects)) upsert(def.statusId, def.label, def.icon);
+  // Ailment slot icons (p.67-68) — one per CONFIG.SMT.ailments id; overrides any
+  // core status sharing the id so a single entry maps onto the system.ailment slot.
+  for (const [id, label] of Object.entries(SMT.ailments)) {
+    upsert(id, label, AILMENT_ICONS[id] ?? "icons/svg/aura.svg");
+  }
+
+  CONFIG.statusEffects = list;
+}
+
 // --- Chat message button handlers ---
 Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindAttackButtons(message, html);
   _bindFateCheckButtons(message, html);
   _bindFateDamageButtons(message, html);
+});
+
+// ═══════════════════════════════════════════════
+// Shared-mutation client election
+// ═══════════════════════════════════════════════
+// Several hooks fire on every connected client but must run their write exactly
+// once. Funnel each through one responsible client: the active GM if any GM is
+// connected (writes succeed regardless of token ownership), otherwise the
+// connected owner with the lowest user id. Keeps automation single-fire without
+// a socket relay.
+function _isResponsibleClient(actor) {
+  if (game.users.some(u => u.active && u.isGM)) return game.user.isGM;
+  const owner = game.users
+    .filter(u => u.active && actor.testUserPermission(u, "OWNER"))
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  return owner?.id === game.user.id;
+}
+
+// ═══════════════════════════════════════════════
+// Token-HUD status backfill (buff / stance casts via the HUD)
+// ═══════════════════════════════════════════════
+// Toggling a buff/debuff or Concentrate/Defend status from the token HUD creates
+// a bare ActiveEffect with only its `statuses` set — no rolled magnitude and no
+// ADD-mode changes. Back-fill one cast's worth of data (a rolled CONFIG.SMT.buffDie
+// per buff axis, or the fixed Concentrate/Defend bonus) so a HUD toggle behaves
+// exactly like casting the effect once. Runs only on the client that created the
+// effect, and skips any effect already carrying our flag/changes (a real cast),
+// so it never double-applies.
+Hooks.on("createActiveEffect", async (effect, options, userId) => {
+  if (game.user.id !== userId) return;
+  const actor = effect.parent;
+  if (!(actor instanceof Actor)) return;
+
+  // A cast made through effects.mjs already carries our bookkeeping flag and the
+  // ADD-mode changes — leave it untouched.
+  const flags = effect.flags?.["smt-rpg"];
+  if (flags?.buff || flags?.concentrate || flags?.defend !== undefined) return;
+  if (effect.changes?.length) return;
+
+  const statusId = [...effect.statuses][0];
+  if (!statusId) return;
+
+  // Only buff/stance statuses are backfilled. Ailment statuses are mirrored from
+  // system.ailment (syncAilmentStatus) and carry no magnitude, so they are skipped.
+  const buffKey = Object.keys(SMT.buffs).find(k => SMT.buffs[k].statusId === statusId);
+  const isConcentrate = statusId === SMT.actionEffects.concentrate.statusId;
+  const isDefend = statusId === SMT.actionEffects.defend.statusId;
+  if (!buffKey && !isConcentrate && !isDefend) return;
+
+  if (!(game.user.isGM || actor.canUserModify(game.user, "update"))) return;
+
+  if (buffKey) {
+    const def = SMT.buffs[buffKey];
+    // One non-exploding CONFIG.SMT.buffDie, signed, written as an ADD change per
+    // axis — mirrors applyBuff's first-stack branch (p.96).
+    const roll = await new Roll(SMT.buffDie).evaluate();
+    const magnitude = (Number(roll.total) || 0) * def.sign;
+    const changes = def.axes.map(axis => ({
+      key: `system.buffs.${axis}`,
+      mode: CONST.ACTIVE_EFFECT_MODES.ADD,
+      value: String(magnitude)
+    }));
+    await effect.update({
+      name: `${game.i18n.localize(def.label)} ×1`,
+      changes,
+      "flags.smt-rpg.buff": { effect: buffKey, group: def.group, stacks: 1 }
+    });
+  } else if (isConcentrate) {
+    const bonus = SMT.concentrate.bonusPct;
+    await effect.update({
+      name: `${game.i18n.localize(SMT.actionEffects.concentrate.label)} +${bonus}%`,
+      changes: [{ key: "system.concentrate.amount", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(bonus) }],
+      // Empty action: a HUD-toggled Concentrate applies to the next named action,
+      // since consumeConcentrate treats a falsy held action as "any" (p.64).
+      "flags.smt-rpg.concentrate": { action: "" }
+    });
+  } else {
+    const bonus = SMT.defend.dodgeBonus;
+    await effect.update({
+      name: `${game.i18n.localize(SMT.actionEffects.defend.label)} +${bonus}%`,
+      changes: [{ key: "system.defend.amount", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(bonus) }],
+      "flags.smt-rpg.defend": true
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════
+// Actor ailment automation
+// ═══════════════════════════════════════════════
+// When system.ailment changes:
+//   (a) a new common ailment landing drops the actor's Concentrate (p.64) — a
+//       held setup bonus is lost the moment an ailment takes hold;
+//   (b) the token-HUD ailment icons are re-mirrored from the single source of
+//       truth (system.ailment + the death/curse flags) via syncAilmentStatus.
+// One-directional (slot → HUD) and idempotent: it only ever creates/deletes the
+// ailment-tagged ActiveEffects it owns and never writes system.ailment, so it
+// cannot loop with itself or with the createActiveEffect backfill above.
+// Funnelled through the responsible client so the writes happen exactly once.
+Hooks.on("updateActor", async (actor, changed) => {
+  const ailmentChanged = changed.system?.ailment !== undefined;
+  const deathChanged = changed.system?.deathAilment !== undefined;
+  const curseChanged = changed.system?.curseAilment !== undefined;
+  if (!ailmentChanged && !deathChanged && !curseChanged) return;
+  if (!_isResponsibleClient(actor)) return;
+
+  const { dropConcentrateOnAilment } = await import("./module/helpers/effects.mjs");
+
+  // (a) A new common ailment (not a clear to "none") drops Concentrate (p.64).
+  if (ailmentChanged && changed.system.ailment !== "none") {
+    await dropConcentrateOnAilment(actor);
+  }
+
+  // (b) Mirror the ailment slot + special flags onto the HUD.
+  await _syncAilmentStatus(actor);
+});
+
+/**
+ * Mirror an actor's ailment state onto its token-HUD status icons (p.67-68).
+ * The single common-ailment slot (system.ailment) plus the two special flags
+ * (system.deathAilment / system.curseAilment) are the source of truth; this only
+ * adds/removes the ailment-tagged ActiveEffects it owns to match. At most one
+ * common-slot icon shows at a time (priority replaces, p.68); Death and Curse
+ * stack alongside it as their own icons. Stale ailment effects are removed first.
+ *
+ * @param {Actor} actor
+ * @returns {Promise<void>}
+ */
+async function _syncAilmentStatus(actor) {
+  const ailmentIds = Object.keys(SMT.ailments);
+
+  // Desired ailment ids: the one common slot, plus any active special flags.
+  const desired = new Set();
+  const current = actor.system.ailment ?? "none";
+  if (current !== "none") desired.add(current);
+  if (actor.system.deathAilment) desired.add("death");
+  if (actor.system.curseAilment) desired.add("curse");
+
+  // Remove any ailment-tagged effect we own whose id is no longer desired.
+  const stale = actor.effects.filter(e => {
+    if (e.getFlag("smt-rpg", "ailment") === undefined) return false;
+    return [...e.statuses].some(s => ailmentIds.includes(s) && !desired.has(s));
+  });
+  if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale.map(e => e.id));
+
+  // Add an icon for any desired ailment not already shown.
+  const toCreate = [];
+  for (const id of desired) {
+    if (actor.effects.some(e => e.statuses.has(id))) continue;
+    toCreate.push({
+      name: game.i18n.localize(SMT.ailments[id] ?? id),
+      img: AILMENT_ICONS[id] ?? "icons/svg/aura.svg",
+      statuses: [id],
+      flags: { "smt-rpg": { ailment: id } }
+    });
+  }
+  if (toCreate.length) await actor.createEmbeddedDocuments("ActiveEffect", toCreate);
+}
+
+// ═══════════════════════════════════════════════
+// Defend expiry (p.64)
+// ═══════════════════════════════════════════════
+// Defend lasts until the START of the defender's next turn. Clear it when that
+// combatant's turn begins. The hook fires on every client, so the write is
+// funnelled through the responsible client (the active GM if connected, so it
+// succeeds regardless of token ownership; otherwise the actor's lowest-id owner).
+// combat.combatant is the new current combatant after the turn/round change.
+Hooks.on("updateCombat", async (combat, changed) => {
+  if (!("turn" in changed || "round" in changed)) return;
+  const actor = combat.combatant?.actor;
+  if (!actor) return;
+  if (!_isResponsibleClient(actor)) return;
+  const { clearDefend } = await import("./module/helpers/effects.mjs");
+  await clearDefend(actor);
+});
+
+// Encounter end: clear any lingering temporary setup-action stances (Defend and
+// Concentrate, p.64) from every combatant so they never bleed across encounters.
+// Buff/debuff effects persist by design (no rules basis for auto-clearing them
+// here) and are managed via Dekaja/Dekunda or manual removal. Run as the active
+// GM so the batch clears every combatant regardless of token ownership.
+Hooks.on("deleteCombat", async (combat) => {
+  if (!game.user.isGM) return;
+  const { clearDefend, dropConcentrateOnAilment } = await import("./module/helpers/effects.mjs");
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor) continue;
+    await clearDefend(actor);
+    // dropConcentrateOnAilment deletes the Concentrate effect if present; the
+    // name reflects its other caller, but the action (clear Concentrate) is the
+    // same one wanted at encounter end.
+    await dropConcentrateOnAilment(actor);
+  }
 });
 
 async function _bindAttackButtons(message, html) {

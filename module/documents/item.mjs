@@ -30,6 +30,16 @@ export default class SMTItem extends Item {
     return this.system.skillType === "physical-attack";
   }
 
+  /**
+   * Whether this skill casts a buff/debuff or a dispel (p.96): its
+   * system.buffEffect is a CONFIG.SMT.buffs or CONFIG.SMT.buffDispels key.
+   * @returns {boolean}
+   */
+  get isBuffSkill() {
+    const e = this.system.buffEffect;
+    return this.type === "skill" && !!e && e !== "none";
+  }
+
   // Main skill use flow: pay cost -> check -> power roll -> pending attacks
   async use() {
     const actor = this.parent;
@@ -52,6 +62,19 @@ export default class SMTItem extends Item {
         return;
       }
       await actor.update({ [`system.${resource}.value`]: current - cost.value });
+    }
+
+    // Poison drains HP for each non-reactive action taken (p.66). Using a skill —
+    // attack, support, or buff — is such an action, so the drain is applied once
+    // here after the cost is paid and before the action resolves.
+    const { applyPoisonDrain } = await import("../helpers/effects.mjs");
+    await applyPoisonDrain(actor);
+
+    // Buff / debuff / dispel skills resolve via ActiveEffects, not the attack
+    // pipeline (p.96). They auto-succeed and skip the hit/power rolls entirely.
+    if (this.isBuffSkill) {
+      await this._castBuff(actor);
+      return;
     }
 
     if (this.system.autoSuccess) {
@@ -98,7 +121,21 @@ export default class SMTItem extends Item {
     }
 
     const stat = this.system.checkStat;
-    const label = `${this.name} (${game.i18n.localize(`SMT.Stat.${stat.charAt(0).toUpperCase() + stat.slice(1)}`)})`;
+    let label = `${this.name} (${game.i18n.localize(`SMT.Stat.${stat.charAt(0).toUpperCase() + stat.slice(1)}`)})`;
+
+    // Concentrate: spend any bonus held for this named action, adding its +% to
+    // the hit TN (p.64). The whole bonus is consumed regardless of the result.
+    const { consumeConcentrate } = await import("../helpers/effects.mjs");
+    const concentrate = await consumeConcentrate(actor, this.name);
+    if (concentrate) {
+      tn += concentrate;
+      label += ` +${concentrate}%`;
+    }
+
+    // Stun caps the attacker's hit TN at CONFIG.SMT.stun.hitCapPct (p.66). Cap the
+    // single TN value here so it flows into both the roll and buildCheckData,
+    // keeping any Fate reroll/boost re-evaluation consistent with what was rolled.
+    if (actor.system.ailment === "stun") tn = Math.min(tn, CONFIG.SMT.stun.hitCapPct);
 
     // Might passive: crit threshold TN/5 instead of TN/10 (getter, physical only)
     const hasMight = this.isPhysicalSkill && actor.system.hasMightPassive;
@@ -151,6 +188,54 @@ export default class SMTItem extends Item {
           targetTokenUuid: token.document.uuid
         });
       }
+    }
+  }
+
+  /**
+   * Resolve a buff/debuff/dispel skill (p.96). These auto-succeed with no hit or
+   * power roll and are AoE by allegiance: -kaja buffs and Dekunda affect all
+   * allies (caster included); -nda debuffs and Dekaja affect all foes. Targeting
+   * is by disposition (combat.getAutoTargets), not the manual target, so the
+   * correct side is always hit. A dispel strips its group from each target; a
+   * buff rolls and stacks per target and posts a result card.
+   *
+   * @param {SMTActor} actor - the casting actor.
+   * @returns {Promise<void>}
+   */
+  async _castBuff(actor) {
+    const {
+      applyBuff, clearBuffGroup, postBuffCard, postEffectNotice
+    } = await import("../helpers/effects.mjs");
+    const { getAutoTargets } = await import("../helpers/combat.mjs");
+
+    const key = this.system.buffEffect;
+    const dispelGroup = CONFIG.SMT.buffDispels[key];
+    const def = CONFIG.SMT.buffs[key];
+
+    // -kaja buffs and Dekunda (clears -nda from allies) affect allies, caster
+    // included; -nda debuffs and Dekaja affect foes. getAutoTargets excludes the
+    // caster's own token, so self is unioned back in for ally-targeted effects.
+    const affectsAllies = dispelGroup === "nda" || def?.sign > 0;
+    const tokens = getAutoTargets(actor, affectsAllies ? "All Allies" : "All Foes");
+    const targets = tokens.map(t => t.actor).filter(Boolean);
+    if (affectsAllies && !targets.includes(actor)) targets.unshift(actor);
+
+    if (!targets.length) {
+      ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
+      return;
+    }
+
+    if (dispelGroup) {
+      let cleared = 0;
+      for (const target of targets) cleared += await clearBuffGroup(target, dispelGroup);
+      const label = game.i18n.localize(CONFIG.SMT.buffEffectChoices[key]);
+      await postEffectNotice(actor, game.i18n.format("SMT.Effect.Dispelled", { skill: label, count: cleared }));
+      return;
+    }
+
+    for (const target of targets) {
+      const summary = await applyBuff(target, key, { source: actor });
+      await postBuffCard(actor, summary);
     }
   }
 
@@ -219,6 +304,10 @@ export default class SMTItem extends Item {
     if (!sys.reusable) {
       await this.update({ "system.quantity": sys.quantity - 1 });
     }
+
+    // Using an item is a non-reactive action: a poisoned user drains HP (p.66).
+    const { applyPoisonDrain } = await import("../helpers/effects.mjs");
+    await applyPoisonDrain(actor);
 
     const results = [];
 

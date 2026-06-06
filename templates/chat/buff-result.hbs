@@ -1,0 +1,18 @@
+<div class="smt-roll buff {{#if isBuff}}buff-up{{else}}buff-down{{/if}}">
+  <h3>{{targetName}} — {{label}}</h3>
+  {{#if capped}}
+  <div class="roll-outcome failure">{{localize "SMT.Buff.Capped"}}</div>
+  {{else}}
+  <div class="roll-breakdown">
+    <span>
+      {{#if isBuff}}{{localize "SMT.Buff.Raised"}}{{else}}{{localize "SMT.Buff.Lowered"}}{{/if}}:
+      {{#each rolls}}<span class="buff-die">{{this}}</span>{{/each}}
+      (+{{rolled}})
+    </span>
+    <span class="buff-stacks">{{localize "SMT.Buff.Stacks"}}: {{stacks}} / {{max}} &middot; {{localize "SMT.Buff.Total"}} {{total}}</span>
+  </div>
+  <div class="roll-outcome {{#if isBuff}}success{{else}}failure{{/if}}">
+    {{#if isBuff}}{{localize "SMT.Buff.Buffed"}}{{else}}{{localize "SMT.Buff.Debuffed"}}{{/if}}
+  </div>
+  {{/if}}
+</div>
