@@ -43,6 +43,29 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       ailment: new StringField({ initial: "none" }),
       deathAilment: new BooleanField({ initial: false }),
       curseAilment: new BooleanField({ initial: false }),
+
+      // Buff/debuff accumulators (p.96). One field per axis in
+      // CONFIG.SMT.buffAxes. ActiveEffect ADD-mode changes write into these; they
+      // are re-zeroed every prepare cycle (prepareBaseData) and folded into the
+      // derived combat stats (prepareDerivedData). Stored — not pure-derived — so
+      // effect application has a schema-backed key to target.
+      buffs: new SchemaField({
+        physicalPower: new NumberField({ integer: true, initial: 0 }),
+        magicalPower: new NumberField({ integer: true, initial: 0 }),
+        resist: new NumberField({ integer: true, initial: 0 }),
+        accuracy: new NumberField({ integer: true, initial: 0 }),
+        dodge: new NumberField({ integer: true, initial: 0 })
+      }),
+      // Setup-action accumulators (p.64), likewise fed by ActiveEffect ADD-mode
+      // changes. Concentrate holds the pending +% for the next named action;
+      // Defend holds the dodge bonus active until the start of the next turn.
+      concentrate: new SchemaField({
+        amount: new NumberField({ integer: true, initial: 0 })
+      }),
+      defend: new SchemaField({
+        amount: new NumberField({ integer: true, initial: 0 })
+      }),
+
       background1: new HTMLField({ initial: "" }),
       background2: new HTMLField({ initial: "" }),
       goal: new HTMLField({ initial: "" }),
@@ -108,6 +131,23 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     return { hpBonus, mpBonus };
   }
 
+  /**
+   * Zero every buff/setup-action accumulator before ActiveEffects apply (their
+   * ADD-mode changes write onto these fields), so each prepare cycle starts from
+   * a clean slate and stale stacks cannot compound across renders. Keys mirror
+   * CONFIG.SMT.buffAxes plus the concentrate/defend accumulators (p.96, p.64).
+   */
+  prepareBaseData() {
+    super.prepareBaseData();
+    this.buffs.physicalPower = 0;
+    this.buffs.magicalPower = 0;
+    this.buffs.resist = 0;
+    this.buffs.accuracy = 0;
+    this.buffs.dodge = 0;
+    this.concentrate.amount = 0;
+    this.defend.amount = 0;
+  }
+
   prepareDerivedData() {
     const lvl = this.level;
 
@@ -143,10 +183,47 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.negotiationTN = (this.luckTotal * CONFIG.SMT.negotiation.multiplier) + CONFIG.SMT.negotiation.bonus;
     this.saveTN = this.vitalityTN;
 
+    // Fold buff/debuff and Defend accumulators into the combat stats (p.96, p.64).
+    this._applyBuffModifiers();
+
     // Fate = (luck / 5) + 5 (p.36)
     this.fatePoints.max = Math.floor(this.luckTotal / CONFIG.SMT.fate.maxLuckDivisor) + CONFIG.SMT.fate.maxBase;
     // EXP needed for next level = level^3 (p.48); expMultiplier is a per-type system extension
     this.expNext = Math.floor(Math.pow(lvl + 1, 3) * this.expMultiplier);
+  }
+
+  /**
+   * Fold the effect-fed buff/debuff accumulators into the derived combat stats
+   * (p.96), reading the base values the existing formulas already produced from
+   * effect-modified stats. Applied AFTER those formulas so the buffs layer on
+   * top rather than feed back into them:
+   * - physicalPower / magicalPower → basePhysicalPower / baseMagicalPower
+   *   (Tarukaja, Makakaja, and Tarunda — the universal attack-power debuff —
+   *   land here);
+   * - resist → both physical and magical resistance (Rakukaja / Rakunda);
+   * - accuracy → the attack-check TNs only (Strength / Magic / Agility), never
+   *   the save / negotiation / luck TNs (Sukukaja / Sukunda);
+   * - dodge → the dodge TN, plus the Defend bonus (Sukukaja / Sukunda + Defend).
+   * dodgeTN is read from agilityTN BEFORE this fold, so Sukukaja's dodge effect
+   * comes solely from the dodge accumulator and the agility accumulator does not
+   * cascade into it twice. Powers and resistances floor at 0 so debuffs cannot
+   * drive them negative.
+   */
+  _applyBuffModifiers() {
+    this.basePhysicalPower = Math.max(0, this.basePhysicalPower + this.buffs.physicalPower);
+    this.baseMagicalPower = Math.max(0, this.baseMagicalPower + this.buffs.magicalPower);
+
+    this.physicalResistance = Math.max(0, this.physicalResistance + this.buffs.resist);
+    this.magicalResistance = Math.max(0, this.magicalResistance + this.buffs.resist);
+
+    const acc = this.buffs.accuracy;
+    if (acc) {
+      this.strengthTN += acc;
+      this.magicTN += acc;
+      this.agilityTN += acc;
+    }
+
+    this.dodgeTN += this.buffs.dodge + this.defend.amount;
   }
 
   _clampCurrentValues() {

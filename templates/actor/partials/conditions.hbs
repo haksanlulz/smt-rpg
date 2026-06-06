@@ -1,0 +1,34 @@
+{{!-- Conditions strip (sheet header): the single common-ailment slot (p.68), the
+  special Death/Curse flags (p.67), and the active buff/stance icons. The ailment
+  and special-flag pips clear on click; the buff/stance marks are display-only
+  (managed from the combat-tab chips / Dekaja-Dekunda). --}}
+{{#if conditions.any}}
+<div class="condition-pips">
+  {{#if conditions.ailment}}
+    <span class="condition-pip ailment clickable" data-action="clearAilment"
+      data-tooltip="{{localize conditions.ailment.label}} — {{localize 'SMT.ClearCondition'}}">
+      <i class="fas fa-skull-crossbones"></i>
+      {{localize conditions.ailment.label}}
+    </span>
+  {{/if}}
+  {{#if conditions.death}}
+    <span class="condition-pip ailment death clickable" data-action="clearDeath"
+      data-tooltip="{{localize 'SMT.Ailment.Death'}} — {{localize 'SMT.ClearCondition'}}">
+      <i class="fas fa-skull"></i>
+      {{localize "SMT.Ailment.Death"}}
+    </span>
+  {{/if}}
+  {{#if conditions.curse}}
+    <span class="condition-pip ailment curse clickable" data-action="clearCurse"
+      data-tooltip="{{localize 'SMT.Ailment.Curse'}} — {{localize 'SMT.ClearCondition'}}">
+      <i class="fas fa-ghost"></i>
+      {{localize "SMT.Ailment.Curse"}}
+    </span>
+  {{/if}}
+  {{#each conditions.marks as |mark|}}
+    <span class="condition-pip mark" data-tooltip="{{mark.name}}">
+      <img src="{{mark.img}}" alt="" width="16" height="16" />
+    </span>
+  {{/each}}
+</div>
+{{/if}}

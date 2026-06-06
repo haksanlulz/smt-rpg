@@ -36,5 +36,15 @@
       <span class="roll-label">{{localize "SMT.Damage.Final"}}</span>
     </div>
   {{/if}}
+  {{!-- Resulting-HP footer (p.65). Suppressed for null/repel, where the target
+       takes no HP loss; shown for hits and drains. --}}
+  {{#unless isNull}}{{#unless isRepel}}
+    {{#if targetHpMax}}
+      <div class="target-hp {{#if targetDefeated}}defeated{{/if}}">
+        {{localize "SMT.HP"}}: {{targetHp}} / {{targetHpMax}}
+        {{#if targetDefeated}}<span class="defeated-tag">{{localize "SMT.Defeated"}}</span>{{/if}}
+      </div>
+    {{/if}}
+  {{/unless}}{{/unless}}
   <div class="fate-buttons"></div>
 </div>

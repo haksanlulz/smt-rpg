@@ -177,6 +177,14 @@ export default class SMTActor extends Actor {
       await this.update({ "system.hp.value": newHp });
     }
 
+    // Surface the target's resulting HP on the card so the outcome is readable at a
+    // glance (no need to open the sheet). Read AFTER the HP mutation above. The
+    // template suppresses this footer for null/repel, where the target takes no HP
+    // loss; for drain the target healed, so the readout is still meaningful.
+    chatData.targetHp = this.system.hp.value;
+    chatData.targetHpMax = this.system.hp.max;
+    chatData.targetDefeated = this.system.hp.value <= 0;
+
     const content = await foundry.applications.handlebars.renderTemplate(
       "systems/smt-rpg/templates/chat/damage-result.hbs",
       chatData

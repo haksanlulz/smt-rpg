@@ -29,6 +29,33 @@
 
 import { evaluatePercentile } from "./checks.mjs";
 
+// ═══════════════════════════════════════════════
+// Resolution idempotency
+// ═══════════════════════════════════════════════
+// Every mutating resolver carries a persisted `resolved` flag that it re-reads
+// and bails on. That guard is written only AFTER the first await, so two clicks
+// (or two clients) can both pass the check before either persists `resolved` —
+// a TOCTOU double-apply. This synchronous in-flight set, keyed by message id,
+// closes that window: a resolver claims its id before its first await and frees
+// it in a finally, so a second concurrent entry returns immediately. It layers
+// on top of the `resolved` re-read (which still guards against re-clicks after
+// the first resolution has fully committed); it does not replace it.
+const _inFlight = new Set();
+
+/**
+ * Stun caps an attacker's attack hit TN at CONFIG.SMT.stun.hitCapPct% (p.66).
+ * Mirrors the inline cap in item.use() so every attack-resolution path agrees on
+ * one rule and one constant. A non-stunned actor's TN is returned unchanged.
+ *
+ * @param {SMTActor} actor - the acting (attacking) actor.
+ * @param {number}   tn    - the hit target number before the stun cap.
+ * @returns {number} the TN capped to CONFIG.SMT.stun.hitCapPct when stunned.
+ */
+export function applyStunHitCap(actor, tn) {
+  if (actor?.system?.ailment === "stun") return Math.min(tn, CONFIG.SMT.stun.hitCapPct);
+  return tn;
+}
+
 // Best token UUID for an actor on the current scene
 export function getTokenUuid(actor) {
   if (actor.token) return actor.token.uuid;
@@ -263,85 +290,122 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
   if (!live || live.resolved) return;
   attackData = live;
 
-  const attacker = getActorFromTokenUuid(attackData.attackerTokenUuid);
-  const target = getActorFromTokenUuid(attackData.targetTokenUuid);
-  if (!attacker || !target) return;
+  // Idempotency: claim this message before the first await so a concurrent click
+  // cannot also pass the resolved-flag check above. Released in finally.
+  if (_inFlight.has(message.id)) return;
+  _inFlight.add(message.id);
+  try {
+    const attacker = getActorFromTokenUuid(attackData.attackerTokenUuid);
+    const target = getActorFromTokenUuid(attackData.targetTokenUuid);
+    if (!attacker || !target) return;
 
-  // Sanitize author-forgeable flag values before they feed rolls / HP updates.
-  let rawPower = _sanitizeAmount(attackData.rawPower);
-  const element = _sanitizeElement(attackData.element);
-  const ailmentType = _sanitizeAilmentType(attackData.ailmentType);
-  const ailmentRate = _sanitizeAilmentRate(attackData.ailmentRate);
-  let isCritical = !!attackData.isCritical;
-  let dodgeFumble = false;
-  let dodgeOutcome = null;
+    // Sanitize author-forgeable flag values before they feed rolls / HP updates.
+    let rawPower = _sanitizeAmount(attackData.rawPower);
+    const element = _sanitizeElement(attackData.element);
+    const ailmentType = _sanitizeAilmentType(attackData.ailmentType);
+    const ailmentRate = _sanitizeAilmentRate(attackData.ailmentRate);
+    const isPhysical = !!attackData.isPhysical;
+    let isCritical = !!attackData.isCritical;
+    let dodgeFumble = false;
+    let dodgeOutcome = null;
 
-  if (!skipDodge) {
-    const dodgeResult = await target.rollPercentile(
-      target.system.dodgeTN,
-      `${target.name} — ${game.i18n.localize("SMT.DodgeLabel")}`
-    );
+    if (!skipDodge) {
+      const dodgeResult = await target.rollPercentile(
+        target.system.dodgeTN,
+        `${target.name} — ${game.i18n.localize("SMT.DodgeLabel")}`
+      );
 
-    dodgeOutcome = _resolveDodgeOutcome(isCritical, dodgeResult);
+      dodgeOutcome = _resolveDodgeOutcome(isCritical, dodgeResult);
 
-    if (CONFIG.SMT.debug) console.log("smt-rpg | Dodge Resolution", {
-      target: target.name, dodgeTN: target.system.dodgeTN,
-      dodgeRoll: dodgeResult.result, dodgeOutcome,
-      hitWasCritical: isCritical
-    });
+      if (CONFIG.SMT.debug) console.log("smt-rpg | Dodge Resolution", {
+        target: target.name, dodgeTN: target.system.dodgeTN,
+        dodgeRoll: dodgeResult.result, dodgeOutcome,
+        hitWasCritical: isCritical
+      });
 
-    switch (dodgeOutcome) {
-      case "miss":
-        await _postDodgeResult(attacker, target, attackData.skillName, "miss");
-        await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
-        return;
+      switch (dodgeOutcome) {
+        case "miss":
+          await _postDodgeResult(attacker, target, attackData.skillName, "miss");
+          await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
+          return;
 
-      case "downgrade":
-        rawPower = Math.floor(rawPower / 2);
-        isCritical = false;
-        await _postDodgeResult(attacker, target, attackData.skillName, "downgrade");
-        break;
+        case "downgrade":
+          rawPower = Math.floor(rawPower / 2);
+          isCritical = false;
+          await _postDodgeResult(attacker, target, attackData.skillName, "downgrade");
+          break;
 
-      case "fumble":
-        dodgeFumble = true;
-        await _postDodgeResult(attacker, target, attackData.skillName, "fumble");
-        break;
+        case "fumble":
+          dodgeFumble = true;
+          await _postDodgeResult(attacker, target, attackData.skillName, "fumble");
+          break;
 
-      case "fail":
-        await _postDodgeResult(attacker, target, attackData.skillName, "fail");
-        break;
+        case "fail":
+          await _postDodgeResult(attacker, target, attackData.skillName, "fail");
+          break;
+      }
     }
-  }
 
-  const dmgResult = await target.applyDamage({
-    rawPower,
-    element,
-    isPhysical: attackData.isPhysical,
-    isCritical,
-    attacker,
-    skillName: attackData.skillName,
-    dodgeFumble
-  });
+    // Crit-on-incoming-Phys (p.66): a physical attack that lands on a target held
+    // by a Restrain/Freeze/Shock/Stone ailment is forced critical. This reuses the
+    // existing crit path in applyDamage/calculateDamage (which skips resistance);
+    // affinity/drain/repel/null are untouched. The triggering ailments are all
+    // common-slot ailments (CONFIG.SMT.critOnPhysAilments), so the single
+    // system.ailment slot is the authoritative state to read; Death/Curse are
+    // tracked as separate flags and never appear in that list. Applied after the
+    // dodge switch so it reflects the hit as it actually lands.
+    if (isPhysical && _forcesCritOnPhys(target)) {
+      isCritical = true;
+      if (CONFIG.SMT.debug) console.log("smt-rpg | Crit-on-Phys forced", {
+        target: target.name, ailment: target.system.ailment
+      });
+    }
 
-  if (CONFIG.SMT.debug) console.log("smt-rpg | Ailment Pre-Check", {
-    dmgResult: { isNull: dmgResult?.isNull, isDrain: dmgResult?.isDrain, isRepel: dmgResult?.isRepel },
-    ailmentType, ailmentRate,
-    dmgResultExists: !!dmgResult
-  });
-  if (dmgResult && !dmgResult.isNull && !dmgResult.isDrain && !dmgResult.isRepel
-      && ailmentType && ailmentType !== "none" && ailmentRate > 0) {
-    await resolveAilment({
-      target, attacker,
-      ailmentType,
-      baseRate: ailmentRate,
+    const dmgResult = await target.applyDamage({
+      rawPower,
       element,
+      isPhysical,
       isCritical,
-      dodgeFumble,
-      targetTokenUuid: attackData.targetTokenUuid
+      attacker,
+      skillName: attackData.skillName,
+      dodgeFumble
     });
-  }
 
-  await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Ailment Pre-Check", {
+      dmgResult: { isNull: dmgResult?.isNull, isDrain: dmgResult?.isDrain, isRepel: dmgResult?.isRepel },
+      ailmentType, ailmentRate,
+      dmgResultExists: !!dmgResult
+    });
+    if (dmgResult && !dmgResult.isNull && !dmgResult.isDrain && !dmgResult.isRepel
+        && ailmentType && ailmentType !== "none" && ailmentRate > 0) {
+      await resolveAilment({
+        target, attacker,
+        ailmentType,
+        baseRate: ailmentRate,
+        element,
+        isCritical,
+        dodgeFumble,
+        targetTokenUuid: attackData.targetTokenUuid
+      });
+    }
+
+    await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
+  } finally {
+    _inFlight.delete(message.id);
+  }
+}
+
+/**
+ * Whether a target's current common ailment forces an incoming physical attack to
+ * crit (p.66). Reads the single system.ailment slot against
+ * CONFIG.SMT.critOnPhysAilments (Restrain/Freeze/Shock/Stone).
+ *
+ * @param {SMTActor} target - the actor receiving the physical attack.
+ * @returns {boolean}
+ */
+function _forcesCritOnPhys(target) {
+  const ailment = target?.system?.ailment ?? "none";
+  return ailment !== "none" && CONFIG.SMT.critOnPhysAilments.includes(ailment);
 }
 
 function _resolveDodgeOutcome(hitIsCritical, dodgeResult) {
@@ -536,38 +600,50 @@ export async function resolveCheckReroll(message, checkData) {
   if (!live || live.resolved) return;
   checkData = live;
 
-  const actor = getActorFromTokenUuid(checkData.actorTokenUuid);
-  if (!actor || actor.system.fatePoints.value <= 0) return;
+  // Claim before the first await so a concurrent click cannot also pass the
+  // resolved-flag check above and spend a second Fate Point. Freed in finally.
+  if (_inFlight.has(message.id)) return;
+  _inFlight.add(message.id);
+  try {
+    const actor = getActorFromTokenUuid(checkData.actorTokenUuid);
+    if (!actor || actor.system.fatePoints.value <= 0) return;
 
-  await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
+    await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
 
-  const currentTN = _sanitizeAmount(checkData.currentTN);
-  const roll = new Roll("1d100");
-  await roll.evaluate();
-  const newResult = roll.total;
-  const evaluated = evaluatePercentile(newResult, currentTN, { hasMight: !!checkData.hasMight });
-  const outcome = game.i18n.localize(evaluated.outcomeKey);
+    // Stun caps the attacker's hit TN at CONFIG.SMT.stun.hitCapPct (p.66). Re-cap
+    // here so the reroll re-evaluates against the cap (the stored currentTN was
+    // capped at use time, but the attacker may have become stunned since), and
+    // persist the capped TN so any cascade stays consistent with what was rolled.
+    const currentTN = applyStunHitCap(actor, _sanitizeAmount(checkData.currentTN));
+    const roll = new Roll("1d100");
+    await roll.evaluate();
+    const newResult = roll.total;
+    const evaluated = evaluatePercentile(newResult, currentTN, { hasMight: !!checkData.hasMight });
+    const outcome = game.i18n.localize(evaluated.outcomeKey);
 
-  const content = await foundry.applications.handlebars.renderTemplate(
-    "systems/smt-rpg/templates/chat/percentile-roll.hbs",
-    { label: `${checkData.skillName} — ${game.i18n.localize("SMT.FateReroll")}`, result: newResult, tn: currentTN, outcome, cssClass: evaluated.cssClass }
-  );
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    content, rolls: [roll], sound: CONFIG.sounds.dice
-  });
+    const content = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/percentile-roll.hbs",
+      { label: `${checkData.skillName} — ${game.i18n.localize("SMT.FateReroll")}`, result: newResult, tn: currentTN, outcome, cssClass: evaluated.cssClass }
+    );
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content, rolls: [roll], sound: CONFIG.sounds.dice
+    });
 
-  const oldSuccess = checkData.isSuccess;
-  const newCheckData = { ...checkData, rollResult: newResult, isSuccess: evaluated.isSuccess, isCritical: evaluated.isCritical };
+    const oldSuccess = checkData.isSuccess;
+    const newCheckData = { ...checkData, currentTN, rollResult: newResult, isSuccess: evaluated.isSuccess, isCritical: evaluated.isCritical };
 
-  if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Reroll", {
-    actor: actor.name, skill: checkData.skillName,
-    oldRoll: checkData.rollResult, newRoll: newResult,
-    tn: currentTN, oldSuccess, newSuccess: evaluated.isSuccess,
-    fpRemaining: actor.system.fatePoints.value
-  });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Reroll", {
+      actor: actor.name, skill: checkData.skillName,
+      oldRoll: checkData.rollResult, newRoll: newResult,
+      tn: currentTN, oldSuccess, newSuccess: evaluated.isSuccess,
+      fpRemaining: actor.system.fatePoints.value
+    });
 
-  await _cascadeCheckChange(message, checkData, newCheckData, oldSuccess, evaluated.isSuccess, actor);
+    await _cascadeCheckChange(message, checkData, newCheckData, oldSuccess, evaluated.isSuccess, actor);
+  } finally {
+    _inFlight.delete(message.id);
+  }
 }
 
 /**
@@ -584,36 +660,47 @@ export async function resolveCheckBoost(message, checkData) {
   if (!live || live.resolved) return;
   checkData = live;
 
-  const actor = getActorFromTokenUuid(checkData.actorTokenUuid);
-  if (!actor || actor.system.fatePoints.value <= 0) return;
+  // Claim before the first await so a concurrent click cannot also pass the
+  // resolved-flag check above and spend a second Fate Point. Freed in finally.
+  if (_inFlight.has(message.id)) return;
+  _inFlight.add(message.id);
+  try {
+    const actor = getActorFromTokenUuid(checkData.actorTokenUuid);
+    if (!actor || actor.system.fatePoints.value <= 0) return;
 
-  await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
+    await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
 
-  const rollResult = _sanitizeAmount(checkData.rollResult);
-  const newTN = _sanitizeAmount(checkData.currentTN) + CONFIG.SMT.fate.boostTN;
-  const evaluated = evaluatePercentile(rollResult, newTN, { hasMight: !!checkData.hasMight });
-  const outcome = game.i18n.localize(evaluated.outcomeKey);
+    const rollResult = _sanitizeAmount(checkData.rollResult);
+    // Boost raises the TN, then the stun cap (p.66) clamps it: a stunned attacker
+    // cannot Boost past CONFIG.SMT.stun.hitCapPct. The capped TN is persisted into
+    // currentTN so it is what any later re-evaluation sees.
+    const newTN = applyStunHitCap(actor, _sanitizeAmount(checkData.currentTN) + CONFIG.SMT.fate.boostTN);
+    const evaluated = evaluatePercentile(rollResult, newTN, { hasMight: !!checkData.hasMight });
+    const outcome = game.i18n.localize(evaluated.outcomeKey);
 
-  const content = await foundry.applications.handlebars.renderTemplate(
-    "systems/smt-rpg/templates/chat/percentile-roll.hbs",
-    { label: `${checkData.skillName} — ${game.i18n.localize("SMT.FateBoostTN")}`, result: rollResult, tn: newTN, outcome, cssClass: evaluated.cssClass }
-  );
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    content
-  });
+    const content = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/percentile-roll.hbs",
+      { label: `${checkData.skillName} — ${game.i18n.localize("SMT.FateBoostTN")}`, result: rollResult, tn: newTN, outcome, cssClass: evaluated.cssClass }
+    );
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content
+    });
 
-  const oldSuccess = checkData.isSuccess;
-  const newCheckData = { ...checkData, currentTN: newTN, isSuccess: evaluated.isSuccess, isCritical: evaluated.isCritical };
+    const oldSuccess = checkData.isSuccess;
+    const newCheckData = { ...checkData, currentTN: newTN, isSuccess: evaluated.isSuccess, isCritical: evaluated.isCritical };
 
-  if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Boost TN", {
-    actor: actor.name, skill: checkData.skillName,
-    roll: rollResult, oldTN: checkData.currentTN, newTN,
-    oldSuccess, newSuccess: evaluated.isSuccess,
-    fpRemaining: actor.system.fatePoints.value
-  });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Boost TN", {
+      actor: actor.name, skill: checkData.skillName,
+      roll: rollResult, oldTN: checkData.currentTN, newTN,
+      oldSuccess, newSuccess: evaluated.isSuccess,
+      fpRemaining: actor.system.fatePoints.value
+    });
 
-  await _cascadeCheckChange(message, checkData, newCheckData, oldSuccess, evaluated.isSuccess, actor);
+    await _cascadeCheckChange(message, checkData, newCheckData, oldSuccess, evaluated.isSuccess, actor);
+  } finally {
+    _inFlight.delete(message.id);
+  }
 }
 
 /**
@@ -707,49 +794,62 @@ export async function resolveHalveDamage(message, damageData) {
   if (!live || live.resolved) return;
   damageData = live;
 
-  const target = getActorFromTokenUuid(damageData.targetTokenUuid);
-  if (!target || target.system.fatePoints.value <= 0) return;
+  // Claim before the first await so a concurrent click cannot also pass the
+  // resolved-flag check above and spend a second Fate Point / re-heal. Freed in finally.
+  if (_inFlight.has(message.id)) return;
+  _inFlight.add(message.id);
+  try {
+    const target = getActorFromTokenUuid(damageData.targetTokenUuid);
+    if (!target || target.system.fatePoints.value <= 0) return;
 
-  const oldDamage = _sanitizeAmount(damageData.currentDamage);
-  if (oldDamage <= 0) return;
+    const oldDamage = _sanitizeAmount(damageData.currentDamage);
+    if (oldDamage <= 0) return;
 
-  await target.update({ "system.fatePoints.value": target.system.fatePoints.value - CONFIG.SMT.fate.cost });
+    await target.update({ "system.fatePoints.value": target.system.fatePoints.value - CONFIG.SMT.fate.cost });
 
-  const newDamage = Math.floor(oldDamage / CONFIG.SMT.fate.halveDivisor);
-  const hpRestored = oldDamage - newDamage;
-  const newHp = Math.min(target.system.hp.value + hpRestored, target.system.hp.max);
-  await target.update({ "system.hp.value": newHp });
+    const newDamage = Math.floor(oldDamage / CONFIG.SMT.fate.halveDivisor);
+    const hpRestored = oldDamage - newDamage;
+    const newHp = Math.min(target.system.hp.value + hpRestored, target.system.hp.max);
+    await target.update({ "system.hp.value": newHp });
 
-  if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Halve Damage", {
-    target: target.name, originalDamage: damageData.originalDamage,
-    oldDamage, newDamage, hpRestored, newHp,
-    fpRemaining: target.system.fatePoints.value
-  });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Halve Damage", {
+      target: target.name, originalDamage: damageData.originalDamage,
+      oldDamage, newDamage, hpRestored, newHp,
+      fpRemaining: target.system.fatePoints.value
+    });
 
-  // Spend the card: persist the halved damage and mark resolved.
-  await message.setFlag("smt-rpg", "damageData", {
-    ...damageData,
-    currentDamage: newDamage,
-    resolved: true
-  });
+    // Spend the card: persist the halved damage and mark resolved.
+    await message.setFlag("smt-rpg", "damageData", {
+      ...damageData,
+      currentDamage: newDamage,
+      resolved: true
+    });
 
-  const content = await foundry.applications.handlebars.renderTemplate(
-    "systems/smt-rpg/templates/chat/damage-result.hbs",
-    {
-      targetName: target.name,
-      skillName: game.i18n.localize("SMT.FateHalveDamage"),
-      affinity: "normal",
-      rawPower: damageData.originalDamage,
-      afterAffinity: 0,
-      resistanceApplied: 0,
-      finalDamage: newDamage,
-      isCritical: false, isPhysical: false,
-      isNull: false, isDrain: false, isRepel: false,
-      dodgeFumble: false
-    }
-  );
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor: target }),
-    content
-  });
+    const content = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/damage-result.hbs",
+      {
+        targetName: target.name,
+        skillName: game.i18n.localize("SMT.FateHalveDamage"),
+        affinity: "normal",
+        rawPower: damageData.originalDamage,
+        afterAffinity: 0,
+        resistanceApplied: 0,
+        finalDamage: newDamage,
+        isCritical: false, isPhysical: false,
+        isNull: false, isDrain: false, isRepel: false,
+        dodgeFumble: false,
+        // Resulting-HP footer (matches actor.applyDamage's card): show the target's
+        // HP after the heal-back so the halved outcome is readable at a glance.
+        targetHp: newHp,
+        targetHpMax: target.system.hp.max,
+        targetDefeated: newHp <= 0
+      }
+    );
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: target }),
+      content
+    });
+  } finally {
+    _inFlight.delete(message.id);
+  }
 }

@@ -79,6 +79,15 @@
       </select>
     </div>
 
+    <div class="form-group">
+      <label>{{localize "SMT.BuffEffect"}}</label>
+      <select name="system.buffEffect">
+        {{#each buffEffectChoices as |label key|}}
+          <option value="{{key}}" {{#if (eq key ../system.buffEffect)}}selected{{/if}}>{{localize label}}</option>
+        {{/each}}
+      </select>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label>{{localize "SMT.AilmentType"}}</label>

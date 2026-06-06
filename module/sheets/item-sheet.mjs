@@ -47,6 +47,7 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
       statChoices: SMT.stats,
       statLabels: SMT.stats,
       skillTypeChoices: SMT.skillTypes,
+      buffEffectChoices: SMT.buffEffectChoices,
       gearTypeChoices: SMT.gearTypes,
       consumableTypeChoices: SMT.consumableTypes,
       ailmentChoices: SMT.ailments,
