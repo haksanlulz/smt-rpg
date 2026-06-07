@@ -43,6 +43,38 @@ export default class SMTActor extends Actor {
   }
 
   /**
+   * Set this actor's level and reset its EXP to the floor for that level (p.48):
+   * "the demon is set to having an amount of EXP as though they'd just then reached
+   * that level". The threshold to reach level L is L^3 scaled by the actor's type
+   * EXP multiplier (demon ×1.3, human ×0.8, fiend ×1) — the same curve
+   * prepareDerivedData uses for expNext, so a set level and a natural level-up agree.
+   * Levelling immediately heals to full HP/MP (p.48 "HP/MP Recovery"); the data
+   * model clamps the inflated current values down to the freshly derived maxima.
+   * GM/owner-gated like every other actor mutation. Clamped to the schema's 1..100.
+   *
+   * @param {number} level - the target level.
+   * @returns {Promise<this|null>} the updated actor, or null if not permitted / no-op.
+   */
+  async setLevel(level) {
+    if (!(game.user.isGM || this.canUserModify(game.user, "update"))) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+      return null;
+    }
+    const target = Math.clamp(Math.floor(Number(level) || 0), 1, 100);
+    const mult = this.system.expMultiplier ?? 1;
+    const exp = Math.floor(Math.pow(target, 3) * mult);
+    await this.update({
+      "system.level": target,
+      "system.exp": exp,
+      // Heal to full on level change (p.48). Oversized values clamp to the derived
+      // max in _clampCurrentValues once the new level re-derives hp/mp.max.
+      "system.hp.value": 9_999_999,
+      "system.mp.value": 9_999_999
+    });
+    return this;
+  }
+
+  /**
    * Roll a d100 check against a target number, post the result card, and return the outcome.
    * Crit/fumble/auto-fail thresholds come from CONFIG.SMT.check via evaluatePercentile.
    *

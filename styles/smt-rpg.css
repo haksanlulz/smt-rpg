@@ -983,3 +983,42 @@
 }
 
 .smt-roll.effect-notice p { margin: 0; }
+
+/* Demon fusion (p.79) — result card + dialog */
+.smt-roll.fusion-result .fusion-ingredients {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.smt-roll.fusion-result .fusion-ingredients .ingredient { color: var(--smt-text-dim); }
+.smt-roll.fusion-result .fusion-ingredients .fusion-output {
+  font-weight: bold;
+  color: var(--smt-accent);
+}
+.smt-roll.fusion-result .fusion-ingredients i { color: var(--smt-text-dim); font-size: 0.85em; }
+
+.smt-roll.fusion-result .inherited-skills {
+  margin: 2px 0 0;
+  padding-left: 1.2em;
+  font-size: 0.9em;
+}
+.smt-roll.fusion-result .fusion-inheritance .none { color: var(--smt-text-dim); font-size: 0.9em; }
+
+.smt-fusion-dialog .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.smt-fusion-dialog .hint { color: var(--smt-text-dim); font-size: 0.9em; margin: 0 0 8px; }
+.smt-fusion-dialog .fusion-preview {
+  margin-top: 8px;
+  padding: 6px;
+  border-top: 1px solid var(--smt-border);
+}
+.smt-fusion-dialog .fusion-preview .preview-line.element { color: var(--smt-strong); font-size: 0.9em; }
+.smt-fusion-dialog .fusion-preview .warn { color: var(--smt-failure); }

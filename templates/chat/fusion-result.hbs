@@ -1,0 +1,27 @@
+<div class="smt-roll fusion-result">
+  <h3>{{localize "SMT.Fusion.Title"}}</h3>
+  <div class="fusion-ingredients">
+    <span class="ingredient">{{ingredientA}}</span>
+    <i class="fas fa-plus"></i>
+    <span class="ingredient">{{ingredientB}}</span>
+    <i class="fas fa-arrow-right"></i>
+    <span class="fusion-output">{{resultName}}</span>
+  </div>
+  <div class="roll-breakdown">
+    <span>{{localize "SMT.Clan"}}: {{clanLabel}}</span>
+    <span>{{localize "SMT.Level"}}: {{level}}</span>
+  </div>
+  {{#if isException}}
+  <div class="roll-outcome failure">{{localize "SMT.Fusion.ExceptionWarning"}}</div>
+  {{/if}}
+  <div class="fusion-inheritance">
+    <span class="inherit-count">{{localize "SMT.Fusion.Inherited"}}: {{inheritedCount}} / {{allowed}}</span>
+    {{#if inheritedNames.length}}
+    <ul class="inherited-skills">
+      {{#each inheritedNames}}<li>{{this}}</li>{{/each}}
+    </ul>
+    {{else}}
+    <span class="none">{{localize "SMT.Fusion.NoInherited"}}</span>
+    {{/if}}
+  </div>
+</div>
