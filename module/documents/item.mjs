@@ -30,40 +30,25 @@ export default class SMTItem extends Item {
     return this.system.skillType === "physical-attack";
   }
 
-  /**
-   * Whether this skill is magic that Mute seals (p.66): a spell or magical attack
-   * skill. Sourced from CONFIG.SMT.muteBlockedSkillTypes so the blocked set stays
-   * config-authoritative. Read by SMTItem.use to bar a Muted actor from casting.
-   * @returns {boolean}
-   */
+  // Magic that Mute seals (p.66): spell or magical attack.
   get isMagicSkill() {
     return this.type === "skill" && CONFIG.SMT.muteBlockedSkillTypes.includes(this.system.skillType);
   }
 
-  /**
-   * Whether this skill casts a buff/debuff or a dispel (p.96): its
-   * system.buffEffect is a CONFIG.SMT.buffs or CONFIG.SMT.buffDispels key.
-   * @returns {boolean}
-   */
+  // Casts a buff/debuff or dispel (p.96).
   get isBuffSkill() {
     const e = this.system.buffEffect;
     return this.type === "skill" && !!e && e !== "none";
   }
 
-  /**
-   * Whether this skill is a talk skill (p.72): an approach or support talk skill.
-   * Approach skills begin a negotiation; support skills interject into one already
-   * underway. Sourced from CONFIG.SMT.talk so the talk-skill set stays
-   * config-authoritative. Read by SMTItem.use to route into the negotiation flow.
-   * @returns {boolean}
-   */
+  // Talk skill (p.72): approach (begins negotiation) or support (interjects).
   get isTalkSkill() {
     if (this.type !== "skill") return false;
     return this.system.skillType === CONFIG.SMT.talk.approachType
       || this.system.skillType === CONFIG.SMT.talk.supportType;
   }
 
-  /** Whether this is specifically an approach talk skill (begins a negotiation, p.72). */
+  // Approach talk skill: begins a negotiation (p.72).
   get isApproachSkill() {
     return this.type === "skill" && this.system.skillType === CONFIG.SMT.talk.approachType;
   }
@@ -78,8 +63,7 @@ export default class SMTItem extends Item {
       return;
     }
 
-    // Mute seals magic (p.66): a Muted actor cannot use spells or magical attack
-    // skills. Checked before the cost is paid so a blocked cast never burns MP.
+    // Mute seals magic (p.66); checked before cost so a blocked cast never burns MP.
     if (this.isMagicSkill && actor.system.ailment === "mute") {
       ui.notifications.warn(game.i18n.localize("SMT.Warnings.Muted"));
       return;
@@ -99,24 +83,17 @@ export default class SMTItem extends Item {
       await actor.update({ [`system.${resource}.value`]: current - cost.value });
     }
 
-    // Poison drains HP for each non-reactive action taken (p.66). Using a skill —
-    // attack, support, or buff — is such an action, so the drain is applied once
-    // here after the cost is paid and before the action resolves.
+    // Poison drains HP per non-reactive action (p.66).
     const { applyPoisonDrain } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
 
-    // Buff / debuff / dispel skills resolve via ActiveEffects, not the attack
-    // pipeline (p.96). They auto-succeed and skip the hit/power rolls entirely.
+    // Buff/debuff/dispel resolve via ActiveEffects (p.96); auto-succeed, no rolls.
     if (this.isBuffSkill) {
       await this._castBuff(actor);
       return;
     }
 
-    // Talk skills resolve via the negotiation flow (p.72), not the attack pipeline.
-    // An approach skill begins a negotiation with one demon; a support skill is an
-    // interjection into a negotiation already underway. Either way the talk does not
-    // roll a hit/power check itself (the Negotiation check is rolled inside the
-    // negotiation engine, with the +20% talk bonus, p.75).
+    // Talk skills resolve via the negotiation flow (p.72), no hit/power roll here.
     if (this.isTalkSkill) {
       await this._talk(actor);
       return;
@@ -138,7 +115,7 @@ export default class SMTItem extends Item {
         await this._postPendingAttacks(actor, powerResult);
       }
 
-      // Ailment-only auto-success (e.g. Stun Gaze with autoSuccess)
+      // Ailment-only auto-success (e.g. Stun Gaze).
       if (!this.hasPowerRoll && this.system.ailment?.type && this.system.ailment.type !== "none" && this.system.ailment.rate > 0) {
         const { resolveAilment, resolveTargets } = await import("../helpers/combat.mjs");
         const targets = resolveTargets(actor, this.system.targets);
@@ -168,8 +145,7 @@ export default class SMTItem extends Item {
     const stat = this.system.checkStat;
     let label = `${this.name} (${game.i18n.localize(`SMT.Stat.${stat.charAt(0).toUpperCase() + stat.slice(1)}`)})`;
 
-    // Concentrate: spend any bonus held for this named action, adding its +% to
-    // the hit TN (p.64). The whole bonus is consumed regardless of the result.
+    // Concentrate: spend any bonus held for this action, +% to hit TN (p.64).
     const { consumeConcentrate } = await import("../helpers/effects.mjs");
     const concentrate = await consumeConcentrate(actor, this.name);
     if (concentrate) {
@@ -177,16 +153,14 @@ export default class SMTItem extends Item {
       label += ` +${concentrate}%`;
     }
 
-    // Stun caps the attacker's hit TN at CONFIG.SMT.stun.hitCapPct (p.66). Cap the
-    // single TN value here so it flows into both the roll and buildCheckData,
-    // keeping any Fate reroll/boost re-evaluation consistent with what was rolled.
+    // Stun caps hit TN (p.66); capped here so the roll and buildCheckData agree.
     if (actor.system.ailment === "stun") tn = Math.min(tn, CONFIG.SMT.stun.hitCapPct);
 
-    // Might passive: crit threshold TN/5 instead of TN/10 (getter, physical only)
+    // Might: crit threshold TN/5 instead of TN/10 (physical only).
     const hasMight = this.isPhysicalSkill && actor.system.hasMightPassive;
     const checkResult = await actor.rollPercentile(tn, label, { hasMight });
 
-    // Store for FP reroll/boost buttons (shared checkData builder)
+    // Stash for FP reroll/boost buttons.
     if (actor.system.fatePoints.value > 0) {
       const { buildCheckData } = await import("../helpers/combat.mjs");
       const msg = game.messages.get(checkResult.messageId);
@@ -215,7 +189,7 @@ export default class SMTItem extends Item {
       await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
     }
 
-    // Ailment-only skills (e.g. Stun Gaze)
+    // Ailment-only skills (e.g. Stun Gaze).
     if (checkResult.isSuccess && !this.hasPowerRoll
         && this.system.ailment?.type && this.system.ailment.type !== "none" && this.system.ailment.rate > 0) {
       const { resolveAilment, resolveTargets } = await import("../helpers/combat.mjs");
@@ -236,17 +210,7 @@ export default class SMTItem extends Item {
     }
   }
 
-  /**
-   * Resolve a buff/debuff/dispel skill (p.96). These auto-succeed with no hit or
-   * power roll and are AoE by allegiance: -kaja buffs and Dekunda affect all
-   * allies (caster included); -nda debuffs and Dekaja affect all foes. Targeting
-   * is by disposition (combat.getAutoTargets), not the manual target, so the
-   * correct side is always hit. A dispel strips its group from each target; a
-   * buff rolls and stacks per target and posts a result card.
-   *
-   * @param {SMTActor} actor - the casting actor.
-   * @returns {Promise<void>}
-   */
+  // Buff/debuff/dispel (p.96): auto-succeed, AoE by allegiance. Dispel strips its group; buff stacks per target.
   async _castBuff(actor) {
     const {
       applyBuff, clearBuffGroup, postBuffCard, postEffectNotice
@@ -257,9 +221,7 @@ export default class SMTItem extends Item {
     const dispelGroup = CONFIG.SMT.buffDispels[key];
     const def = CONFIG.SMT.buffs[key];
 
-    // -kaja buffs and Dekunda (clears -nda from allies) affect allies, caster
-    // included; -nda debuffs and Dekaja affect foes. getAutoTargets excludes the
-    // caster's own token, so self is unioned back in for ally-targeted effects.
+    // Buffs/Dekunda hit allies (caster included); debuffs/Dekaja hit foes. getAutoTargets drops self, so union it back.
     const affectsAllies = dispelGroup === "nda" || def?.sign > 0;
     const tokens = getAutoTargets(actor, affectsAllies ? "All Allies" : "All Foes");
     const targets = tokens.map(t => t.actor).filter(Boolean);
@@ -284,28 +246,13 @@ export default class SMTItem extends Item {
     }
   }
 
-  /**
-   * Resolve a talk skill (p.72). An approach skill begins a negotiation with one
-   * targeted demon: the negotiation engine rolls the rulebook Negotiation check (with
-   * the +20% talk bonus and the impress-type crit widening) and posts the card whose
-   * GM-driven buttons resolve demands, gifts, and the final Deal/Break (p.73-76). A
-   * support skill is an interjection into a negotiation already underway — it has no
-   * standalone target, so it posts a short interjection notice granting its +20% and
-   * leaves the flowchart move to the GM (the support-skill effects — restart, halve a
-   * macca demand, negate a Break — are GM judgement calls on the active negotiation).
-   * Targeting one demon uses the manual target (the book's "1 enemy demon").
-   *
-   * @param {SMTActor} actor - the talking actor.
-   * @returns {Promise<void>}
-   */
+  // Talk skill (p.72): approach begins a negotiation with one demon; support posts an interjection notice.
   async _talk(actor) {
     const { startNegotiation } = await import("../helpers/negotiation.mjs");
     const { postEffectNotice } = await import("../helpers/effects.mjs");
 
     if (this.isApproachSkill) {
-      // Approach: negotiate with one demon (the book's "1 enemy demon"). Prefer the
-      // manual target; fall back to a single auto-resolved foe so a one-foe encounter
-      // needs no manual targeting.
+      // Prefer the manual target; fall back to a single auto-resolved foe.
       const { resolveTargets } = await import("../helpers/combat.mjs");
       const target = game.user.targets.first()?.actor
         ?? resolveTargets(actor, "All Foes")[0]?.actor
@@ -314,9 +261,7 @@ export default class SMTItem extends Item {
         ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
         return;
       }
-      // Impress-type match (p.76) depends on the skill's impress type and the demon's
-      // behavioural patterns — a GM/table call, not schema data — so confirm it once
-      // here. A yes widens the Negotiation check's crit range to one-fifth of the TN.
+      // Impress-type match (p.76) is a GM call; a yes widens the crit range to TN/5.
       const impressMatch = await foundry.applications.api.DialogV2.confirm({
         window: { title: game.i18n.localize("SMT.Talk.ImpressPrompt") },
         content: `<p>${game.i18n.format("SMT.Talk.ImpressQuestion", { name: target.name })}</p>`,
@@ -327,24 +272,13 @@ export default class SMTItem extends Item {
       return;
     }
 
-    // Support: interjection notice (p.72). The +20% is the talk-skill bonus the GM
-    // applies to the active negotiation's next check; the specific support effect is
-    // resolved on that negotiation's card by the GM.
+    // Support: interjection notice (p.72); GM applies the +20% and the effect.
     await postEffectNotice(actor, game.i18n.format("SMT.Talk.Interjection", {
       name: actor.name, skill: this.name
     }));
   }
 
-  /**
-   * Post pending-attack cards for this skill's targets; damage is applied later via the
-   * Dodge/Apply buttons. Delegates the per-target loop, token-UUID resolution, and the
-   * no-target notification to combat.postAttacksToTargets.
-   *
-   * @param {SMTActor} attacker        - the attacking actor.
-   * @param {{total:number,isCritical:boolean}} powerResult - result from actor.rollPower.
-   * @param {?string}  [checkMessageId] - id of the originating check card (FP cascade), or undefined.
-   * @returns {Promise<void>}
-   */
+  // Post pending-attack cards; damage applied later via Dodge/Apply buttons.
   async _postPendingAttacks(attacker, powerResult, checkMessageId) {
     const { postAttacksToTargets, resolveTargets } = await import("../helpers/combat.mjs");
     await postAttacksToTargets({
@@ -361,17 +295,7 @@ export default class SMTItem extends Item {
     });
   }
 
-  /**
-   * Use a consumable: healing, ailment cures, revival, or attack items.
-   *
-   * quantity is only decremented once an effect is confirmed to take effect,
-   * so a pure-revive consumable used on a living target (or any item with no applicable
-   * effect) no longer silently burns a charge. healAllAllies now resolves disposition-
-   * based ally targets (self + same-disposition tokens, mirroring combat.getAutoTargets)
-   * instead of falling back to self-only.
-   *
-   * @returns {Promise<void>}
-   */
+  // Use a consumable: heal, cure, revive, or attack. Charge spent only if an effect applies.
   async useConsumable() {
     const actor = this.parent;
     if (!actor) return;
@@ -386,9 +310,7 @@ export default class SMTItem extends Item {
     const isAttackItem = sys.attackPower > 0 || sys.attackElement !== "none";
     const reviveTarget = sys.revive ? (game.user.targets.first()?.actor ?? actor) : null;
 
-    // confirm at least one effect will actually apply before spending a charge.
-    // Heal/cure/attack are effective whenever configured; revive only applies to a
-    // downed target. A pure-revive on a living target therefore must NOT decrement.
+    // At least one effect must apply before spending a charge; revive only on a downed target.
     const willHeal = sys.healFull || sys.healHP > 0 || sys.healMP > 0;
     const willCure = sys.curesAilment && sys.curesAilment !== "none";
     const willRevive = sys.revive && reviveTarget && reviveTarget.system.hp.value <= 0;
@@ -401,7 +323,7 @@ export default class SMTItem extends Item {
       await this.update({ "system.quantity": sys.quantity - 1 });
     }
 
-    // Using an item is a non-reactive action: a poisoned user drains HP (p.66).
+    // Using an item is a non-reactive action: poison drains HP (p.66).
     const { applyPoisonDrain } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
 
@@ -437,7 +359,7 @@ export default class SMTItem extends Item {
       results.push(`${reviveTarget.name}: ${game.i18n.localize("SMT.Revived")} (${newHp} HP)`);
     }
 
-    // Attack item (Rock) — base magical power + item potency
+    // Attack item (Rock): base magical power + item potency.
     if (isAttackItem) {
       const { postAttacksToTargets } = await import("../helpers/combat.mjs");
       const baseMagPower = actor.system.baseMagicalPower;
@@ -445,7 +367,6 @@ export default class SMTItem extends Item {
         baseMagPower, sys.attackPower,
         `${this.name} — ${game.i18n.localize("SMT.Power")}`
       );
-      // shared per-target poster (also emits the no-target notification).
       await postAttacksToTargets({
         attacker: actor,
         targets: Array.from(game.user.targets),
@@ -470,14 +391,7 @@ export default class SMTItem extends Item {
     });
   }
 
-  /**
-   * Resolve the "all allies" target set for a party consumable: the user plus
-   * every same-disposition token in scope, mirroring combat.getAutoTargets (which excludes
-   * the actor's own token, so self is unioned back in). Deduped by actor id.
-   *
-   * @param {SMTActor} actor - the actor using the consumable.
-   * @returns {Promise<SMTActor[]>} the actors to affect (always includes the user).
-   */
+  // "All allies" for a party consumable: user + same-disposition tokens, deduped by actor id.
   async _getAllyTargets(actor) {
     const { getAutoTargets } = await import("../helpers/combat.mjs");
     const allyActors = getAutoTargets(actor, "All Allies")
@@ -495,14 +409,7 @@ export default class SMTItem extends Item {
     return out;
   }
 
-  /**
-   * Apply HP/MP healing to a target. Writes HP and MP in a single update so a
-   * combined HP+MP restore is one document write rather than two.
-   *
-   * @param {SMTActor} target - the actor to heal.
-   * @param {object}   sys    - this consumable's system data (healFull/healHP/healMP).
-   * @returns {Promise<string>} a per-target result line for the chat card.
-   */
+  // Apply HP/MP healing in a single update. Returns a per-target card line.
   async _applyHealing(target, sys) {
     let hpHealed = 0, mpHealed = 0;
     const update = {};

@@ -1,56 +1,9 @@
-// ═══════════════════════════════════════════════
-// combat.mjs — attack/dodge/ailment/Fate-Point resolution helpers.
-//
-// Role: the rules engine behind the chat-card attack pipeline. smt-rpg.mjs binds
-// the chat buttons (Dodge/Apply, Fate reroll/boost/halve) and calls into here via
-// dynamic import to break the import cycle. Pure check evaluation lives in
-// checks.mjs (evaluatePercentile); pure damage math lives in damage.mjs.
-//
-// Attack pipeline:
-//   item.use()/sheet strike -> rollPercentile -> rollPower
-//     -> postAttacksToTargets -> postPendingAttack (one card per target)
-//     -> [Dodge | Apply] -> resolveAttack -> actor.applyDamage -> resolveAilment
-//
-// ChatMessage flags (namespace "smt-rpg"): attackData / checkData / damageData.
-// These are author-forgeable — every resolver re-reads + validates them before
-// they feed a roll or an HP mutation (see _sanitize* helpers).
-//
-// Section index:
-//   - Token / target resolution           (getTokenUuid … resolveTargets)
-//   - Flag validation helpers              (_sanitize*)
-//   - Targeting                            (getAutoTargets)
-//   - Attack / Dodge                       (postAttacksToTargets … resolveAttack)
-//   - Ailment Resolution                   (resolveAilment)
-//   - Fate Point Resolution                (buildCheckData … resolveHalveDamage)
-//
-// Typedefs (CheckData / AttackData / DamageData / DamageResult / CheckOutcome)
-// are declared in checks.mjs and referenced here via {import("./checks.mjs").T}.
-// ═══════════════════════════════════════════════
-
 import { evaluatePercentile } from "./checks.mjs";
 
-// ═══════════════════════════════════════════════
-// Resolution idempotency
-// ═══════════════════════════════════════════════
-// Every mutating resolver carries a persisted `resolved` flag that it re-reads
-// and bails on. That guard is written only AFTER the first await, so two clicks
-// (or two clients) can both pass the check before either persists `resolved` —
-// a TOCTOU double-apply. This synchronous in-flight set, keyed by message id,
-// closes that window: a resolver claims its id before its first await and frees
-// it in a finally, so a second concurrent entry returns immediately. It layers
-// on top of the `resolved` re-read (which still guards against re-clicks after
-// the first resolution has fully committed); it does not replace it.
+// Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
 const _inFlight = new Set();
 
-/**
- * Stun caps an attacker's attack hit TN at CONFIG.SMT.stun.hitCapPct% (p.66).
- * Mirrors the inline cap in item.use() so every attack-resolution path agrees on
- * one rule and one constant. A non-stunned actor's TN is returned unchanged.
- *
- * @param {SMTActor} actor - the acting (attacking) actor.
- * @param {number}   tn    - the hit target number before the stun cap.
- * @returns {number} the TN capped to CONFIG.SMT.stun.hitCapPct when stunned.
- */
+// Stun caps an attacker's hit TN at CONFIG.SMT.stun.hitCapPct (p.66).
 export function applyStunHitCap(actor, tn) {
   if (actor?.system?.ailment === "stun") return Math.min(tn, CONFIG.SMT.stun.hitCapPct);
   return tn;
@@ -71,44 +24,31 @@ export function getActorFromTokenUuid(uuid) {
   return game.actors.get(uuid) ?? null;
 }
 
-// ═══════════════════════════════════════════════
-// Flag validation helpers
-//
-// ChatMessage flags are author-forgeable. Coerce every numeric/element/ailment
-// field sourced from a flag before it feeds a roll or an HP update.
-// ═══════════════════════════════════════════════
+// Flag validation: ChatMessage flags are author-forgeable, so coerce before use.
 
-// Upper bound on any flag-sourced power/damage/TN before it reaches a roll or HP
-// update — mirrors actor.mjs MAX_HP_DELTA. Guards against NaN/Infinity/overflow.
 const MAX_FLAG_VALUE = 1_000_000;
 
-// Clamp a flag-sourced number to [0, MAX_FLAG_VALUE]; non-finite collapses to 0.
 function _sanitizeAmount(value) {
   if (!Number.isFinite(value)) return 0;
   return Math.clamp(Math.floor(value), 0, MAX_FLAG_VALUE);
 }
 
-// Validate a flag-sourced element key against CONFIG.SMT.elements; unknown -> "none".
 function _sanitizeElement(element) {
   return element in CONFIG.SMT.elements ? element : "none";
 }
 
-// Validate a flag-sourced ailment type against CONFIG.SMT.ailments; unknown -> "none".
 function _sanitizeAilmentType(ailmentType) {
   return ailmentType in CONFIG.SMT.ailments ? ailmentType : "none";
 }
 
-// Clamp a flag-sourced ailment rate to CONFIG.SMT.ailmentRate.min..max (0 stays 0
-// so the "rate > 0" gate can still short-circuit a no-ailment attack).
+// 0 stays 0 so the rate>0 gate can short-circuit.
 function _sanitizeAilmentRate(rate) {
   if (!Number.isFinite(rate) || rate <= 0) return 0;
   const { min, max } = CONFIG.SMT.ailmentRate;
   return Math.clamp(Math.floor(rate), min, max);
 }
 
-// ═══════════════════════════════════════════════
 // Targeting
-// ═══════════════════════════════════════════════
 
 // Auto-resolve targets from skill target string ("All Foes", "All Allies", etc.)
 export function getAutoTargets(actor, targetString) {
@@ -130,10 +70,7 @@ export function getAutoTargets(actor, targetString) {
     candidates = canvas.tokens.placeables.filter(t => t.id !== actorToken.id);
   }
 
-  // Target-string -> token set:
-  //   "foe"/"enem"   -> tokens of the opposing disposition
-  //   "ally"/"all"   -> tokens sharing the actor's disposition (incl. "All Allies")
-  // ("foe" is matched first, so "All Foes" never falls through to the ally branch.)
+  // "foe" matched first so "All Foes" never falls through to the ally branch.
   if (ts.includes("foe") || ts.includes("enem")) {
     return candidates.filter(t => {
       const d = t.document.disposition;
@@ -166,28 +103,9 @@ export function resolveTargets(actor, targetString) {
   return merged;
 }
 
-// ═══════════════════════════════════════════════
 // Attack / Dodge
-// ═══════════════════════════════════════════════
 
-/**
- * Post one pending-attack card per target. Owns the per-target loop, token-UUID
- * resolution, and the no-target notification so the sheet strike/shoot handlers,
- * item.use, and the Fate-cascade path can all share one entry point.
- *
- * @param {object}    params
- * @param {SMTActor}  params.attacker        - the attacking actor.
- * @param {Token[]}   params.targets         - resolved target tokens (from resolveTargets).
- * @param {number}    params.rawPower        - rolled power total (pre affinity/resistance).
- * @param {string}    params.element         - damage/affinity element key.
- * @param {boolean}   params.isPhysical      - true for physical attacks.
- * @param {boolean}   params.isCritical      - true if the originating power roll critted.
- * @param {string}    params.skillName       - skill display name for the card.
- * @param {?string}   [params.checkMessageId]- id of the originating check card (FP cascade), or null.
- * @param {string}    [params.ailmentType]   - inflicted ailment type, or "none".
- * @param {number}    [params.ailmentRate]   - base ailment infliction rate (percent).
- * @returns {Promise<number>} count of pending-attack cards posted.
- */
+// Post one pending-attack card per target.
 export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0 }) {
   if (!targets?.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
@@ -217,26 +135,7 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   return posted;
 }
 
-/**
- * Post a single pending-attack card; damage is applied later via the Dodge/Apply
- * buttons (handlers in smt-rpg.mjs). Writes the attackData flag (see the AttackData
- * typedef in checks.mjs).
- *
- * @param {object}    params
- * @param {SMTActor}  params.attacker            - the attacking actor.
- * @param {SMTActor}  params.target              - the target actor.
- * @param {string}    [params.attackerTokenUuid] - attacker token UUID (defaults to getTokenUuid).
- * @param {string}    [params.targetTokenUuid]   - target token UUID (defaults to getTokenUuid).
- * @param {number}    params.rawPower            - rolled power total (pre affinity/resistance).
- * @param {string}    params.element             - damage/affinity element key.
- * @param {boolean}   params.isPhysical          - true for physical attacks.
- * @param {boolean}   params.isCritical          - true if the originating power roll critted.
- * @param {string}    params.skillName           - skill display name for the card.
- * @param {?string}   [params.checkMessageId]    - originating check card id (FP cascade), or null.
- * @param {string}    [params.ailmentType]       - inflicted ailment type, or "none".
- * @param {number}    [params.ailmentRate]       - base ailment infliction rate (percent).
- * @returns {Promise<void>}
- */
+// Post a single pending-attack card; damage applied later via Dodge/Apply.
 export async function postPendingAttack({ attacker, target, attackerTokenUuid, targetTokenUuid, rawPower, element, isPhysical, isCritical, skillName, checkMessageId, ailmentType = "none", ailmentRate = 0 }) {
   const atkUuid = attackerTokenUuid ?? getTokenUuid(attacker);
   const tgtUuid = targetTokenUuid ?? getTokenUuid(target);
@@ -273,25 +172,12 @@ export async function postPendingAttack({ attacker, target, attackerTokenUuid, t
   });
 }
 
-/**
- * Resolve a pending attack: optionally roll the target's dodge, then apply damage
- * and (on a real hit) roll the ailment. Re-reads the message flag and bails if the
- * card was already resolved (idempotency under double-click / re-render). All
- * flag-sourced numerics/element/ailment are sanitized before use.
- *
- * @param {ChatMessage} message               - the pending-attack card.
- * @param {import("./checks.mjs").AttackData} attackData - the attackData flag payload.
- * @param {boolean} [skipDodge=false]          - true for the Apply-damage button (no dodge roll).
- * @returns {Promise<void>}
- */
+// Resolve a pending attack: optional dodge roll, apply damage, then ailment on a hit.
 export async function resolveAttack(message, attackData, skipDodge = false) {
-  // Re-read the live flag; bail if another client/click already resolved it.
   const live = message.getFlag("smt-rpg", "attackData");
   if (!live || live.resolved) return;
   attackData = live;
 
-  // Idempotency: claim this message before the first await so a concurrent click
-  // cannot also pass the resolved-flag check above. Released in finally.
   if (_inFlight.has(message.id)) return;
   _inFlight.add(message.id);
   try {
@@ -299,7 +185,6 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
     const target = getActorFromTokenUuid(attackData.targetTokenUuid);
     if (!attacker || !target) return;
 
-    // Sanitize author-forgeable flag values before they feed rolls / HP updates.
     let rawPower = _sanitizeAmount(attackData.rawPower);
     const element = _sanitizeElement(attackData.element);
     const ailmentType = _sanitizeAilmentType(attackData.ailmentType);
@@ -346,14 +231,7 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
       }
     }
 
-    // Crit-on-incoming-Phys (p.66): a physical attack that lands on a target held
-    // by a Restrain/Freeze/Shock/Stone ailment is forced critical. This reuses the
-    // existing crit path in applyDamage/calculateDamage (which skips resistance);
-    // affinity/drain/repel/null are untouched. The triggering ailments are all
-    // common-slot ailments (CONFIG.SMT.critOnPhysAilments), so the single
-    // system.ailment slot is the authoritative state to read; Death/Curse are
-    // tracked as separate flags and never appear in that list. Applied after the
-    // dodge switch so it reflects the hit as it actually lands.
+    // Phys hit on a Restrain/Freeze/Shock/Stone target is forced crit (p.66).
     if (isPhysical && _forcesCritOnPhys(target)) {
       isCritical = true;
       if (CONFIG.SMT.debug) console.log("smt-rpg | Crit-on-Phys forced", {
@@ -395,21 +273,14 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
   }
 }
 
-/**
- * Whether a target's current common ailment forces an incoming physical attack to
- * crit (p.66). Reads the single system.ailment slot against
- * CONFIG.SMT.critOnPhysAilments (Restrain/Freeze/Shock/Stone).
- *
- * @param {SMTActor} target - the actor receiving the physical attack.
- * @returns {boolean}
- */
+// p.66
 function _forcesCritOnPhys(target) {
   const ailment = target?.system?.ailment ?? "none";
   return ailment !== "none" && CONFIG.SMT.critOnPhysAilments.includes(ailment);
 }
 
 function _resolveDodgeOutcome(hitIsCritical, dodgeResult) {
-  // rollPercentile's return omits isFumble, so detect the fumble from the raw roll.
+  // rollPercentile omits isFumble, so detect it from the raw roll.
   if (dodgeResult.result === CONFIG.SMT.check.fumble) return "fumble";
   if (dodgeResult.isCritical) return "miss";
   if (dodgeResult.isSuccess && !hitIsCritical) return "miss";
@@ -440,37 +311,15 @@ async function _postDodgeResult(attacker, target, skillName, outcome) {
   });
 }
 
-// ═══════════════════════════════════════════════
 // Ailment Resolution
-// ═══════════════════════════════════════════════
 
-/**
- * Ailment infliction roll (p.67). Rate is modified by affinity/crit/fumble then
- * clamped to CONFIG.SMT.ailmentRate.min..max. Stacking model (p.67-68):
- *  - Death and Curse (CONFIG.SMT.specialAilments) set their own boolean flags
- *    (system.deathAilment / system.curseAilment) and do NOT enter the common-
- *    ailment priority comparison — a target can hold them alongside one common ailment.
- *  - Every other ailment competes for the single system.ailment slot; the lower
- *    CONFIG.SMT.ailmentPriority number wins (an unmapped type defaults to 99).
- *
- * @param {object}    params
- * @param {SMTActor}  params.target          - the actor the ailment is inflicted on.
- * @param {SMTActor}  params.attacker        - the attacking actor (chat speaker).
- * @param {string}    params.ailmentType     - ailment type key (validated against CONFIG.SMT.ailments).
- * @param {number}    params.baseRate        - base infliction rate before affinity/crit/fumble.
- * @param {string}    params.element         - element key (selects ailment vs damage affinity table).
- * @param {boolean}   params.isCritical      - doubles the rate (p.67).
- * @param {boolean}   params.dodgeFumble     - doubles the rate (p.67).
- * @param {string}    params.targetTokenUuid - target token UUID for the authoritative actor update.
- * @returns {Promise<void>}
- */
+// Ailment infliction roll (p.67). Death/Curse set their own flags; others contend for the single system.ailment slot.
 export async function resolveAilment({ target, attacker, ailmentType, baseRate, element, isCritical, dodgeFumble, targetTokenUuid }) {
-  // Validate flag-sourced inputs: unknown type/element collapse to "none".
   ailmentType = _sanitizeAilmentType(ailmentType);
   element = _sanitizeElement(element);
   if (ailmentType === "none") return;
 
-  // Ailment elements use ailmentAffinities; others use damage affinities
+  // Ailment elements use ailmentAffinities; others use damage affinities.
   const isAilmentElement = CONFIG.SMT.ailmentElements.has(element);
   const affinity = isAilmentElement
     ? (target.system.ailmentAffinities?.[element] ?? "normal")
@@ -484,7 +333,6 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
   if (isCritical) rate *= 2;
   if (dodgeFumble) rate *= 2;
 
-  // Clamp to CONFIG.SMT.ailmentRate.min..max. 0/non-finite -> 0 -> bail.
   rate = _sanitizeAilmentRate(rate);
   if (rate <= 0) return;
 
@@ -502,11 +350,10 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
     const targetActor = getActorFromTokenUuid(targetTokenUuid) ?? target;
 
     if (CONFIG.SMT.specialAilments.includes(ailmentType)) {
-      // Death / Curse (p.67): set the dedicated boolean flag; stacks alongside the
-      // common-ailment slot rather than competing for it.
+      // Death / Curse: dedicated flag, stacks alongside the common slot (p.67).
       await targetActor.update({ [`system.${ailmentType}Ailment`]: true });
     } else {
-      // Common ailment: lower CONFIG.SMT.ailmentPriority number wins the single slot (p.68).
+      // Lower priority number wins the single slot (p.68).
       const currentAilment = target.system.ailment ?? "none";
       const priorities = CONFIG.SMT.ailmentPriority;
       const newPriority = priorities[ailmentType] ?? 99;
@@ -536,33 +383,9 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
   });
 }
 
-// ═══════════════════════════════════════════════
-// Fate Point Resolution Functions
-// ═══════════════════════════════════════════════
+// Fate Point Resolution
 
-/**
- * Build the checkData flag payload (see the CheckData typedef in checks.mjs) in one
- * place so item.use, the sheet strike/shoot handlers, and any future caller agree on
- * the shape. Numeric inputs are taken as already-trusted (computed locally, not from
- * a flag); resolveCheckReroll/Boost sanitize them again on read.
- *
- * @param {object}    params
- * @param {SMTActor}  params.actor                - the acting actor.
- * @param {object}    params.checkResult          - { result, isSuccess, isCritical, messageId } from rollPercentile.
- * @param {number}    params.tn                   - the check target number (becomes both current & original TN).
- * @param {boolean}   params.hasPowerRoll         - whether a power roll follows on success.
- * @param {number}    params.basePower            - actor base physical/magical power for the power roll.
- * @param {number}    [params.skillPower=0]       - the skill's own power contribution.
- * @param {string}    params.element              - damage/affinity element key.
- * @param {boolean}   params.isPhysical           - true for physical-attack skills.
- * @param {string}    params.skillName            - skill display name.
- * @param {string[]}  [params.targetTokenUuids]   - manually-targeted token UUIDs at use time.
- * @param {string}    [params.targetsString="1"]  - the skill's raw targets string.
- * @param {string}    [params.ailmentType="none"] - inflicted ailment type, or "none".
- * @param {number}    [params.ailmentRate=0]      - base ailment infliction rate (percent).
- * @param {boolean}   [params.hasMight=false]     - whether the Might passive widened the crit threshold.
- * @returns {import("./checks.mjs").CheckData}
- */
+// Build the checkData flag payload. Numeric inputs are trusted here; reroll/boost re-sanitize on read.
 export function buildCheckData({ actor, checkResult, tn, hasPowerRoll, basePower, skillPower = 0, element, isPhysical, skillName, targetTokenUuids = null, targetsString = "1", ailmentType = "none", ailmentRate = 0, hasMight = false }) {
   return {
     actorTokenUuid: getTokenUuid(actor) ?? actor.id,
@@ -586,22 +409,12 @@ export function buildCheckData({ actor, checkResult, tn, hasPowerRoll, basePower
   };
 }
 
-/**
- * FP reroll: spend CONFIG.SMT.fate.cost, roll a fresh d100, re-evaluate, and cascade
- * if the outcome flipped. Re-reads the live flag and bails if already resolved.
- *
- * @param {ChatMessage} message - the originating check card.
- * @param {import("./checks.mjs").CheckData} checkData - the checkData flag payload.
- * @returns {Promise<void>}
- */
+// FP reroll: spend cost, roll a fresh d100, re-evaluate, cascade if the outcome flipped.
 export async function resolveCheckReroll(message, checkData) {
-  // Idempotency: re-read the live flag; bail if spent.
   const live = message.getFlag("smt-rpg", "checkData");
   if (!live || live.resolved) return;
   checkData = live;
 
-  // Claim before the first await so a concurrent click cannot also pass the
-  // resolved-flag check above and spend a second Fate Point. Freed in finally.
   if (_inFlight.has(message.id)) return;
   _inFlight.add(message.id);
   try {
@@ -610,10 +423,7 @@ export async function resolveCheckReroll(message, checkData) {
 
     await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
 
-    // Stun caps the attacker's hit TN at CONFIG.SMT.stun.hitCapPct (p.66). Re-cap
-    // here so the reroll re-evaluates against the cap (the stored currentTN was
-    // capped at use time, but the attacker may have become stunned since), and
-    // persist the capped TN so any cascade stays consistent with what was rolled.
+    // Re-cap: attacker may have become stunned since use time (p.66).
     const currentTN = applyStunHitCap(actor, _sanitizeAmount(checkData.currentTN));
     const roll = new Roll("1d100");
     await roll.evaluate();
@@ -646,22 +456,12 @@ export async function resolveCheckReroll(message, checkData) {
   }
 }
 
-/**
- * FP boost: spend CONFIG.SMT.fate.cost, add CONFIG.SMT.fate.boostTN to the TN, and
- * re-evaluate the same roll. Re-reads the live flag and bails if already resolved.
- *
- * @param {ChatMessage} message - the originating check card.
- * @param {import("./checks.mjs").CheckData} checkData - the checkData flag payload.
- * @returns {Promise<void>}
- */
+// FP boost: spend cost, add boostTN to the TN, re-evaluate the same roll.
 export async function resolveCheckBoost(message, checkData) {
-  // Idempotency: re-read the live flag; bail if spent.
   const live = message.getFlag("smt-rpg", "checkData");
   if (!live || live.resolved) return;
   checkData = live;
 
-  // Claim before the first await so a concurrent click cannot also pass the
-  // resolved-flag check above and spend a second Fate Point. Freed in finally.
   if (_inFlight.has(message.id)) return;
   _inFlight.add(message.id);
   try {
@@ -671,9 +471,7 @@ export async function resolveCheckBoost(message, checkData) {
     await actor.update({ "system.fatePoints.value": actor.system.fatePoints.value - CONFIG.SMT.fate.cost });
 
     const rollResult = _sanitizeAmount(checkData.rollResult);
-    // Boost raises the TN, then the stun cap (p.66) clamps it: a stunned attacker
-    // cannot Boost past CONFIG.SMT.stun.hitCapPct. The capped TN is persisted into
-    // currentTN so it is what any later re-evaluation sees.
+    // Stun cap clamps the boosted TN (p.66).
     const newTN = applyStunHitCap(actor, _sanitizeAmount(checkData.currentTN) + CONFIG.SMT.fate.boostTN);
     const evaluated = evaluatePercentile(rollResult, newTN, { hasMight: !!checkData.hasMight });
     const outcome = game.i18n.localize(evaluated.outcomeKey);
@@ -703,22 +501,8 @@ export async function resolveCheckBoost(message, checkData) {
   }
 }
 
-/**
- * Funnel for both FP reroll and boost: persist the new checkData (marked resolved),
- * then cascade — trigger the power roll on a fail->success, or cancel pending attacks
- * on a success->fail. Setting resolved here spends the card so it cannot be reused on
- * a later re-render.
- *
- * @param {ChatMessage} message - the originating check card.
- * @param {import("./checks.mjs").CheckData} oldCheckData - the pre-change payload.
- * @param {import("./checks.mjs").CheckData} newCheckData - the post-change payload.
- * @param {boolean}  oldSuccess - success state before the FP action.
- * @param {boolean}  newSuccess - success state after the FP action.
- * @param {SMTActor} actor       - the acting actor.
- * @returns {Promise<void>}
- */
+// Shared by reroll and boost: persist resolved, then trigger power roll on fail->success or cancel attacks on success->fail.
 async function _cascadeCheckChange(message, oldCheckData, newCheckData, oldSuccess, newSuccess, actor) {
-  // Spend the card so it is not reusable on every re-render.
   await message.setFlag("smt-rpg", "checkData", { ...newCheckData, resolved: true });
 
   if (!oldSuccess && newSuccess && newCheckData.hasPowerRoll) {
@@ -730,15 +514,7 @@ async function _cascadeCheckChange(message, oldCheckData, newCheckData, oldSucce
   }
 }
 
-/**
- * Continue the skill flow after a Fate Point flips a check fail->success: roll power
- * and post the pending attacks. Flag-sourced power inputs are sanitized before rolling.
- *
- * @param {import("./checks.mjs").CheckData} checkData - the (now-successful) checkData payload.
- * @param {SMTActor} actor          - the acting actor.
- * @param {string}   checkMessageId - id of the originating check card (for FP cascade linkage).
- * @returns {Promise<void>}
- */
+// After an FP flips a check fail->success: roll power and post the pending attacks.
 async function _continueSkillFlow(checkData, actor, checkMessageId) {
   const basePower = _sanitizeAmount(checkData.basePower);
   const skillPower = _sanitizeAmount(checkData.skillPower);
@@ -748,7 +524,6 @@ async function _continueSkillFlow(checkData, actor, checkMessageId) {
     checkData.isCritical
   );
 
-  // Resolve the use-time UUID list into live tokens, then share the post pipeline.
   const targetUuids = checkData.targetTokenUuids ?? [];
   const targets = targetUuids
     .map(uuid => fromUuidSync(uuid)?.object)
@@ -778,24 +553,12 @@ async function _cancelPendingAttacks(checkMessageId) {
   }
 }
 
-/**
- * FP halve damage: spend CONFIG.SMT.fate.cost, halve the current damage
- * (CONFIG.SMT.fate.halveDivisor), and restore the HP difference. Re-reads the live
- * flag and bails if already resolved; marks the card resolved at the end so it is
- * single-use. Flag-sourced damage is sanitized before the HP update.
- *
- * @param {ChatMessage} message - the damage-result card.
- * @param {import("./checks.mjs").DamageData} damageData - the damageData flag payload.
- * @returns {Promise<void>}
- */
+// FP halve damage: spend cost, halve current damage, restore the HP difference.
 export async function resolveHalveDamage(message, damageData) {
-  // Idempotency: re-read the live flag; bail if spent.
   const live = message.getFlag("smt-rpg", "damageData");
   if (!live || live.resolved) return;
   damageData = live;
 
-  // Claim before the first await so a concurrent click cannot also pass the
-  // resolved-flag check above and spend a second Fate Point / re-heal. Freed in finally.
   if (_inFlight.has(message.id)) return;
   _inFlight.add(message.id);
   try {
@@ -818,7 +581,6 @@ export async function resolveHalveDamage(message, damageData) {
       fpRemaining: target.system.fatePoints.value
     });
 
-    // Spend the card: persist the halved damage and mark resolved.
     await message.setFlag("smt-rpg", "damageData", {
       ...damageData,
       currentDamage: newDamage,
@@ -838,8 +600,6 @@ export async function resolveHalveDamage(message, damageData) {
         isCritical: false, isPhysical: false,
         isNull: false, isDrain: false, isRepel: false,
         dodgeFumble: false,
-        // Resulting-HP footer (matches actor.applyDamage's card): show the target's
-        // HP after the heal-back so the halved outcome is readable at a glance.
         targetHp: newHp,
         targetHpMax: target.system.hp.max,
         targetDefeated: newHp <= 0

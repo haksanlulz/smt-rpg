@@ -38,18 +38,12 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       macca: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       affinities: makeAffinitySchema(),
       ailmentAffinities: makeAilmentAffinitySchema(),
-      // Single common-ailment slot: holds the one highest-priority common
-      // ailment (p.68). Death and Curse are special (p.67) and live OUTSIDE
-      // this slot as the boolean flags below so they stack alongside it.
+      // Single common-ailment slot (p.68); Death/Curse are separate flags so they stack alongside it (p.67).
       ailment: new StringField({ initial: "none" }),
       deathAilment: new BooleanField({ initial: false }),
       curseAilment: new BooleanField({ initial: false }),
 
-      // Buff/debuff accumulators (p.96). One field per axis in
-      // CONFIG.SMT.buffAxes. ActiveEffect ADD-mode changes write into these; they
-      // are re-zeroed every prepare cycle (prepareBaseData) and folded into the
-      // derived combat stats (prepareDerivedData). Stored — not pure-derived — so
-      // effect application has a schema-backed key to target.
+      // Buff/debuff accumulators (p.96); stored so effects have a key to target, re-zeroed each prepare.
       buffs: new SchemaField({
         physicalPower: new NumberField({ integer: true, initial: 0 }),
         magicalPower: new NumberField({ integer: true, initial: 0 }),
@@ -57,9 +51,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
         accuracy: new NumberField({ integer: true, initial: 0 }),
         dodge: new NumberField({ integer: true, initial: 0 })
       }),
-      // Setup-action accumulators (p.64), likewise fed by ActiveEffect ADD-mode
-      // changes. Concentrate holds the pending +% for the next named action;
-      // Defend holds the dodge bonus active until the start of the next turn.
+      // Setup-action accumulators (p.64): Concentrate's pending +%, Defend's dodge bonus.
       concentrate: new SchemaField({
         amount: new NumberField({ integer: true, initial: 0 })
       }),
@@ -76,22 +68,12 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     };
   }
 
-  /**
-   * HP multiplier for this actor's type (p.36). Sourced from
-   * CONFIG.SMT.hpMultipliers keyed by actor type; falls back to the demon
-   * value (6) when the type is unmapped.
-   * @returns {number}
-   */
+  // p.36; falls back to demon value when type unmapped.
   get hpMultiplier() {
     return CONFIG.SMT.hpMultipliers[this.parent.type] ?? CONFIG.SMT.hpMultipliers.demon;
   }
 
-  /**
-   * MP multiplier for this actor's type (p.36). Sourced from
-   * CONFIG.SMT.mpMultipliers keyed by actor type; falls back to the demon
-   * value (3) when the type is unmapped.
-   * @returns {number}
-   */
+  // p.36; falls back to demon value when type unmapped.
   get mpMultiplier() {
     return CONFIG.SMT.mpMultipliers[this.parent.type] ?? CONFIG.SMT.mpMultipliers.demon;
   }
@@ -100,49 +82,23 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     return 1;
   }
 
-  /**
-   * This actor's skill items (the carriers of passive effects). Source for the
-   * passive-effect resolution below.
-   * @returns {Array} skill items, or an empty array when the actor is unbound.
-   */
   get _skillItems() {
     return this.parent?.items?.filter(i => i.type === "skill") ?? [];
   }
 
-  /**
-   * Whether this actor has a passive skill granting Might (p.110), which
-   * widens the crit threshold for basic strikes / physical attack skills.
-   * Centralizes the detection previously inlined at the attack sites (combat /
-   * item / sheet) so they can read this getter instead. Resolution is enum-first
-   * (system.passiveEffect) with a legacy skill-name fallback, via the shared
-   * CONFIG.SMT.passiveEffects registry.
-   * @returns {boolean}
-   */
+  // Might passive widens the crit threshold for strikes/physical attacks (p.110).
   get hasMightPassive() {
     return hasMightEffect(this._skillItems, CONFIG.SMT.passiveEffects);
   }
 
-  /**
-   * HP/MP multiplier bonuses from passive skills (highest tier only — similar
-   * abilities do not stack, p.109). Each skill resolves to its
-   * CONFIG.SMT.passiveEffects entry by system.passiveEffect, with a legacy
-   * skill-name fallback; the pure resolver lives in helpers/passives.mjs.
-   * @returns {{hpBonus: number, mpBonus: number}}
-   */
+  // HP/MP multiplier bonuses from passive skills, highest tier only (p.109).
   _getPassiveMultiplierBonuses() {
-    // Amplify HP/MP bonuses come only from passive-type skills (p.109), matching the
-    // pre-registry behavior so a non-passive skill that happens to share a legacy name
-    // cannot grant a multiplier. (Might detection matches by name regardless, as before.)
+    // Amplify bonuses come only from passive-type skills (p.109).
     const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
     return passiveMultiplierBonuses(passives, CONFIG.SMT.passiveEffects);
   }
 
-  /**
-   * Zero every buff/setup-action accumulator before ActiveEffects apply (their
-   * ADD-mode changes write onto these fields), so each prepare cycle starts from
-   * a clean slate and stale stacks cannot compound across renders. Keys mirror
-   * CONFIG.SMT.buffAxes plus the concentrate/defend accumulators (p.96, p.64).
-   */
+  // Zero the buff/setup accumulators before effects apply (p.96, p.64).
   prepareBaseData() {
     super.prepareBaseData();
     this.buffs.physicalPower = 0;
@@ -174,8 +130,6 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.hp.max = (this.vitalityTotal + lvl) * (this.hpMultiplier + hpBonus);
     this.mp.max = (this.magicTotal + lvl) * (this.mpMultiplier + mpBonus);
 
-    // Clamping done in _clampCurrentValues() after subtype modifications
-
     // Resistances: (vitality|magic + level) / 2 (p.36)
     this.physicalResistance = Math.floor((this.vitalityTotal + lvl) / 2);
     this.magicalResistance = Math.floor((this.magicTotal + lvl) / 2);
@@ -189,32 +143,15 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.negotiationTN = (this.luckTotal * CONFIG.SMT.negotiation.multiplier) + CONFIG.SMT.negotiation.bonus;
     this.saveTN = this.vitalityTN;
 
-    // Fold buff/debuff and Defend accumulators into the combat stats (p.96, p.64).
     this._applyBuffModifiers();
 
     // Fate = (luck / 5) + 5 (p.36)
     this.fatePoints.max = Math.floor(this.luckTotal / CONFIG.SMT.fate.maxLuckDivisor) + CONFIG.SMT.fate.maxBase;
-    // EXP needed for next level = level^3 (p.48); expMultiplier is a per-type system extension
+    // EXP for next level = level^3 (p.48)
     this.expNext = Math.floor(Math.pow(lvl + 1, 3) * this.expMultiplier);
   }
 
-  /**
-   * Fold the effect-fed buff/debuff accumulators into the derived combat stats
-   * (p.96), reading the base values the existing formulas already produced from
-   * effect-modified stats. Applied AFTER those formulas so the buffs layer on
-   * top rather than feed back into them:
-   * - physicalPower / magicalPower → basePhysicalPower / baseMagicalPower
-   *   (Tarukaja, Makakaja, and Tarunda — the universal attack-power debuff —
-   *   land here);
-   * - resist → both physical and magical resistance (Rakukaja / Rakunda);
-   * - accuracy → the attack-check TNs only (Strength / Magic / Agility), never
-   *   the save / negotiation / luck TNs (Sukukaja / Sukunda);
-   * - dodge → the dodge TN, plus the Defend bonus (Sukukaja / Sukunda + Defend).
-   * dodgeTN is read from agilityTN BEFORE this fold, so Sukukaja's dodge effect
-   * comes solely from the dodge accumulator and the agility accumulator does not
-   * cascade into it twice. Powers and resistances floor at 0 so debuffs cannot
-   * drive them negative.
-   */
+  // Fold buff/debuff accumulators into combat stats (p.96). Powers/resists floor at 0.
   _applyBuffModifiers() {
     this.basePhysicalPower = Math.max(0, this.basePhysicalPower + this.buffs.physicalPower);
     this.baseMagicalPower = Math.max(0, this.baseMagicalPower + this.buffs.magicalPower);
@@ -229,6 +166,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       this.agilityTN += acc;
     }
 
+    // dodgeTN read from agilityTN before this fold, so the agility accumulator doesn't double-count.
     this.dodgeTN += this.buffs.dodge + this.defend.amount;
   }
 

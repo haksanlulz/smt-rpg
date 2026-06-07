@@ -1,27 +1,6 @@
-// ═══════════════════════════════════════════════
-// passives.mjs — pure resolution of passive-skill effects (p.109-110).
-//
-// CONFIG.SMT.passiveEffects is the single source of truth for every mechanical
-// passive. A skill declares its effect via system.passiveEffect (a registry
-// key); these helpers map a skill to its registry entry — by that key first,
-// then by a case-insensitive match against the entry's legacyNames so skills
-// authored before the enum existed (carrying only the rulebook name) still
-// resolve. No document or Foundry access: the data model passes plain
-// {name, system} shapes in, which keeps the logic unit-testable.
-// ═══════════════════════════════════════════════
+// passives.mjs — passive-skill effect resolution (p.109-110)
 
-/**
- * Resolve one skill to its passive-effect registry entry.
- *
- * Resolution order (first match wins):
- *   1. system.passiveEffect — an explicit registry key (skips the sentinel "none").
- *   2. legacy fallback — a case-insensitive match of the skill's name against any
- *      entry's legacyNames, for skills that predate the enum.
- *
- * @param {{name?: string, system?: {passiveEffect?: string}}} skill - skill-like shape.
- * @param {Record<string, {legacyNames?: string[]}>} registry - CONFIG.SMT.passiveEffects.
- * @returns {{id: string, entry: object}|null} the matched entry and its key, or null.
- */
+// Map a skill to its passiveEffects entry: by passiveEffect key, else by legacyNames.
 export function resolvePassiveEffect(skill, registry) {
   if (!skill || !registry) return null;
 
@@ -39,15 +18,7 @@ export function resolvePassiveEffect(skill, registry) {
   return null;
 }
 
-/**
- * Highest-tier HP/MP multiplier bonuses across a set of passive skills (Amplify
- * Group, p.109). Similar abilities do not stack, so the max per resource wins —
- * holding both Life Bonus (+1) and Life Surge (+3) yields +3, not +4.
- *
- * @param {Array<{name?: string, system?: object}>} skills - the actor's passive skills.
- * @param {Record<string, object>} registry - CONFIG.SMT.passiveEffects.
- * @returns {{hpBonus: number, mpBonus: number}}
- */
+// Highest HP/MP amplify bonus per resource (p.109); these don't stack, so max wins.
 export function passiveMultiplierBonuses(skills, registry) {
   let hpBonus = 0;
   let mpBonus = 0;
@@ -61,14 +32,7 @@ export function passiveMultiplierBonuses(skills, registry) {
   return { hpBonus, mpBonus };
 }
 
-/**
- * Whether any skill in the set grants the Might effect (p.110), which widens the
- * crit threshold for basic strikes / physical attack skills to TN/mightCritDivisor.
- *
- * @param {Array<{name?: string, system?: object}>} skills - skills to scan.
- * @param {Record<string, object>} registry - CONFIG.SMT.passiveEffects.
- * @returns {boolean}
- */
+// Whether any skill grants Might (p.110), which widens the crit threshold.
 export function hasMightEffect(skills, registry) {
   for (const skill of skills ?? []) {
     const resolved = resolvePassiveEffect(skill, registry);
