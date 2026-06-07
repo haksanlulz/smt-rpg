@@ -1022,3 +1022,39 @@
 }
 .smt-fusion-dialog .fusion-preview .preview-line.element { color: var(--smt-strong); font-size: 0.9em; }
 .smt-fusion-dialog .fusion-preview .warn { color: var(--smt-failure); }
+
+/* Combat-end rewards (p.46, p.48) — result card + tracker control */
+.smt-roll.reward-result .reward-section-label {
+  display: block;
+  font-weight: bold;
+  color: var(--smt-text-dim);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 6px;
+}
+.smt-roll.reward-result .reward-foe-list,
+.smt-roll.reward-result .reward-loot-list {
+  margin: 2px 0 0;
+  padding-left: 1.2em;
+  font-size: 0.9em;
+}
+.smt-roll.reward-result .reward-foe-list .foe-detail { color: var(--smt-text-dim); font-size: 0.9em; }
+.smt-roll.reward-result .reward-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+.smt-roll.reward-result .reward-totals strong { color: var(--smt-accent); }
+.smt-roll.reward-result .reward-note { color: var(--smt-text-dim); font-size: 0.85em; }
+.smt-roll.reward-result .recipient-names { font-size: 0.9em; }
+
+#combat button.smt-grant-rewards,
+.combat-tracker button.smt-grant-rewards,
+button.smt-grant-rewards {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  width: 100%;
+}
+button.smt-grant-rewards.paid { opacity: 0.6; }

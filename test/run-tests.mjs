@@ -30,6 +30,10 @@ const {
 const {
   lookupBand, maccaDemand, hpDemand, talkCheckBonus, negotiationBlockReason
 } = await import("../module/helpers/negotiation.mjs");
+const {
+  sanitizeRewardValue, expMultiplierForGap, expForDefeat, partyLevelOf,
+  maccaShares, sanitizeDropName, parseDropItems
+} = await import("../module/helpers/rewards.mjs");
 
 // --- Tiny assertion harness ---
 let passed = 0;
@@ -208,6 +212,63 @@ function ok(cond, label) { eq(!!cond, true, label); }
   // data models — the same plain-object shape the engine passes in either case.
   eq(negotiationBlockReason({ negotiable: true, isBoss: true }),
     "SMT.Talk.Block.Boss", "isBoss block works on a minimal (npc-shaped) system object");
+}
+
+// ═══════════════════════════════════════════════
+// Combat-end rewards (p.46, p.48)
+// ═══════════════════════════════════════════════
+{
+  // sanitizeRewardValue: floor, clamp [0, max], non-finite -> 0.
+  eq(sanitizeRewardValue(12.9), 12, "reward value floors");
+  eq(sanitizeRewardValue(-5), 0, "negative reward clamps to 0");
+  eq(sanitizeRewardValue(NaN), 0, "NaN reward collapses to 0");
+  eq(sanitizeRewardValue(Infinity), 0, "non-finite reward collapses to 0 (matches the chat/HP guards)");
+  eq(sanitizeRewardValue(5e9), SMT.rewards.maxValue, "oversized finite reward clamps to max");
+
+  // expMultiplierForGap (p.48 "Notice"): 1 below the 10-level threshold; doubles
+  // once per full 10 levels of gap at or above it.
+  eq(expMultiplierForGap(0), 1, "foe at party level -> x1");
+  eq(expMultiplierForGap(9), 1, "9 levels above -> still x1 (below threshold)");
+  eq(expMultiplierForGap(10), 2, "10 levels above -> x2");
+  eq(expMultiplierForGap(19), 2, "19 levels above -> x2 (one full step)");
+  eq(expMultiplierForGap(20), 4, "20 levels above -> x4 (two full steps)");
+  eq(expMultiplierForGap(30), 8, "30 levels above -> x8");
+  eq(expMultiplierForGap(-5), 1, "foe below party level -> x1");
+
+  // expForDefeat: base EXP scaled by the gap multiplier, granted in full (p.48).
+  eq(expForDefeat(100, 5, 5), 100, "even-level foe grants its base EXP");
+  eq(expForDefeat(100, 15, 5), 200, "foe 10 levels up doubles EXP");
+  eq(expForDefeat(100, 25, 5), 400, "foe 20 levels up quadruples EXP");
+  eq(expForDefeat(0, 25, 5), 0, "a foe with no EXP drop grants nothing");
+  eq(expForDefeat(-50, 25, 5), 0, "a negative/forged EXP drop grants nothing");
+
+  // partyLevelOf: the highest recipient level (the party advances at its strongest).
+  eq(partyLevelOf([3, 7, 5]), 7, "party level is the highest member level");
+  eq(partyLevelOf([]), 0, "empty party level is 0");
+  eq(partyLevelOf([2, "bad", 9]), 9, "party level coerces non-numbers");
+
+  // maccaShares: shared splits evenly (floored, never minted); per-pc gives full.
+  eq(maccaShares(100, 4, "shared"), 25, "shared macca splits evenly");
+  eq(maccaShares(101, 4, "shared"), 25, "shared macca floors the split (no minting)");
+  eq(maccaShares(100, 4, "per-pc"), 100, "per-pc macca gives each the full total");
+  eq(maccaShares(100, 0, "shared"), 0, "no recipients -> 0 each");
+  eq(maccaShares(0, 4, "shared"), 0, "no macca -> 0 each");
+  eq(maccaShares(100, 3, "bogus"), 33, "unknown mode falls back to shared split");
+
+  // sanitizeDropName: strip HTML-significant chars, collapse whitespace, trim, cap.
+  eq(sanitizeDropName("  Life Stone  "), "Life Stone", "drop name trims and collapses");
+  eq(sanitizeDropName("<b>Bead</b>"), "b Bead /b", "drop name neutralizes angle brackets");
+  eq(sanitizeDropName('Chakra "Drop"'), "Chakra Drop", "drop name strips quotes");
+  eq(sanitizeDropName(""), "", "empty drop name stays empty");
+  eq(sanitizeDropName(42), "", "non-string drop name -> empty");
+  eq(sanitizeDropName("x".repeat(150)).length, 100, "drop name caps at 100 chars");
+
+  // parseDropItems: comma/newline split, sanitized, blanks dropped, deduped.
+  eq(parseDropItems("Bead, Life Stone, Chakra Drop"), ["Bead", "Life Stone", "Chakra Drop"], "parses comma-separated drops");
+  eq(parseDropItems("Bead\nLife Stone"), ["Bead", "Life Stone"], "parses newline-separated drops");
+  eq(parseDropItems("Bead, ,, Bead , bead"), ["Bead"], "drops blanks and dedupes case-insensitively");
+  eq(parseDropItems(""), [], "empty drops string -> no items");
+  eq(parseDropItems("   "), [], "whitespace-only drops string -> no items");
 }
 
 // --- Report ---

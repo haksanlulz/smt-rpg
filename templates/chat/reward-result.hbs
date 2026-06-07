@@ -1,0 +1,38 @@
+<div class="smt-roll reward-result">
+  <h3>{{localize "SMT.Rewards.Title"}}</h3>
+
+  {{#if foes.length}}
+  <div class="reward-foes">
+    <span class="reward-section-label">{{localize "SMT.Rewards.Defeated"}}</span>
+    <ul class="reward-foe-list">
+      {{#each foes}}
+      <li>{{this.name}} <span class="foe-detail">(LV {{this.level}} — {{localize "SMT.EXP"}} {{this.exp}}{{#if this.macca}}, {{this.macca}} {{localize "SMT.MaccaShort"}}{{/if}})</span></li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/if}}
+
+  <div class="roll-breakdown reward-totals">
+    <span>{{localize "SMT.Rewards.ExpEach"}}: <strong>{{exp}}</strong></span>
+    {{#if isShared}}
+    <span>{{localize "SMT.Rewards.MaccaEach"}}: <strong>{{maccaPerRecipient}}</strong> <span class="reward-note">({{localize "SMT.Rewards.MaccaSharedNote"}} {{maccaTotal}})</span></span>
+    {{else}}
+    <span>{{localize "SMT.Rewards.MaccaEach"}}: <strong>{{maccaPerRecipient}}</strong> <span class="reward-note">({{modeLabel}})</span></span>
+    {{/if}}
+  </div>
+
+  <div class="reward-recipients">
+    <span class="reward-section-label">{{localize "SMT.Rewards.Recipients"}} ({{recipientCount}})</span>
+    <span class="recipient-names">{{#each recipients}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</span>
+  </div>
+
+  {{#if hasItems}}
+  <div class="reward-loot">
+    <span class="reward-section-label">{{localize "SMT.Rewards.Loot"}}</span>
+    <ul class="reward-loot-list">
+      {{#each items}}<li>{{this}}</li>{{/each}}
+    </ul>
+    <span class="reward-note">{{localize "SMT.Rewards.LootTo"}} {{#each lootHolders}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</span>
+  </div>
+  {{/if}}
+</div>
