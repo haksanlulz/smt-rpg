@@ -139,8 +139,8 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.basePhysicalPower = this.strengthTotal + lvl;
     this.baseMagicalPower = this.magicTotal + lvl;
 
-    // Dodge TN = agility TN + 10; Negotiation TN = (luck x 2) + 20 (p.35)
-    this.dodgeTN = this.agilityTN + CONFIG.SMT.dodgeBonus;
+    // Dodge TN = agility + 10; Negotiation TN = (luck x 2) + 20 (p.35). Both are NOT level-based.
+    this.dodgeTN = this.agilityTotal + CONFIG.SMT.dodgeBonus;
     this.negotiationTN = (this.luckTotal * CONFIG.SMT.negotiation.multiplier) + CONFIG.SMT.negotiation.bonus;
     this.saveTN = this.vitalityTN;
 
@@ -172,7 +172,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       this.agilityTN += acc;
     }
 
-    // dodgeTN read from agilityTN before this fold, so the agility accumulator doesn't double-count.
+    // dodgeTN is based on raw agility, independent of the accuracy fold above; only the dodge axis applies here.
     this.dodgeTN += this.buffs.dodge + this.defend.amount;
   }
 

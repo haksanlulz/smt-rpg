@@ -217,7 +217,7 @@ SMT.ailmentRate = {
 
 // Derived stat modifiers (base-actor.mjs prepareDerivedData)
 SMT.tnPerStat = 5;     // TN = (stat x tnPerStat) + level
-SMT.dodgeBonus = 10;   // dodgeTN = agilityTN + dodgeBonus
+SMT.dodgeBonus = 10;   // dodgeTN = agility + dodgeBonus (p.35, not level-based)
 SMT.negotiation = {    // negotiationTN = (luck x multiplier) + bonus (p.35)
   multiplier: 2,
   bonus: 20,
