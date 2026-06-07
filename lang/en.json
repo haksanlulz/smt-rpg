@@ -165,6 +165,16 @@
   "SMT.SkillType.TalkApproach": "Talk (Approach)",
   "SMT.SkillType.TalkSupport": "Talk (Support)",
 
+  "SMT.PassiveEffect.Label": "Passive Effect",
+  "SMT.PassiveEffect.None": "None",
+  "SMT.PassiveEffect.LifeBonus": "Life Bonus (+1 HP mult.)",
+  "SMT.PassiveEffect.LifeGain": "Life Gain (+2 HP mult.)",
+  "SMT.PassiveEffect.LifeSurge": "Life Surge (+3 HP mult.)",
+  "SMT.PassiveEffect.ManaBonus": "Mana Bonus (+1 MP mult.)",
+  "SMT.PassiveEffect.ManaGain": "Mana Gain (+2 MP mult.)",
+  "SMT.PassiveEffect.ManaSurge": "Mana Surge (+3 MP mult.)",
+  "SMT.PassiveEffect.Might": "Might (crit at TN/5)",
+
   "SMT.GearType.Label": "Gear Type",
   "SMT.GearType.WeaponMelee": "Melee Weapon",
   "SMT.GearType.WeaponRanged": "Ranged Weapon",

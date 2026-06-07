@@ -34,6 +34,9 @@ const {
   sanitizeRewardValue, expMultiplierForGap, expForDefeat, partyLevelOf,
   maccaShares, sanitizeDropName, parseDropItems
 } = await import("../module/helpers/rewards.mjs");
+const {
+  resolvePassiveEffect, passiveMultiplierBonuses, hasMightEffect
+} = await import("../module/helpers/passives.mjs");
 
 // --- Tiny assertion harness ---
 let passed = 0;
@@ -269,6 +272,72 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(parseDropItems("Bead, ,, Bead , bead"), ["Bead"], "drops blanks and dedupes case-insensitively");
   eq(parseDropItems(""), [], "empty drops string -> no items");
   eq(parseDropItems("   "), [], "whitespace-only drops string -> no items");
+}
+
+// ═══════════════════════════════════════════════
+// Passive-skill resolution (p.109-110)
+// ═══════════════════════════════════════════════
+{
+  const reg = SMT.passiveEffects;
+  const skill = (name, passiveEffect) => ({ name, system: { passiveEffect } });
+
+  // resolvePassiveEffect — enum key takes priority.
+  eq(resolvePassiveEffect(skill("anything", "lifeSurge"), reg)?.id, "lifeSurge",
+    "explicit passiveEffect key resolves regardless of name");
+  // Legacy name fallback when the enum is the "none" sentinel (pre-enum data).
+  eq(resolvePassiveEffect(skill("Life Bonus", "none"), reg)?.id, "lifeBonus",
+    "legacy name resolves when passiveEffect is 'none'");
+  eq(resolvePassiveEffect(skill("Mana Surge", undefined), reg)?.id, "manaSurge",
+    "legacy name resolves when passiveEffect is absent");
+  // Name fallback is case/whitespace-insensitive.
+  eq(resolvePassiveEffect(skill("  mana gain  ", "none"), reg)?.id, "manaGain",
+    "legacy name match trims and lowercases");
+  eq(resolvePassiveEffect(skill("MIGHT", "none"), reg)?.id, "might",
+    "Might resolves by legacy name, case-insensitively");
+  // Unknown skills resolve to nothing.
+  eq(resolvePassiveEffect(skill("Bufu", "none"), reg), null,
+    "non-passive skill resolves to null");
+  eq(resolvePassiveEffect(skill("", "none"), reg), null,
+    "empty name with no enum resolves to null");
+  // An unknown enum key still allows the name fallback to win.
+  eq(resolvePassiveEffect(skill("Life Gain", "bogusKey"), reg)?.id, "lifeGain",
+    "unrecognized enum key falls through to the legacy name");
+
+  // passiveMultiplierBonuses — Amplify tiers (highest only, per resource).
+  eq(passiveMultiplierBonuses([skill("Life Bonus", "none")], reg), { hpBonus: 1, mpBonus: 0 },
+    "Life Bonus grants +1 HP multiplier");
+  eq(passiveMultiplierBonuses([skill("x", "lifeSurge")], reg), { hpBonus: 3, mpBonus: 0 },
+    "Life Surge (by enum) grants +3 HP multiplier");
+  // Similar abilities do not stack — take the max, not the sum.
+  eq(passiveMultiplierBonuses([skill("Life Bonus", "none"), skill("y", "lifeSurge")], reg),
+    { hpBonus: 3, mpBonus: 0 }, "HP amplifies take the highest tier, never sum");
+  // HP and MP tiers accumulate independently.
+  eq(passiveMultiplierBonuses([skill("Life Gain", "none"), skill("Mana Surge", "none")], reg),
+    { hpBonus: 2, mpBonus: 3 }, "HP and MP amplify bonuses resolve independently");
+  // Mixed enum + legacy + irrelevant skills.
+  eq(passiveMultiplierBonuses([skill("z", "manaBonus"), skill("Bufu", "none"), skill("Mana Gain", "none")], reg),
+    { hpBonus: 0, mpBonus: 2 }, "max MP tier wins across enum + legacy; non-passives ignored");
+  // Might is not an amplify and contributes no multiplier.
+  eq(passiveMultiplierBonuses([skill("Might", "none")], reg), { hpBonus: 0, mpBonus: 0 },
+    "Might contributes no HP/MP multiplier");
+  eq(passiveMultiplierBonuses([], reg), { hpBonus: 0, mpBonus: 0 },
+    "no skills -> no bonuses");
+
+  // hasMightEffect — both resolution paths, and the negative case.
+  ok(hasMightEffect([skill("Might", "none")], reg), "Might detected by legacy name");
+  ok(hasMightEffect([skill("renamed", "might")], reg), "Might detected by enum key");
+  ok(!hasMightEffect([skill("Life Bonus", "none"), skill("Bufu", "none")], reg),
+    "no Might among amplify / non-passive skills");
+  ok(!hasMightEffect([], reg), "no skills -> no Might");
+
+  // Regression guard: legacy-name-only data (enum left at default) behaves exactly
+  // as the prior name-keyed implementation did for the full Amplify set + Might.
+  const legacy = [
+    skill("Life Surge", "none"), skill("Mana Bonus", "none"), skill("Might", "none")
+  ];
+  eq(passiveMultiplierBonuses(legacy, reg), { hpBonus: 3, mpBonus: 1 },
+    "legacy-name-only actor keeps prior HP/MP amplify result");
+  ok(hasMightEffect(legacy, reg), "legacy-name-only actor keeps prior Might detection");
 }
 
 // --- Report ---

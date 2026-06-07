@@ -1,4 +1,5 @@
 import { makeAffinitySchema, makeAilmentAffinitySchema, STATS } from "./fields.mjs";
+import { passiveMultiplierBonuses, hasMightEffect } from "../helpers/passives.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
 
@@ -100,35 +101,40 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
   }
 
   /**
+   * This actor's skill items (the carriers of passive effects). Source for the
+   * passive-effect resolution below.
+   * @returns {Array} skill items, or an empty array when the actor is unbound.
+   */
+  get _skillItems() {
+    return this.parent?.items?.filter(i => i.type === "skill") ?? [];
+  }
+
+  /**
    * Whether this actor has a passive skill granting Might (p.110), which
    * widens the crit threshold for basic strikes / physical attack skills.
-   * Centralizes the name-based detection previously inlined at the attack
-   * sites (combat / item / sheet) so they can read this getter instead.
+   * Centralizes the detection previously inlined at the attack sites (combat /
+   * item / sheet) so they can read this getter instead. Resolution is enum-first
+   * (system.passiveEffect) with a legacy skill-name fallback, via the shared
+   * CONFIG.SMT.passiveEffects registry.
    * @returns {boolean}
    */
   get hasMightPassive() {
-    return this.parent?.items?.some(
-      i => i.type === "skill" && i.name === CONFIG.SMT.mightPassiveName
-    ) ?? false;
+    return hasMightEffect(this._skillItems, CONFIG.SMT.passiveEffects);
   }
 
   /**
    * HP/MP multiplier bonuses from passive skills (highest tier only — similar
-   * abilities do not stack, p.109). Tier values are config-driven via
-   * CONFIG.SMT.passiveBonuses keyed by skill name.
+   * abilities do not stack, p.109). Each skill resolves to its
+   * CONFIG.SMT.passiveEffects entry by system.passiveEffect, with a legacy
+   * skill-name fallback; the pure resolver lives in helpers/passives.mjs.
    * @returns {{hpBonus: number, mpBonus: number}}
    */
   _getPassiveMultiplierBonuses() {
-    let hpBonus = 0;
-    let mpBonus = 0;
-    const hpTiers = CONFIG.SMT.passiveBonuses.hp;
-    const mpTiers = CONFIG.SMT.passiveBonuses.mp;
-    const skills = this.parent?.items?.filter(i => i.type === "skill" && i.system.skillType === "passive") ?? [];
-    for (const skill of skills) {
-      if (skill.name in hpTiers) hpBonus = Math.max(hpBonus, hpTiers[skill.name]);
-      if (skill.name in mpTiers) mpBonus = Math.max(mpBonus, mpTiers[skill.name]);
-    }
-    return { hpBonus, mpBonus };
+    // Amplify HP/MP bonuses come only from passive-type skills (p.109), matching the
+    // pre-registry behavior so a non-passive skill that happens to share a legacy name
+    // cannot grant a multiplier. (Might detection matches by name regardless, as before.)
+    const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
+    return passiveMultiplierBonuses(passives, CONFIG.SMT.passiveEffects);
   }
 
   /**

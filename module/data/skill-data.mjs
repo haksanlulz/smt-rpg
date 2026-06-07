@@ -42,6 +42,15 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
         initial: "none",
         choices: Object.keys(CONFIG.SMT.buffEffectChoices)
       }),
+      // Mechanical passive this skill grants (Amplify / Might, p.109-110). "none"
+      // = no registry effect. A CONFIG.SMT.passiveEffects key drives HP/MP
+      // multiplier bonuses or the Might crit widen; resolution (enum-first, with a
+      // legacy skill-name fallback) lives in helpers/passives.mjs. Choices derive
+      // from the registry so the config stays the single source of truth.
+      passiveEffect: new StringField({
+        initial: "none",
+        choices: Object.keys(CONFIG.SMT.passiveEffects)
+      }),
       inheritanceType: new StringField({ initial: "" })
     };
   }
