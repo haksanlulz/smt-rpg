@@ -231,6 +231,14 @@ SMT.bossHpMpMultiplier = 2;
 // Max skills an actor may have (base-actor-sheet.mjs drop/create enforcement)
 SMT.skillCap = 8;
 
+// Character advancement (p.48). EXP to reach a level = level^expCurvePower x expMultiplier
+// (fiend ×1, demon ×1.3, human ×0.8); maxLevel is the schema ceiling. helpers/advancement.mjs
+// is the one definition; base-actor derives expNext/canLevelUp, setLevel + fusion reuse it.
+SMT.advancement = {
+  expCurvePower: 3,
+  maxLevel: 100
+};
+
 // Buffs / debuffs (p.96)
 // Flat 1d10 per stack; effects on the same axis share one 4-stack cap.
 SMT.buffMaxStacks = 4;
@@ -308,6 +316,14 @@ SMT.autoRecoverAtTurnStart = ["freeze", "shock"];
 
 // Sleep regens HP and MP by (Vitality + level) each of the sleeper's turns (p.66).
 SMT.sleep = { regenStat: "vitality" };
+
+// Start-of-turn ailment save (p.69). eligible = the p.68 Save column: Charm/Restrain/Sleep/Panic.
+// Stone and Fly are not eligible; Freeze/Shock auto-recover (autoRecoverAtTurnStart) so they're
+// omitted. stat selects the save check's stat (Vitality), reusing the derived saveTN.
+SMT.ailmentSave = {
+  eligible: ["charm", "restrain", "sleep", "panic"],
+  stat: "vitality"
+};
 
 // Cleared when the afflicted actor takes real attack damage (p.66); read by SMTActor.applyDamage.
 SMT.wakeOnDamageAilments = ["sleep"];

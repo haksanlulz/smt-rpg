@@ -48,8 +48,17 @@
         </div>
         <div class="resource">
           <label>{{localize "SMT.Next"}}</label>
-          <span>{{system.expNext}}</span>
+          <span class="{{#if system.canLevelUp}}exp-ready{{/if}}">{{system.expNext}}</span>
         </div>
+        {{!-- EXP-ready level-up control (p.48); shown once canLevelUp. --}}
+        {{#if system.canLevelUp}}
+        <div class="resource level-up">
+          <button type="button" class="level-up-btn" data-action="levelUp"
+            data-tooltip="{{localize 'SMT.LevelUp.Hint'}}">
+            <i class="fas fa-arrow-up"></i> {{localize "SMT.LevelUp.Action"}}
+          </button>
+        </div>
+        {{/if}}
         <div class="resource">
           <label>{{localize "SMT.Macca"}}</label>
           <input type="number" name="system.macca" value="{{system.macca}}" />

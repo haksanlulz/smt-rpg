@@ -3,6 +3,7 @@
 // orchestration. Ingredients are left intact — fusion yields a card to manifest.
 
 import { SMT } from "../config.mjs";
+import { expThresholdForLevel } from "./advancement.mjs";
 
 const FLAG_SCOPE = "smt-rpg";
 
@@ -103,7 +104,7 @@ export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } 
   return {
     ...stats,
     level: newLevel,
-    exp: Math.floor(Math.pow(newLevel, 3) * expMultiplier), // floor for the level (p.48)
+    exp: expThresholdForLevel(newLevel, expMultiplier), // floor for the level (p.48)
     hp: { value: 9_999_999 }, // clamped to derived max on first prepare
     mp: { value: 9_999_999 },
     affinities,

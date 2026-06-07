@@ -1,7 +1,8 @@
 {{!-- Conditions strip (sheet header): the single common-ailment slot (p.68), the
   special Death/Curse flags (p.67), and the active buff/stance icons. The ailment
-  and special-flag pips clear on click; the buff/stance marks are display-only
-  (managed from the combat-tab chips / Dekaja-Dekunda). --}}
+  and special-flag pips clear on click; a save-eligible ailment (p.69) also carries a
+  start-of-turn Save control. The buff/stance marks are display-only (managed from
+  the combat-tab chips / Dekaja-Dekunda). --}}
 {{#if conditions.any}}
 <div class="condition-pips">
   {{#if conditions.ailment}}
@@ -10,6 +11,12 @@
       <i class="fas fa-skull-crossbones"></i>
       {{localize conditions.ailment.label}}
     </span>
+    {{#if conditions.ailment.canSave}}
+      <button type="button" class="condition-pip ailment-save" data-action="saveAilment"
+        data-tooltip="{{localize 'SMT.Save.Hint'}}">
+        <i class="fas fa-dice-d20"></i> {{localize "SMT.Save.Action"}}
+      </button>
+    {{/if}}
   {{/if}}
   {{#if conditions.death}}
     <span class="condition-pip ailment death clickable" data-action="clearDeath"

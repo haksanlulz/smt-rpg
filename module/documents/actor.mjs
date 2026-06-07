@@ -1,5 +1,6 @@
 import { calculateDamage } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
+import { expThresholdForLevel } from "../helpers/advancement.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -40,23 +41,36 @@ export default class SMTActor extends Actor {
     return this.items.filter(i => i.type === "consumable");
   }
 
-  // Set level, reset EXP to that level's floor (L^3 * expMultiplier, p.48). Heals to full.
+  // Set level, reset EXP to that level's floor via the shared curve (p.48). Heals to full.
   async setLevel(level) {
     if (!(game.user.isGM || this.canUserModify(game.user, "update"))) {
       ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
       return null;
     }
-    const target = Math.clamp(Math.floor(Number(level) || 0), 1, 100);
-    const mult = this.system.expMultiplier ?? 1;
-    const exp = Math.floor(Math.pow(target, 3) * mult);
+    const target = Math.clamp(Math.floor(Number(level) || 0), 1, CONFIG.SMT.advancement.maxLevel);
+    const exp = expThresholdForLevel(target, this.system.expMultiplier ?? 1);
     await this.update({
       "system.level": target,
       "system.exp": exp,
-      // Heal to full (p.48); clamps to derived max once level re-derives hp/mp.max.
+      // Heal to full (p.49); clamps to derived max once level re-derives hp/mp.max.
       "system.hp.value": 9_999_999,
       "system.mp.value": 9_999_999
     });
     return this;
+  }
+
+  // Advance one level when enough EXP is banked (p.48). Gated; reuses setLevel's
+  // EXP-reset + full-heal path. Stat/skill choices stay the player's to apply (p.49).
+  async levelUp() {
+    if (!(game.user.isGM || this.canUserModify(game.user, "update"))) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+      return null;
+    }
+    if (!this.system.canLevelUp) {
+      ui.notifications.info(game.i18n.localize("SMT.LevelUp.NotReady"));
+      return null;
+    }
+    return this.setLevel(this.system.level + 1);
   }
 
   // Roll 1d100 vs tn, post the card, return the outcome.

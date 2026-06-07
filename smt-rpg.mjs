@@ -143,6 +143,7 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/chat/attack-pending.hbs",
     "systems/smt-rpg/templates/chat/dodge-result.hbs",
     "systems/smt-rpg/templates/chat/ailment-result.hbs",
+    "systems/smt-rpg/templates/chat/ailment-save.hbs",
     "systems/smt-rpg/templates/chat/item-use.hbs",
     "systems/smt-rpg/templates/chat/fusion-result.hbs",
     "systems/smt-rpg/templates/chat/negotiation.hbs",
@@ -320,9 +321,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
   const actor = combat.combatant?.actor;
   if (!actor) return;
   if (!_isResponsibleClient(actor)) return;
-  const { clearDefend, processAilmentTurnStart } = await import("./module/helpers/effects.mjs");
+  const { clearDefend, processAilmentTurnStart, attemptAilmentSave } = await import("./module/helpers/effects.mjs");
   await clearDefend(actor);
   await processAilmentTurnStart(actor);
+  // Start-of-turn save against a save-eligible ailment (p.69); no-op otherwise.
+  await attemptAilmentSave(actor);
 });
 
 // Encounter end: pay out rewards (p.46, p.48), then clear Defend/Concentrate (p.64) from every

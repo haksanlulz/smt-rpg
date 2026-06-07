@@ -25,6 +25,8 @@ const {
 const {
   resolvePassiveEffect, passiveMultiplierBonuses, hasMightEffect
 } = await import("../module/helpers/passives.mjs");
+const { expThresholdForLevel, canLevelUp } = await import("../module/helpers/advancement.mjs");
+const { isSaveEligibleAilment } = await import("../module/helpers/effects.mjs");
 
 // Assertion harness
 let passed = 0;
@@ -314,6 +316,56 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(passiveMultiplierBonuses(legacy, reg), { hpBonus: 3, mpBonus: 1 },
     "legacy-name-only actor keeps prior HP/MP amplify result");
   ok(hasMightEffect(legacy, reg), "legacy-name-only actor keeps prior Might detection");
+}
+
+// Advancement maths (p.48). Confirms the shared curve matches the old inline values.
+{
+  // EXP to reach a level = level^3 x type multiplier, floored.
+  eq(expThresholdForLevel(1), 0, "level 1 needs 0 EXP");
+  eq(expThresholdForLevel(0), 0, "level 0 (and below) needs 0 EXP");
+  eq(expThresholdForLevel(2, 1), 8, "fiend level 2 needs 8 (2^3)");
+  eq(expThresholdForLevel(3, 1), 27, "fiend level 3 needs 27");
+  eq(expThresholdForLevel(10, 1), 1000, "fiend level 10 needs 1000");
+  eq(expThresholdForLevel(50, 1), 125000, "fiend level 50 needs 125000");
+  // Demon ×1.3 floors: 2^3×1.3=10.4->10, 3^3×1.3=35.1->35, 10^3×1.3=1300.
+  eq(expThresholdForLevel(2, 1.3), 10, "demon level 2 needs 10 (floor 10.4)");
+  eq(expThresholdForLevel(3, 1.3), 35, "demon level 3 needs 35 (floor 35.1)");
+  eq(expThresholdForLevel(10, 1.3), 1300, "demon level 10 needs 1300 (old inline value)");
+  // Human ×0.8 floors: 2^3×0.8=6.4->6, 10^3×0.8=800, 50^3×0.8=100000.
+  eq(expThresholdForLevel(2, 0.8), 6, "human level 2 needs 6 (floor 6.4)");
+  eq(expThresholdForLevel(10, 0.8), 800, "human level 10 needs 800");
+  eq(expThresholdForLevel(50, 0.8), 100000, "human level 50 needs 100000");
+
+  // canLevelUp: banked EXP must meet the NEXT level's threshold; capped level is never ready.
+  ok(canLevelUp(8, 1, 1), "fiend with 8 EXP at level 1 can level up");
+  ok(!canLevelUp(7, 1, 1), "fiend with 7 EXP at level 1 cannot level up yet");
+  ok(canLevelUp(27, 2, 1), "fiend with 27 EXP at level 2 can reach level 3");
+  ok(!canLevelUp(26, 2, 1), "fiend with 26 EXP at level 2 cannot reach level 3");
+  ok(canLevelUp(10, 1, 1.3), "demon with 10 EXP at level 1 can level up");
+  ok(!canLevelUp(9, 1, 1.3), "demon with 9 EXP at level 1 cannot level up yet");
+  ok(!canLevelUp(9_999_999, SMT.advancement.maxLevel, 1), "an actor at the level cap is never ready");
+}
+
+// Ailment-save eligibility (p.69, p.68 Save column).
+{
+  // Save-eligible set is exactly Charm/Restrain/Sleep/Panic.
+  ok(isSaveEligibleAilment("charm"), "Charm is save-eligible");
+  ok(isSaveEligibleAilment("restrain"), "Restrain is save-eligible");
+  ok(isSaveEligibleAilment("sleep"), "Sleep is save-eligible");
+  ok(isSaveEligibleAilment("panic"), "Panic is save-eligible");
+  // Stone and Fly are NOT eligible (the fix).
+  ok(!isSaveEligibleAilment("stone"), "Stone is not save-eligible");
+  ok(!isSaveEligibleAilment("fly"), "Fly is not save-eligible (only ends at combat end)");
+  // Freeze/Shock auto-recover at turn start, so they are not save-eligible here.
+  ok(!isSaveEligibleAilment("freeze"), "Freeze is not save-eligible (auto-recovers)");
+  ok(!isSaveEligibleAilment("shock"), "Shock is not save-eligible (auto-recovers)");
+  // The rest cannot be saved against.
+  ok(!isSaveEligibleAilment("mute"), "Mute is not save-eligible");
+  ok(!isSaveEligibleAilment("stun"), "Stun is not save-eligible");
+  ok(!isSaveEligibleAilment("poison"), "Poison is not save-eligible");
+  ok(!isSaveEligibleAilment("death"), "Death is not save-eligible");
+  ok(!isSaveEligibleAilment("curse"), "Curse is not save-eligible");
+  ok(!isSaveEligibleAilment("none"), "no ailment is not save-eligible");
 }
 
 // Report

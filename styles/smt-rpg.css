@@ -133,6 +133,32 @@
   text-align: center;
 }
 
+/* EXP-ready indicator + level-up control (p.48). */
+.smt-actor-sheet .resource .exp-ready {
+  color: var(--smt-fate);
+  font-weight: bold;
+}
+
+.smt-actor-sheet .level-up-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--smt-fate);
+  border: 1px solid var(--smt-fate);
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: auto;
+}
+
+.smt-actor-sheet .level-up-btn:hover {
+  filter: brightness(1.15);
+}
+
 /* ---- Tabs ---- */
 .smt-actor-sheet .sheet-tabs {
   display: flex;
@@ -556,6 +582,20 @@
 
 .condition-pip.mark img { border: none; border-radius: 50%; }
 
+/* Save control on a save-eligible ailment pip (p.69). */
+button.condition-pip.ailment-save {
+  background: var(--smt-bg);
+  border: 1px solid var(--smt-fate);
+  color: var(--smt-fate);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.condition-pip.ailment-save:hover {
+  background: var(--smt-fate);
+  color: #fff;
+}
+
 /* ---- Ailment ---- */
 .ailment-status {
   display: flex;
@@ -893,6 +933,20 @@
 /* ---- Ailment Result Cards ---- */
 .smt-roll.ailment.inflicted .roll-outcome { background: var(--smt-fumble); color: #fff; }
 .smt-roll.ailment.resisted .roll-outcome { background: var(--smt-success); color: #fff; }
+
+/* ---- Ailment Save Cards (p.69) ---- */
+.smt-roll.ailment-save .save-result {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  text-align: center;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+.smt-roll.ailment-save .save-result.success { background: var(--smt-success); color: #fff; }
+.smt-roll.ailment-save .save-result.failure { background: var(--smt-failure); color: #fff; }
 
 /* ---- Fate Point Buttons ---- */
 .smt-roll .fate-buttons {

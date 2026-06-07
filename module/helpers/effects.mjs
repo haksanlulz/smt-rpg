@@ -3,11 +3,16 @@
 // defend.amount accumulators that the actor folds into derived stats each prepare.
 
 import { SMT } from "../config.mjs";
+import { evaluatePercentile } from "./checks.mjs";
 
 const FLAG_SCOPE = "smt-rpg";
 const BUFF_KEY = "buff";
 const CONCENTRATE_KEY = "concentrate";
 const DEFEND_KEY = "defend";
+
+// Once-per-turn ailment-save lock (p.69), keyed "<combatId>:<round>:<actorId>" so the
+// turn automation and a manual Save can't re-roll the same turn.
+const _saveLocks = new Set();
 
 export function canModifyEffects(actor) {
   return game.user.isGM || actor.canUserModify(game.user, "update");
@@ -273,6 +278,68 @@ async function _resolvePanic(actor) {
       targetTokenUuid: getTokenUuid(actor) ?? actor.id
     });
   }
+}
+
+// Whether an ailment accepts a start-of-turn save (p.69, p.68 Save column). Pure;
+// reads only SMT.ailmentSave.eligible (Charm/Restrain/Sleep/Panic). Exported so the
+// sheet (which control to show) and the tests share one definition.
+export function isSaveEligibleAilment(ailment) {
+  return SMT.ailmentSave.eligible.includes(ailment);
+}
+
+// Start-of-turn save against the common ailment (p.69): a percentile check on the save
+// stat's TN (Vitality, via the shared saveTN) through evaluatePercentile; clears the slot
+// on success. One attempt per turn, locked on "<combatId>:<round>:<actorId>". Posts a card.
+export async function attemptAilmentSave(actor) {
+  if (!actor) return null;
+  const ailment = actor.system.ailment ?? "none";
+  if (ailment === "none" || !isSaveEligibleAilment(ailment)) return null;
+  if (!canModifyEffects(actor)) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+    return null;
+  }
+
+  // One save per turn (p.69). No active combat -> no lock (a free out-of-combat attempt).
+  const lockKey = game.combat ? `${game.combat.id}:${game.combat.round}:${actor.id}` : null;
+  if (lockKey !== null && _saveLocks.has(lockKey)) {
+    ui.notifications.info(game.i18n.localize("SMT.Save.AlreadyTried"));
+    return null;
+  }
+  if (lockKey !== null) _saveLocks.add(lockKey);
+
+  const tn = Number(actor.system.saveTN) || 0;
+  const roll = await new Roll("1d100").evaluate();
+  const result = roll.total;
+  const evaluated = evaluatePercentile(result, tn);
+  const recovered = evaluated.isSuccess;
+  const label = game.i18n.localize(SMT.ailments[ailment] ?? ailment);
+
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Ailment Save", {
+    actor: actor.name, ailment, tn, roll: result, recovered
+  });
+
+  if (recovered) await actor.update({ "system.ailment": "none" });
+
+  const content = await foundry.applications.handlebars.renderTemplate(
+    "systems/smt-rpg/templates/chat/ailment-save.hbs",
+    {
+      name: actor.name,
+      ailmentLabel: label,
+      statLabel: game.i18n.localize(SMT.stats[SMT.ailmentSave.stat] ?? SMT.ailmentSave.stat),
+      tn,
+      roll: result,
+      outcomeText: game.i18n.localize(evaluated.outcomeKey),
+      cssClass: evaluated.cssClass,
+      recovered
+    }
+  );
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content,
+    rolls: [roll]
+  });
+
+  return { recovered, roll: result, tn };
 }
 
 export function defendEffect(actor) {
