@@ -296,6 +296,109 @@ export async function applyPoisonDrain(actor) {
 }
 
 /**
+ * Resolve the start-of-turn effects of the afflicted combatant's common ailment
+ * (p.66-68). Called once when a combatant's turn begins. In order:
+ *  1. Auto-recovery — Freeze and Shock end at the start of the next turn even on a
+ *     failed save (CONFIG.SMT.autoRecoverAtTurnStart); the slot is cleared and a
+ *     recovery notice posts. The combatant then acts normally that turn.
+ *  2. Sleep regen — a sleeper restores HP and MP equal to (Vitality + level) at the
+ *     start of each of its turns (CONFIG.SMT.sleep.regenStat); Sleep does not end here.
+ *  3. Panic — CONFIG.SMT.panic.chancePct% chance to act randomly: roll the Panic
+ *     table, post the rolled line, and apply its `inflicts` ailment if any (the
+ *     7-8 "fall asleep" result inflicts Sleep, p.67).
+ *  4. Cannot act — Freeze/Sleep/Shock/Restrain (CONFIG.SMT.cannotActAilments) forfeit
+ *     the turn; a "cannot act" notice posts. (Step 1 already cleared Freeze/Shock, so
+ *     only a still-active can't-act ailment reaches here.)
+ * All HP/ailment writes are gated by canModifyEffects so this runs only on a client
+ * allowed to mutate the actor (the caller also elects a single responsible client).
+ *
+ * @param {Actor} actor - the combatant whose turn is starting.
+ * @returns {Promise<void>}
+ */
+export async function processAilmentTurnStart(actor) {
+  if (!actor) return;
+  const ailment = actor.system.ailment ?? "none";
+  if (ailment === "none") return;
+  if (!canModifyEffects(actor)) return;
+
+  const label = game.i18n.localize(SMT.ailments[ailment] ?? ailment);
+
+  // 1. Freeze / Shock auto-recover at the start of the next turn (p.66).
+  if (SMT.autoRecoverAtTurnStart.includes(ailment)) {
+    await actor.update({ "system.ailment": "none" });
+    await postEffectNotice(actor, game.i18n.format("SMT.Ailment.Recovered", { name: actor.name, ailment: label }));
+    return;
+  }
+
+  // 2. Sleep regen: restore (regenStat + level) HP and MP each turn (p.66).
+  if (ailment === "sleep") {
+    const stat = SMT.sleep.regenStat;
+    const amount = Math.max(0, (Number(actor.system[`${stat}Total`]) || 0) + (Number(actor.system.level) || 0));
+    if (amount > 0) {
+      const newHp = Math.min(actor.system.hp.value + amount, actor.system.hp.max);
+      const newMp = Math.min(actor.system.mp.value + amount, actor.system.mp.max);
+      await actor.update({ "system.hp.value": newHp, "system.mp.value": newMp });
+      await postEffectNotice(actor, game.i18n.format("SMT.Sleep.Regen", { name: actor.name, amount }));
+    }
+  }
+
+  // 3. Panic: chance to act randomly off the Panic table (p.67).
+  if (ailment === "panic") {
+    await _resolvePanic(actor);
+    return;
+  }
+
+  // 4. Fully incapacitating ailments forfeit the turn (p.66, p.68).
+  if (SMT.cannotActAilments.includes(ailment)) {
+    await postEffectNotice(actor, game.i18n.format("SMT.Ailment.CannotAct", { name: actor.name, ailment: label }));
+  }
+}
+
+/**
+ * Resolve a Panic turn (p.67): with CONFIG.SMT.panic.chancePct% probability the
+ * combatant takes a random action — roll CONFIG.SMT.panic.die, look the result up
+ * on the Panic table, post the rolled line, and apply its `inflicts` ailment (the
+ * 7-8 "fall asleep" entry inflicts Sleep). Below the chance threshold they act
+ * normally and only a short notice posts. Caller has already gated on canModifyEffects.
+ * @param {Actor} actor
+ * @returns {Promise<void>}
+ */
+async function _resolvePanic(actor) {
+  const chanceRoll = await new Roll("1d100").evaluate();
+  if (chanceRoll.total > SMT.panic.chancePct) {
+    await postEffectNotice(actor, game.i18n.format("SMT.Panic.Steady", { name: actor.name }));
+    return;
+  }
+
+  const roll = await new Roll(SMT.panic.die).evaluate();
+  const entry = SMT.panic.table.find(e => roll.total >= e.min && roll.total <= e.max)
+    ?? SMT.panic.table[SMT.panic.table.length - 1];
+  const effectText = game.i18n.localize(entry.label);
+
+  // Post the rolled Panic line as a short notice (consistent with the other
+  // start-of-turn ailment notices), carrying the d10 so the roll is auditable.
+  const content = `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.Panic.Acts", { name: actor.name, effect: effectText })}</p></div>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content,
+    rolls: [roll]
+  });
+
+  // The Panic table's sleep result (p.67 entry 7-8) inflicts Sleep on the panicker.
+  if (entry.inflicts) {
+    const { resolveAilment, getTokenUuid } = await import("./combat.mjs");
+    await resolveAilment({
+      target: actor, attacker: actor,
+      ailmentType: entry.inflicts,
+      baseRate: SMT.ailmentRate.max,
+      element: "none",
+      isCritical: false, dodgeFumble: false,
+      targetTokenUuid: getTokenUuid(actor) ?? actor.id
+    });
+  }
+}
+
+/**
  * The actor's active Defend effect, if any.
  * @param {Actor} actor
  * @returns {ActiveEffect|undefined}

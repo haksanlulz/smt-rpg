@@ -299,5 +299,19 @@
   "SMT.Defeated": "Defeated",
   "SMT.ClearCondition": "Click to clear",
 
-  "SMT.Poison.Drain": "{name} loses {damage} HP to poison."
+  "SMT.Poison.Drain": "{name} loses {damage} HP to poison.",
+
+  "SMT.Ailment.CannotAct": "{name} is afflicted with {ailment} and cannot act this turn.",
+  "SMT.Ailment.Recovered": "{name} recovers from {ailment}.",
+  "SMT.Ailment.WokeFrom": "Woke from {ailment}!",
+  "SMT.Sleep.Regen": "{name} sleeps and recovers {amount} HP and MP.",
+  "SMT.Panic.Steady": "{name} fights through the panic and acts normally.",
+  "SMT.Panic.Acts": "{name} panics: {effect}",
+  "SMT.Panic.Macca": "tosses out some macca, losing 10% of their held money.",
+  "SMT.Panic.Spacing": "spaces out and takes no action.",
+  "SMT.Panic.Negotiate": "starts talking funny and tries to negotiate.",
+  "SMT.Panic.Sleep": "falls asleep, and is inflicted with Sleep.",
+  "SMT.Panic.Dance": "dances, twirls, and takes other strange actions.",
+
+  "SMT.Warnings.Muted": "Muted — you cannot use spells or magical attack skills."
 }

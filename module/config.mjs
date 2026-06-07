@@ -333,3 +333,60 @@ SMT.poison = { die: "1d10" };
 
 // Stun: the afflicted actor's attack hit checks are capped at <=25% (p.66).
 SMT.stun = { hitCapPct: 25 };
+
+// Mute seals magic: the afflicted actor may not use spells or magical attack
+// skills (p.66). Skill types blocked while Muted, checked in SMTItem.use.
+SMT.muteBlockedSkillTypes = ["spell", "magical-attack"];
+
+// ═══════════════════════════════════════════════
+// Ailment turn interaction (p.66-68)
+// ═══════════════════════════════════════════════
+// Common-slot ailments that prevent the afflicted combatant from acting on their
+// turn at all (p.66, p.68 "Can take no actions"). Stone cannot dodge but is left
+// out here because it still acts; the four below forfeit the whole turn. The
+// start-of-turn automation posts a "cannot act" notice for these (Charm is GM-run,
+// Panic acts randomly, so neither is a flat skip).
+SMT.cannotActAilments = ["freeze", "sleep", "shock", "restrain"];
+
+// Ailments that auto-recover at the START of the afflicted combatant's next turn
+// (p.66): Freeze and Shock end then even on a failed save. The turn automation
+// clears system.ailment for these before the "cannot act" notice, so the icon
+// drops the moment the turn it would skip begins.
+SMT.autoRecoverAtTurnStart = ["freeze", "shock"];
+
+// Sleep restores HP and MP equal to (Vitality + level) at the start of each of the
+// sleeper's turns (p.66). Sourced here so the regen rule stays config-authoritative.
+SMT.sleep = { regenStat: "vitality" };
+
+// Common-slot ailments cleared when the afflicted actor takes damage from an attack
+// (p.66): Sleep ends the moment a hit lands. Read by SMTActor.applyDamage after a
+// real (non-null/drain/repel) hit. Kept as a set so the rule is config-authoritative
+// and trivially extensible.
+SMT.wakeOnDamageAilments = ["sleep"];
+
+// Panic (p.67): on the afflicted combatant's turn there is a panicChancePct% chance
+// they take a random action instead of the one chosen. The 1d10 Panic table maps a
+// roll to a localized effect line and (for the sleep result) the secondary ailment
+// it inflicts. Ranges are inclusive [min,max] over a 1d10; effects are display-only
+// narration except `inflicts`, which the automation applies (p.67 entry 7-8 = Sleep).
+SMT.panic = {
+  chancePct: 50,
+  die: "1d10",
+  table: [
+    { min: 1, max: 2, label: "SMT.Panic.Macca" },
+    { min: 3, max: 4, label: "SMT.Panic.Spacing" },
+    { min: 5, max: 6, label: "SMT.Panic.Negotiate" },
+    { min: 7, max: 8, label: "SMT.Panic.Sleep", inflicts: "sleep" },
+    { min: 9, max: 10, label: "SMT.Panic.Dance" }
+  ]
+};
+
+// ═══════════════════════════════════════════════
+// Initiative (p.63)
+// ═══════════════════════════════════════════════
+// Initiative is "1d10x10 + Agility" (declared authoritatively in system.json and
+// mirrored to CONFIG.Combat.initiative at init). When two or more combatants tie,
+// the book breaks the tie with a flat die-off, highest roll first (p.63). SMTCombat
+// rolls this die once per combatant and sorts ties by it. A plain d-size so the
+// tie-break never explodes (a clean highest-roll-wins, p.63).
+SMT.initiativeTieBreakDie = 10;

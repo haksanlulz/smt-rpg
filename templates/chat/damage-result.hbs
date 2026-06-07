@@ -35,6 +35,9 @@
       <span class="roll-value">{{finalDamage}}</span>
       <span class="roll-label">{{localize "SMT.Damage.Final"}}</span>
     </div>
+    {{#if wokeFrom}}
+      <div class="roll-outcome">{{wokeFrom}}</div>
+    {{/if}}
   {{/if}}
   {{!-- Resulting-HP footer (p.65). Suppressed for null/repel, where the target
        takes no HP loss; shown for hits and drains. --}}
