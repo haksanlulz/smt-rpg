@@ -176,27 +176,40 @@ SMT.mpMultipliers = {
   npc: 3
 };
 
-// Passive skill HP/MP multiplier bonuses (Amplify Group, p.109). Highest tier
-// only — similar abilities do not stack. Data-model-owned; read via
-// SMTBaseActorData._getPassiveMultiplierBonuses().
-// TODO: key off skill.system.passiveEffect enum instead of skill name.
-SMT.passiveBonuses = {
-  hp: {
-    "Life Bonus": 1,
-    "Life Gain": 2,
-    "Life Surge": 3
-  },
-  mp: {
-    "Mana Bonus": 1,
-    "Mana Gain": 2,
-    "Mana Surge": 3
-  }
+// Passive-skill effect registry (p.109-110) — the single source of truth for
+// every mechanical passive. A skill declares which entry it grants via
+// system.passiveEffect (a key below); helpers/passives.mjs resolves a skill to
+// its entry by that key, falling back to a case-insensitive match against the
+// entry's legacyNames so skills authored before the enum existed (which only
+// carry the rulebook name) keep working unchanged.
+//
+// Entry shape:
+//   label       — i18n key for the dropdown / sheet.
+//   legacyNames — rulebook skill names that map to this effect (name fallback).
+//   kind        — "amplify" (HP/MP multiplier) or "might" (crit-threshold widen).
+//   resource    — "hp" | "mp"  (amplify only): which multiplier it raises.
+//   value       — integer added to that multiplier (amplify only).
+//
+// Amplify Group (p.109): raises the HP or MP multiplier; highest tier only —
+// similar abilities do not stack, so the resolver takes the max per resource.
+// Might (Attack Enhancers, p.110): widens the basic-strike / physical-attack
+// crit threshold to TN/mightCritDivisor.
+SMT.passiveEffects = {
+  none: { label: "SMT.PassiveEffect.None", legacyNames: [], kind: "none" },
+  lifeBonus: { label: "SMT.PassiveEffect.LifeBonus", legacyNames: ["Life Bonus"], kind: "amplify", resource: "hp", value: 1 },
+  lifeGain: { label: "SMT.PassiveEffect.LifeGain", legacyNames: ["Life Gain"], kind: "amplify", resource: "hp", value: 2 },
+  lifeSurge: { label: "SMT.PassiveEffect.LifeSurge", legacyNames: ["Life Surge"], kind: "amplify", resource: "hp", value: 3 },
+  manaBonus: { label: "SMT.PassiveEffect.ManaBonus", legacyNames: ["Mana Bonus"], kind: "amplify", resource: "mp", value: 1 },
+  manaGain: { label: "SMT.PassiveEffect.ManaGain", legacyNames: ["Mana Gain"], kind: "amplify", resource: "mp", value: 2 },
+  manaSurge: { label: "SMT.PassiveEffect.ManaSurge", legacyNames: ["Mana Surge"], kind: "amplify", resource: "mp", value: 3 },
+  might: { label: "SMT.PassiveEffect.Might", legacyNames: ["Might"], kind: "might" }
 };
 
-// Passive skill that widens the crit threshold for basic strikes / physical
-// attack skills to TN/mightCritDivisor (p.110). Detected by skill name today.
-// TODO: move to skill.system.passiveEffect enum.
-SMT.mightPassiveName = "Might";
+// Localized choices for the skill sheet's passive-effect dropdown (key -> label),
+// derived from the registry so it stays the single source of truth.
+SMT.passiveEffectChoices = Object.fromEntries(
+  Object.entries(SMT.passiveEffects).map(([key, entry]) => [key, entry.label])
+);
 
 // ═══════════════════════════════════════════════
 // Rules constants (config-authoritative source of truth)
