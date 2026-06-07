@@ -303,9 +303,9 @@
   "SMT.Action.Defend": "Defend",
   "SMT.Action.DefendHint": "Forego your action for +20% dodge until the start of your next turn.",
 
-  "SMT.Effect.Dispelled": "{skill}: cleared {count} effect(s).",
-  "SMT.Effect.Concentrated": "Concentrates on {action} (+{amount}% to its next hit check).",
-  "SMT.Effect.Defended": "Defends (+{amount}% dodge until the start of the next turn).",
+  "SMT.EffectMsg.Dispelled": "{skill}: cleared {count} effect(s).",
+  "SMT.EffectMsg.Concentrated": "Concentrates on {action} (+{amount}% to its next hit check).",
+  "SMT.EffectMsg.Defended": "Defends (+{amount}% dodge until the start of the next turn).",
 
   "SMT.Effects.Label": "Buffs & Actions",
   "SMT.Effects.None": "No active effects.",

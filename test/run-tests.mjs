@@ -368,6 +368,23 @@ function ok(cond, label) { eq(!!cond, true, label); }
   ok(!isSaveEligibleAilment("none"), "no ailment is not save-eligible");
 }
 
+// lang/en.json must be expandObject-safe: a dotted key that is also an ancestor
+// of another key (e.g. "SMT.Effect" + "SMT.Effect.Dispelled") makes Foundry's
+// i18n load throw, and the whole file silently fails to load.
+{
+  const { readFileSync } = await import("fs");
+  const { fileURLToPath } = await import("url");
+  const lang = JSON.parse(readFileSync(fileURLToPath(new URL("../lang/en.json", import.meta.url)), "utf8"));
+  const keys = Object.keys(lang);
+  const set = new Set(keys);
+  const collisions = [];
+  for (const k of keys) {
+    const p = k.split(".");
+    for (let i = 1; i < p.length; i++) { const pre = p.slice(0, i).join("."); if (set.has(pre)) collisions.push(`${pre} <-> ${k}`); }
+  }
+  eq(collisions, [], "en.json has no dotted-key prefix collisions");
+}
+
 // Report
 console.log(`\nsmt-rpg pure-helper tests: ${passed} passed, ${failed} failed`);
 if (failed) {
