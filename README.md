@@ -2,6 +2,7 @@
 
 A [Foundry Virtual Tabletop](https://foundryvtt.com/) game system for **Shin Megami Tensei: The Roleplaying Game — Tokyo Conception**, the d100 percentile tabletop RPG set in the post-apocalyptic Vortex World. Play Fiends, Demons, and Humans; the system handles the percentile skill checks, power rolls, elemental affinities, ailments, dodge, and Fate Points so the table can focus on the game.
 
+This README covers **what the system is, how to install it, and where it stands**. Implementation details live in the source: the `module/` helpers and data models carry inline comments with rulebook page references.
 
 ## What it does
 
@@ -79,6 +80,7 @@ Because Foundry cannot run headlessly here, behavioural changes are validated by
 
 ## Contributing
 
+Internals: the attack pipeline runs `use() → rollPercentile → rollPower → postPendingAttack → resolveAttack → applyDamage → resolveAilment`; chat-card buttons store their state in `smt-rpg` message flags; and the rules constants are centralized in `module/config.mjs`. Read the source comments before making changes.
 
 ## License
 
