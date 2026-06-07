@@ -3,7 +3,7 @@
   <h3>{{localize "SMT.Affinities"}}</h3>
   <div class="affinities-grid">
     {{#each affinityEntries as |entry|}}
-    <div class="affinity-cell {{entry.rating}}">
+    <div class="affinity-cell {{entry.effective}}">
       <label>{{localize entry.label}}</label>
       <select name="system.affinities.{{entry.key}}">
         {{#each @root.affinityChoices as |label key|}}
@@ -17,7 +17,7 @@
   <h3>{{localize "SMT.AilmentAffinities"}}</h3>
   <div class="affinities-grid">
     {{#each ailmentAffinityEntries as |entry|}}
-    <div class="affinity-cell {{entry.rating}}">
+    <div class="affinity-cell {{entry.effective}}">
       <label>{{localize entry.label}}</label>
       <select name="system.ailmentAffinities.{{entry.key}}">
         {{#each @root.ailmentAffinityChoices as |label key|}}

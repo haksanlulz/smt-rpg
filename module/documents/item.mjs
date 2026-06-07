@@ -31,6 +31,16 @@ export default class SMTItem extends Item {
   }
 
   /**
+   * Whether this skill is magic that Mute seals (p.66): a spell or magical attack
+   * skill. Sourced from CONFIG.SMT.muteBlockedSkillTypes so the blocked set stays
+   * config-authoritative. Read by SMTItem.use to bar a Muted actor from casting.
+   * @returns {boolean}
+   */
+  get isMagicSkill() {
+    return this.type === "skill" && CONFIG.SMT.muteBlockedSkillTypes.includes(this.system.skillType);
+  }
+
+  /**
    * Whether this skill casts a buff/debuff or a dispel (p.96): its
    * system.buffEffect is a CONFIG.SMT.buffs or CONFIG.SMT.buffDispels key.
    * @returns {boolean}
@@ -47,6 +57,13 @@ export default class SMTItem extends Item {
 
     if (this.isPassive) {
       ui.notifications.warn(game.i18n.localize("SMT.Warnings.PassiveSkill"));
+      return;
+    }
+
+    // Mute seals magic (p.66): a Muted actor cannot use spells or magical attack
+    // skills. Checked before the cost is paid so a blocked cast never burns MP.
+    if (this.isMagicSkill && actor.system.ailment === "mute") {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.Muted"));
       return;
     }
 

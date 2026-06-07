@@ -37,9 +37,12 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   };
 
-  // Stat entries for template
+  // Stat entries for template. `base` is the SOURCE stat (what the editable input
+  // binds to) so derived/magatama-fed mutations never round-trip back into the
+  // stored stat on submit; `total`/`tn` stay prepared for display.
   _prepareStatEntries() {
     const sys = this.document.system;
+    const src = this.document._source.system ?? {};
     const actor = this.document;
     const favoredStat = sys.favoredStat ?? "";
     return STATS.map(key => {
@@ -49,7 +52,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         key,
         fullLabel: SMT.stats[key],
         abbrLabel: SMT.statsAbbr[key],
-        base: sys[key],
+        base: src[key] ?? sys[key],
         bonus,
         bonusTooltip: bonusSources,
         total: sys[`${key}Total`],
@@ -75,23 +78,35 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return `${game.i18n.localize("SMT.StatBonuses")}: +${totalBonus}`;
   }
 
-  // Affinity entries for template
+  // Affinity entries for template. The editable <select> binds to `rating` (the
+  // SOURCE affinity), while `effective` is the prepared value used only to colour
+  // the cell — so a Fiend's active-magatama affinity override (applied in
+  // prepareDerivedData) is shown by colour without being written back into the
+  // stored affinity on submit.
   _prepareAffinityEntries() {
     const affinities = this.document.system.affinities;
+    const source = this.document._source.system.affinities ?? {};
     return ELEMENTS.map(key => ({
       key,
       label: SMT.elements[key],
-      rating: affinities[key]
+      // Fall back to the prepared value if a key is absent from source (e.g. an
+      // actor stored before the element existed) so the <select> still has a
+      // matching option.
+      rating: source[key] ?? affinities[key],
+      effective: affinities[key]
     }));
   }
 
-  // Ailment affinity entries for template
+  // Ailment affinity entries for template. `rating` is the SOURCE value bound by
+  // the editable <select>; `effective` is the prepared value for cell colouring.
   _prepareAilmentAffinityEntries() {
     const ailmentAffinities = this.document.system.ailmentAffinities;
+    const source = this.document._source.system.ailmentAffinities ?? {};
     return AILMENT_ELEMENTS.map(key => ({
       key,
       label: SMT.elements[key],
-      rating: ailmentAffinities[key]
+      rating: source[key] ?? ailmentAffinities[key],
+      effective: ailmentAffinities[key]
     }));
   }
 
@@ -163,6 +178,35 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       enriched[field] = await foundry.applications.ux.TextEditor.implementation.enrichHTML(sys[field] ?? "");
     }
     return enriched;
+  }
+
+  /**
+   * Coerce blanked numeric inputs before the form submit validates. v14 sheets
+   * drop the legacy `data-dtype` attribute (TypeDataModel handles coercion), but
+   * a number input the user clears submits an empty string — which a non-nullable
+   * NumberField casts to NaN and rejects, silently dropping the edit. Map each
+   * empty `system.*` value that targets a NumberField to a safe fallback (null
+   * when the field is nullable, otherwise its initial or 0) so clearing a field
+   * sticks. Only string values are touched; everything else passes through.
+   * @param {SubmitEvent} event
+   * @param {HTMLFormElement} form
+   * @param {FormDataExtended} formData
+   * @returns {object}
+   */
+  _prepareSubmitData(event, form, formData) {
+    const obj = formData.object;
+    const schema = this.document.system.schema;
+    for (const key of Object.keys(obj)) {
+      if (!key.startsWith("system.")) continue;
+      const val = obj[key];
+      if (typeof val !== "string") continue;
+      const field = schema.getField(key.slice(7));
+      if (!(field instanceof foundry.data.fields.NumberField)) continue;
+      if (val.trim() === "") {
+        obj[key] = field.nullable ? null : (field.initial ?? 0);
+      }
+    }
+    return super._prepareSubmitData(event, form, formData);
   }
 
   // Skill cap enforcement on drop

@@ -34,6 +34,33 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
     return parts;
   }
 
+  /**
+   * Coerce blanked numeric inputs before validation. With `data-dtype` removed in
+   * v14, a cleared number field (power, cost, quantity, ammo, magatama stat
+   * bonuses, …) submits an empty string that a non-nullable NumberField casts to
+   * NaN and rejects, dropping the edit. Map each empty `system.*` NumberField to
+   * null (when nullable) or its initial/0 so the clear persists.
+   * @param {SubmitEvent} event
+   * @param {HTMLFormElement} form
+   * @param {FormDataExtended} formData
+   * @returns {object}
+   */
+  _prepareSubmitData(event, form, formData) {
+    const obj = formData.object;
+    const schema = this.document.system.schema;
+    for (const key of Object.keys(obj)) {
+      if (!key.startsWith("system.")) continue;
+      const val = obj[key];
+      if (typeof val !== "string") continue;
+      const field = schema.getField(key.slice(7));
+      if (!(field instanceof foundry.data.fields.NumberField)) continue;
+      if (val.trim() === "") {
+        obj[key] = field.nullable ? null : (field.initial ?? 0);
+      }
+    }
+    return super._prepareSubmitData(event, form, formData);
+  }
+
   async _prepareContext(options) {
     const context = {
       item: this.document,

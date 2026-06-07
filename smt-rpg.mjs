@@ -1,6 +1,7 @@
 import { SMT } from "./module/config.mjs";
 import SMTActor from "./module/documents/actor.mjs";
 import SMTItem from "./module/documents/item.mjs";
+import SMTCombat from "./module/documents/combat.mjs";
 import FiendData from "./module/data/fiend-data.mjs";
 import DemonData from "./module/data/demon-data.mjs";
 import HumanData from "./module/data/human-data.mjs";
@@ -65,6 +66,9 @@ Hooks.once("init", () => {
 
   CONFIG.Actor.documentClass = SMTActor;
   CONFIG.Item.documentClass = SMTItem;
+  // SMTCombat adds the rulebook's flat initiative tie-break die-off (p.63) on top
+  // of the standard initiative roll below.
+  CONFIG.Combat.documentClass = SMTCombat;
 
   // Initiative is declared authoritatively in system.json
   // ("1d10x10 + @agilityTotal", p.298). Mirror that one declaration onto
@@ -326,20 +330,28 @@ async function _syncAilmentStatus(actor) {
 }
 
 // ═══════════════════════════════════════════════
-// Defend expiry (p.64)
+// Start-of-turn automation (p.64, p.66-68)
 // ═══════════════════════════════════════════════
-// Defend lasts until the START of the defender's next turn. Clear it when that
-// combatant's turn begins. The hook fires on every client, so the write is
-// funnelled through the responsible client (the active GM if connected, so it
-// succeeds regardless of token ownership; otherwise the actor's lowest-id owner).
-// combat.combatant is the new current combatant after the turn/round change.
+// When a combatant's turn begins:
+//   (a) their Defend stance expires — Defend lasts only until the start of their
+//       next turn (p.64);
+//   (b) their common ailment resolves its start-of-turn effect (p.66-68):
+//       Freeze/Shock auto-recover, Sleep regenerates HP/MP, Panic may force a random
+//       action off the Panic table, and a fully incapacitating ailment posts a
+//       "cannot act" notice. Defend is cleared first so a turn the ailment then skips
+//       does not leave a now-irrelevant stance lingering.
+// The hook fires on every client, so both writes are funnelled through the
+// responsible client (the active GM if connected, so they succeed regardless of
+// token ownership; otherwise the actor's lowest-id owner). combat.combatant is the
+// new current combatant after the turn/round change.
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!("turn" in changed || "round" in changed)) return;
   const actor = combat.combatant?.actor;
   if (!actor) return;
   if (!_isResponsibleClient(actor)) return;
-  const { clearDefend } = await import("./module/helpers/effects.mjs");
+  const { clearDefend, processAilmentTurnStart } = await import("./module/helpers/effects.mjs");
   await clearDefend(actor);
+  await processAilmentTurnStart(actor);
 });
 
 // Encounter end: clear any lingering temporary setup-action stances (Defend and

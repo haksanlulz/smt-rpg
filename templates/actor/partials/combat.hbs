@@ -3,7 +3,7 @@
   <div class="resource-bar hp-bar">
     <label>{{localize "SMT.HP"}}</label>
     <div class="bar-container">
-      <input type="number" name="system.hp.value" value="{{system.hp.value}}" min="0" max="{{system.hp.max}}" />
+      <input type="number" name="system.hp.value" value="{{source.hp.value}}" min="0" max="{{system.hp.max}}" />
       <span class="separator">/</span>
       <span class="max-value">{{system.hp.max}}</span>
     </div>
@@ -12,7 +12,7 @@
   <div class="resource-bar mp-bar">
     <label>{{localize "SMT.MP"}}</label>
     <div class="bar-container">
-      <input type="number" name="system.mp.value" value="{{system.mp.value}}" min="0" max="{{system.mp.max}}" />
+      <input type="number" name="system.mp.value" value="{{source.mp.value}}" min="0" max="{{system.mp.max}}" />
       <span class="separator">/</span>
       <span class="max-value">{{system.mp.max}}</span>
     </div>
@@ -21,7 +21,7 @@
   <div class="resource-bar fate-bar">
     <label>{{localize "SMT.Fate"}}</label>
     <div class="bar-container">
-      <input type="number" name="system.fatePoints.value" value="{{system.fatePoints.value}}" min="0" max="{{system.fatePoints.max}}" />
+      <input type="number" name="system.fatePoints.value" value="{{source.fatePoints.value}}" min="0" max="{{system.fatePoints.max}}" />
       <span class="separator">/</span>
       <span class="max-value">{{system.fatePoints.max}}</span>
     </div>

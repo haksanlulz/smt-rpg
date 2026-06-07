@@ -174,7 +174,16 @@ export default class SMTActor extends Actor {
     } else if (!result.isNull && result.finalDamage > 0) {
       const dmgAmount = SMTActor.#clampHpDelta(result.finalDamage);
       const newHp = Math.max(this.system.hp.value - dmgAmount, 0);
-      await this.update({ "system.hp.value": newHp });
+      const update = { "system.hp.value": newHp };
+      // Wake on damage (p.66): a hit that deals real damage clears Sleep (and any
+      // other CONFIG.SMT.wakeOnDamageAilments). Folded into the same update so the
+      // HP loss and the ailment clear are one document write. Surfaced on the card.
+      if (CONFIG.SMT.wakeOnDamageAilments.includes(this.system.ailment)) {
+        const ailmentLabel = game.i18n.localize(CONFIG.SMT.ailments[this.system.ailment] ?? this.system.ailment);
+        chatData.wokeFrom = game.i18n.format("SMT.Ailment.WokeFrom", { ailment: ailmentLabel });
+        update["system.ailment"] = "none";
+      }
+      await this.update(update);
     }
 
     // Surface the target's resulting HP on the card so the outcome is readable at a
