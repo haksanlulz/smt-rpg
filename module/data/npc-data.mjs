@@ -45,7 +45,7 @@ export default class NPCData extends SMTBaseActorData {
   // Scale current HP/MP when boss trait is toggled to preserve ratio (p.123).
   // v14: _preUpdate(changes, options, user) is async; returning false vetoes.
   async _preUpdate(changed, options, user) {
-    // Honor a veto from the parent pre-update workflow.
+    // Honor a veto from the parent's pre-update hook.
     const result = await super._preUpdate(changed, options, user);
     if (result === false) return false;
 

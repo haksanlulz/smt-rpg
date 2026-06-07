@@ -448,7 +448,7 @@ Hooks.on("deleteCombat", async (combat) => {
 // Combat Tracker payout control (p.46, p.48)
 // ═══════════════════════════════════════════════
 // Inject a GM-only "pay out rewards" button into the Combat Tracker controls so the
-// GM can grant EXP/macca/loot before ending the encounter (the common workflow:
+// GM can grant EXP/macca/loot before ending the encounter (the common case:
 // pay out, review the card, then delete the combat). The render hook fires for the
 // v13/v14 ApplicationV2 CombatTracker; `html` is its rendered HTMLElement. The
 // button is added once per render, only for a GM with an active combat, and calls
