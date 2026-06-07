@@ -351,7 +351,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
 
     const result = await applyConcentrate(actor, action);
     if (result) {
-      await postEffectNotice(actor, game.i18n.format("SMT.Effect.Concentrated", {
+      await postEffectNotice(actor, game.i18n.format("SMT.EffectMsg.Concentrated", {
         action: result.action, amount: result.amount
       }));
     }
@@ -363,7 +363,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const { applyDefend, postEffectNotice } = await import("../helpers/effects.mjs");
     const result = await applyDefend(actor);
     if (result) {
-      await postEffectNotice(actor, game.i18n.format("SMT.Effect.Defended", { amount: result.amount }));
+      await postEffectNotice(actor, game.i18n.format("SMT.EffectMsg.Defended", { amount: result.amount }));
     }
   }
 

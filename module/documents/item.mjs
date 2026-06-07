@@ -236,7 +236,7 @@ export default class SMTItem extends Item {
       let cleared = 0;
       for (const target of targets) cleared += await clearBuffGroup(target, dispelGroup);
       const label = game.i18n.localize(CONFIG.SMT.buffEffectChoices[key]);
-      await postEffectNotice(actor, game.i18n.format("SMT.Effect.Dispelled", { skill: label, count: cleared }));
+      await postEffectNotice(actor, game.i18n.format("SMT.EffectMsg.Dispelled", { skill: label, count: cleared }));
       return;
     }
 
