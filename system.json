@@ -8,6 +8,9 @@
     "minimum": "13",
     "verified": "14"
   },
+  "url": "https://github.com/haksanlulz/smt-rpg",
+  "manifest": "https://raw.githubusercontent.com/haksanlulz/smt-rpg/main/system.json",
+  "download": "https://github.com/haksanlulz/smt-rpg/archive/refs/heads/main.zip",
   "authors": [
     {
       "name": "Abishai James"
