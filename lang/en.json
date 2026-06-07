@@ -314,6 +314,24 @@
   "SMT.Defeated": "Defeated",
   "SMT.ClearCondition": "Click to clear",
 
+  "SMT.Save.Title": "Ailment Save",
+  "SMT.Save.Action": "Save",
+  "SMT.Save.Hint": "Attempt a Vitality save to shake off this ailment (once per turn).",
+  "SMT.Save.Recovered": "Recovered from the ailment!",
+  "SMT.Save.Held": "The ailment holds.",
+  "SMT.Save.AlreadyTried": "Already attempted a save this turn.",
+
+  "SMT.LevelUp.Title": "Level Up",
+  "SMT.LevelUp.Action": "Level Up",
+  "SMT.LevelUp.Hint": "Enough EXP banked — advance to the next level.",
+  "SMT.LevelUp.Prompt": "Advance {name} from level {current} to level {next}?",
+  "SMT.LevelUp.Confirm": "Level Up",
+  "SMT.LevelUp.NotReady": "Not enough EXP to level up yet.",
+  "SMT.LevelUp.StatPoint": "Gain 1 stat point to assign (Demons roll on the Stat Growth table).",
+  "SMT.LevelUp.FullHeal": "HP and MP are fully restored.",
+  "SMT.LevelUp.Recalc": "TNs, resistances, and base power are recalculated for the new level.",
+  "SMT.LevelUp.SkillChance": "You may learn a new skill (every level for some, every 10th level otherwise).",
+
   "SMT.Poison.Drain": "{name} loses {damage} HP to poison.",
 
   "SMT.Ailment.CannotAct": "{name} is afflicted with {ailment} and cannot act this turn.",

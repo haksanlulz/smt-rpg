@@ -21,8 +21,10 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       shoot: SMTBaseActorSheet.#onShoot,
       concentrate: SMTBaseActorSheet.#onConcentrate,
       defend: SMTBaseActorSheet.#onDefend,
+      levelUp: SMTBaseActorSheet.#onLevelUp,
       removeEffect: SMTBaseActorSheet.#onRemoveEffect,
       clearAilment: SMTBaseActorSheet.#onClearAilment,
+      saveAilment: SMTBaseActorSheet.#onSaveAilment,
       clearDeath: SMTBaseActorSheet.#onClearDeath,
       clearCurse: SMTBaseActorSheet.#onClearCurse,
       useSkill: SMTBaseActorSheet.#onUseSkill,
@@ -136,7 +138,12 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const sys = this.document.system;
     const ailmentKey = sys.ailment ?? "none";
     const ailment = ailmentKey !== "none"
-      ? { key: ailmentKey, label: SMT.ailments[ailmentKey] ?? ailmentKey }
+      ? {
+          key: ailmentKey,
+          label: SMT.ailments[ailmentKey] ?? ailmentKey,
+          // Save-eligible ailments (p.69) get a one-click save control on the pip.
+          canSave: SMT.ailmentSave.eligible.includes(ailmentKey)
+        }
       : null;
     const marks = this._prepareEffectChips().map(c => ({ img: c.img, name: c.name }));
     const death = !!sys.deathAilment;
@@ -360,6 +367,39 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
+  // Level up (p.48): confirm via DialogV2, then route through actor.levelUp (gated,
+  // re-checks readiness, resets EXP + full-heals). Stat/skill choices stay the player's (p.49).
+  static async #onLevelUp() {
+    const actor = this.document;
+    const { canModifyEffects } = await import("../helpers/effects.mjs");
+    if (!canModifyEffects(actor)) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+      return;
+    }
+    if (!actor.system.canLevelUp) {
+      ui.notifications.info(game.i18n.localize("SMT.LevelUp.NotReady"));
+      return;
+    }
+
+    const current = actor.system.level;
+    const next = current + 1;
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize("SMT.LevelUp.Title") },
+      content: `<p>${game.i18n.format("SMT.LevelUp.Prompt", { name: actor.name, current, next })}</p>`
+        + `<ul class="smt-levelup-effects">`
+        + `<li>${game.i18n.localize("SMT.LevelUp.StatPoint")}</li>`
+        + `<li>${game.i18n.localize("SMT.LevelUp.FullHeal")}</li>`
+        + `<li>${game.i18n.localize("SMT.LevelUp.Recalc")}</li>`
+        + `<li>${game.i18n.localize("SMT.LevelUp.SkillChance")}</li>`
+        + `</ul>`,
+      yes: { label: game.i18n.localize("SMT.LevelUp.Confirm") },
+      no: { label: game.i18n.localize("SMT.Cancel") }
+    }).catch(() => false);
+    if (!confirmed) return;
+
+    await actor.levelUp();
+  }
+
   static async #onRemoveEffect(event, target) {
     const { canModifyEffects } = await import("../helpers/effects.mjs");
     const actor = this.document;
@@ -381,6 +421,13 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       return;
     }
     if (actor.system.ailment !== "none") await actor.update({ "system.ailment": "none" });
+  }
+
+  // Attempt the start-of-turn save against the common ailment (p.69). Delegates to
+  // effects.attemptAilmentSave (gated, once-per-turn lock, shared percentile ladder).
+  static async #onSaveAilment() {
+    const { attemptAilmentSave } = await import("../helpers/effects.mjs");
+    await attemptAilmentSave(this.document);
   }
 
   // Clear the Death flag (p.67).

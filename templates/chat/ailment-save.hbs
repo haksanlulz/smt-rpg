@@ -1,0 +1,21 @@
+{{!-- Start-of-turn ailment save (p.69): a Vitality check against the held ailment.
+  On a success the ailment is removed; on a failure it persists. The roll/TN and the
+  shared check outcome are shown so the result is auditable. --}}
+<div class="smt-roll ailment-save {{#if recovered}}recovered{{else}}held{{/if}}">
+  <h3>{{name}} — {{localize "SMT.Save.Title"}}</h3>
+  <div class="roll-breakdown">
+    <span>{{ailmentLabel}} — {{statLabel}}</span>
+  </div>
+  <div class="roll-result">
+    <span class="roll-value">{{roll}}</span>
+    <span class="roll-tn">/ {{tn}}%</span>
+  </div>
+  <div class="roll-outcome {{cssClass}}">{{outcomeText}}</div>
+  <div class="save-result {{#if recovered}}success{{else}}failure{{/if}}">
+    {{#if recovered}}
+      {{localize "SMT.Save.Recovered"}}
+    {{else}}
+      {{localize "SMT.Save.Held"}}
+    {{/if}}
+  </div>
+</div>

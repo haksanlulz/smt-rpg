@@ -1,5 +1,6 @@
 import { makeAffinitySchema, makeAilmentAffinitySchema, STATS } from "./fields.mjs";
 import { passiveMultiplierBonuses, hasMightEffect } from "../helpers/passives.mjs";
+import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
 
@@ -147,8 +148,13 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
 
     // Fate = (luck / 5) + 5 (p.36)
     this.fatePoints.max = Math.floor(this.luckTotal / CONFIG.SMT.fate.maxLuckDivisor) + CONFIG.SMT.fate.maxBase;
-    // EXP for next level = level^3 (p.48)
-    this.expNext = Math.floor(Math.pow(lvl + 1, 3) * this.expMultiplier);
+    // EXP for next level = (level+1)^3 x expMultiplier (p.48), via the shared curve.
+    this.expNext = expThresholdForLevel(lvl + 1, this.expMultiplier);
+  }
+
+  // True once banked EXP meets the next level's threshold and the cap isn't reached (p.48).
+  get canLevelUp() {
+    return canLevelUp(this.exp, this.level, this.expMultiplier);
   }
 
   // Fold buff/debuff accumulators into combat stats (p.96). Powers/resists floor at 0.
