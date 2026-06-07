@@ -390,3 +390,69 @@ SMT.panic = {
 // rolls this die once per combatant and sorts ties by it. A plain d-size so the
 // tie-break never explodes (a clean highest-roll-wins, p.63).
 SMT.initiativeTieBreakDie = 10;
+
+// ═══════════════════════════════════════════════
+// Demon fusion (p.79-82)
+// ═══════════════════════════════════════════════
+// Config-authoritative source for the fusion maths the engine in
+// helpers/fusion.mjs reads. The rulebook is the SSoT for every number here; the
+// engine never hard-codes a fusion constant.
+SMT.fusion = {
+  // Result level of a normal fusion: (L1 + L2) / 2 + 2, then the new clan's demon
+  // at the level closest to that and no less than (p.80). The floor + the +2 are
+  // the two constants; the "round up to an available demon" step is a GM/data
+  // concern the engine surfaces but does not invent demons for.
+  levelDivisor: 2,
+  levelBonus: 2,
+
+  // Maximum skills a fused demon may hold, INCLUDING its initial skills (p.80):
+  // "it may not learn more than eight skills in total". Reuses the same ceiling as
+  // the per-actor skill cap so the two never drift.
+  skillCap: 8,
+
+  // Inherited-skill count by the COMBINED skill total of the ingredient demons
+  // before fusion (p.80 "Number of Inherited Skills" table). Each entry is an
+  // inclusive [min, max] band over that combined total mapping to a skill count;
+  // 24+ caps at 7. The engine picks the band the combined total falls into.
+  inheritBands: [
+    { min: 1, max: 3, count: 1 },
+    { min: 4, max: 7, count: 2 },
+    { min: 8, max: 11, count: 3 },
+    { min: 12, max: 15, count: 4 },
+    { min: 16, max: 19, count: 5 },
+    { min: 20, max: 23, count: 6 },
+    { min: 24, max: Infinity, count: 7 }
+  ],
+
+  // Same-clan fusion yields a specific Element clan demon, regardless of level
+  // (p.81 "Element Born From Fusion"). Keyed by ingredient clan -> Element clan.
+  // The four Elements and their source clans are listed verbatim from the book.
+  elementBorn: {
+    holy: "flaemis", seraph: "flaemis",
+    yoma: "aquans", snake: "aquans", femme: "aquans",
+    fairy: "aeros", divine: "aeros", beast: "aeros", wilder: "aeros",
+    night: "erthys", fallen: "erthys", jirae: "erthys", brute: "erthys"
+  },
+
+  // The Element clans produced above (labels for the dialog / cards). These are
+  // fusion-only result clans and are intentionally NOT in SMT.demonClans, which is
+  // the playable-clan dropdown for demon actors.
+  elementClans: {
+    flaemis: "SMT.Fusion.ElementFlaemis",
+    aquans: "SMT.Fusion.ElementAquans",
+    aeros: "SMT.Fusion.ElementAeros",
+    erthys: "SMT.Fusion.ElementErthys"
+  },
+
+  // Exception demons that cannot be produced by normal fusion (p.80). When a
+  // computed result lands on one of these, the GM bumps a rank instead. Stored so
+  // the engine can flag the result rather than silently emit an illegal demon.
+  // Lower-cased for case-insensitive name matching against the chosen result.
+  exceptionDemons: [
+    "amaterasu", "shiva", "wu kong", "skadi", "parvati", "makami", "senri",
+    "ifrit", "karasu tengu", "high pixie", "naga raja", "ongyo-ki", "qing long",
+    "genbu", "samael", "girimekhala", "aciel", "lilith", "queen mab", "michael",
+    "gabriel", "raphael", "uriel", "ganesha", "valkyrie", "arahabaki",
+    "kurama tengu", "hanuman", "cu chulainn", "garuda", "gurulu", "albion"
+  ]
+};

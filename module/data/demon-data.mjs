@@ -1,6 +1,6 @@
 import SMTBaseActorData from "./base-actor.mjs";
 
-const { StringField, SchemaField, NumberField } = foundry.data.fields;
+const { StringField, BooleanField, SchemaField, NumberField } = foundry.data.fields;
 
 export default class DemonData extends SMTBaseActorData {
 
@@ -19,7 +19,17 @@ export default class DemonData extends SMTBaseActorData {
         demonName: new StringField({ initial: "" }),
         level: new NumberField({ integer: true, min: 0, initial: 0 }),
         partyLevel: new NumberField({ integer: true, min: 0, initial: 0 })
-      })
+      }),
+      // Boss flag, reward drops, and negotiability mirror NPCData so reward and
+      // negotiation logic can read the same fields on demon- and npc-type actors.
+      // Inert here by design (no boss HP/MP scaling applied to demons).
+      isBoss: new BooleanField({ initial: false }),
+      drops: new SchemaField({
+        normalItems: new StringField({ initial: "" }),
+        macca: new NumberField({ integer: true, min: 0, initial: 0 }),
+        exp: new NumberField({ integer: true, min: 0, initial: 0 })
+      }),
+      negotiable: new BooleanField({ initial: true })
     };
   }
 

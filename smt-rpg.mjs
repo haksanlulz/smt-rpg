@@ -54,6 +54,20 @@ Hooks.once("init", () => {
     }
   });
 
+  // Demon fusion (p.79): a GM keybinding opens the fusion dialog. Dynamic import
+  // keeps fusion.mjs out of the init bundle (mirrors the combat-helper pattern) and
+  // the onDown handler is gated GM-side inside openFusionDialog.
+  game.keybindings.register("smt-rpg", "openFusion", {
+    name: "SMT.Keybind.OpenFusion",
+    hint: "SMT.Keybind.OpenFusionHint",
+    editable: [{ key: "KeyF", modifiers: ["Control", "Shift"] }],
+    restricted: true, // GM only
+    onDown: () => {
+      import("./module/helpers/fusion.mjs").then(m => m.openFusionDialog());
+      return true;
+    }
+  });
+
   CONFIG.Actor.dataModels.fiend = FiendData;
   CONFIG.Actor.dataModels.demon = DemonData;
   CONFIG.Actor.dataModels.human = HumanData;
@@ -124,7 +138,8 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/chat/attack-pending.hbs",
     "systems/smt-rpg/templates/chat/dodge-result.hbs",
     "systems/smt-rpg/templates/chat/ailment-result.hbs",
-    "systems/smt-rpg/templates/chat/item-use.hbs"
+    "systems/smt-rpg/templates/chat/item-use.hbs",
+    "systems/smt-rpg/templates/chat/fusion-result.hbs"
   ]);
 
   console.log("smt-rpg | System initialized");

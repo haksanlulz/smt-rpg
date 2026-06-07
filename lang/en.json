@@ -313,5 +313,33 @@
   "SMT.Panic.Sleep": "falls asleep, and is inflicted with Sleep.",
   "SMT.Panic.Dance": "dances, twirls, and takes other strange actions.",
 
-  "SMT.Warnings.Muted": "Muted — you cannot use spells or magical attack skills."
+  "SMT.Warnings.Muted": "Muted — you cannot use spells or magical attack skills.",
+  "SMT.Warnings.FusionGM": "Only the GM may perform demon fusion.",
+  "SMT.Warnings.FusionTwoDemons": "Select two different demons to fuse.",
+  "SMT.Warnings.FusionDemonsOnly": "Only demon actors can be fused.",
+  "SMT.Warnings.FusionNeedDemons": "Fusion needs at least two demon actors in the world.",
+
+  "SMT.Cancel": "Cancel",
+
+  "SMT.Keybind.OpenFusion": "Open Demon Fusion",
+  "SMT.Keybind.OpenFusionHint": "Open the demon fusion dialog (GM only).",
+
+  "SMT.Fusion.Title": "Demon Fusion",
+  "SMT.Fusion.Fuse": "Fuse",
+  "SMT.Fusion.DefaultName": "Fused Demon",
+  "SMT.Fusion.DialogHint": "Fuse two demons into one. The result's level, Element clan, and inherited-skill count are computed from the ingredients (p.79).",
+  "SMT.Fusion.IngredientA": "First Demon",
+  "SMT.Fusion.IngredientB": "Second Demon",
+  "SMT.Fusion.ResultName": "Result Name",
+  "SMT.Fusion.ResultClan": "Result Clan",
+  "SMT.Fusion.AutoClan": "Auto (same-clan Element / first demon's clan)",
+  "SMT.Fusion.Preview": "Result: LV {level} {clan} — may inherit {allowed} of {combined} skills.",
+  "SMT.Fusion.SameClanNote": "Same-clan fusion: born as an Element demon (p.81).",
+  "SMT.Fusion.Inherited": "Inherited skills",
+  "SMT.Fusion.NoInherited": "No skills inherited.",
+  "SMT.Fusion.ExceptionWarning": "Exception demon — cannot be made by normal fusion; bump a rank (p.80).",
+  "SMT.Fusion.ElementFlaemis": "Flaemis (Fire)",
+  "SMT.Fusion.ElementAquans": "Aquans (Ice)",
+  "SMT.Fusion.ElementAeros": "Aeros (Force)",
+  "SMT.Fusion.ElementErthys": "Erthys (Earth)"
 }
