@@ -13,6 +13,7 @@
   "SMT.EXP": "EXP",
   "SMT.Next": "Next",
   "SMT.Macca": "Held Macca",
+  "SMT.MaccaShort": "Macca",
   "SMT.HP": "HP",
   "SMT.MP": "MP",
   "SMT.Fate": "Fate Points",
@@ -211,6 +212,10 @@
   "SMT.Settings.TargetingModeHint": "How 'All Foes' and 'All Allies' skills determine targets. Combat Tracker: only tokens in the active encounter. Scene: all tokens on the scene.",
   "SMT.Settings.TargetingCombat": "Combat Tracker Only",
   "SMT.Settings.TargetingScene": "All Tokens on Scene",
+  "SMT.Settings.MaccaDistribution": "Macca Distribution",
+  "SMT.Settings.MaccaDistributionHint": "How combat-end macca is split among the party. Shared Pool: the foes' total macca divided evenly. Per Character: each character receives the full total. EXP is always granted in full to every participant (p.48).",
+  "SMT.Settings.AutoGrantRewards": "Auto-Grant Combat Rewards",
+  "SMT.Settings.AutoGrantRewardsHint": "Automatically pay out EXP, macca, and loot when an encounter ends. When off, the GM pays out manually with the Combat Tracker button.",
 
   "SMT.ItemHealing": "Healing",
   "SMT.ItemHealHP": "Heal HP",
@@ -380,6 +385,8 @@
   "SMT.Warnings.FusionTwoDemons": "Select two different demons to fuse.",
   "SMT.Warnings.FusionDemonsOnly": "Only demon actors can be fused.",
   "SMT.Warnings.FusionNeedDemons": "Fusion needs at least two demon actors in the world.",
+  "SMT.Warnings.RewardsGM": "Only the GM may pay out combat rewards.",
+  "SMT.Warnings.RewardsNoRecipients": "No party members in this encounter to receive rewards.",
 
   "SMT.Cancel": "Cancel",
 
@@ -403,5 +410,20 @@
   "SMT.Fusion.ElementFlaemis": "Flaemis (Fire)",
   "SMT.Fusion.ElementAquans": "Aquans (Ice)",
   "SMT.Fusion.ElementAeros": "Aeros (Force)",
-  "SMT.Fusion.ElementErthys": "Erthys (Earth)"
+  "SMT.Fusion.ElementErthys": "Erthys (Earth)",
+
+  "SMT.Rewards.Title": "Combat Rewards",
+  "SMT.Rewards.PayOut": "Pay Out Rewards",
+  "SMT.Rewards.PayOutHint": "Grant EXP, macca, and loot from this encounter's defeated foes to the party (GM only).",
+  "SMT.Rewards.Defeated": "Defeated",
+  "SMT.Rewards.Recipients": "Rewarded",
+  "SMT.Rewards.ExpEach": "EXP (each)",
+  "SMT.Rewards.MaccaEach": "Macca (each)",
+  "SMT.Rewards.MaccaSharedNote": "shared from",
+  "SMT.Rewards.MaccaShared": "Shared Pool",
+  "SMT.Rewards.MaccaPerPc": "Per Character",
+  "SMT.Rewards.Loot": "Loot",
+  "SMT.Rewards.LootTo": "Added to",
+  "SMT.Rewards.AlreadyPaid": "This encounter's rewards were already paid out.",
+  "SMT.Rewards.Nothing": "No rewards to grant from this encounter."
 }

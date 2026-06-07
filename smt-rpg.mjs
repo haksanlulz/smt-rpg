@@ -54,6 +54,32 @@ Hooks.once("init", () => {
     }
   });
 
+  // Macca distribution model for combat-end rewards (p.48 leaves the split to the
+  // table). Choices derive from CONFIG.SMT.rewards.maccaDistributionModes so the
+  // setting and the reward engine read one source. EXP is always granted in full
+  // per participant (p.48) and is not configurable.
+  game.settings.register("smt-rpg", "maccaDistribution", {
+    name: "SMT.Settings.MaccaDistribution",
+    hint: "SMT.Settings.MaccaDistributionHint",
+    scope: "world",
+    config: true,
+    type: String,
+    default: SMT.rewards.maccaDistributionDefault,
+    choices: SMT.rewards.maccaDistributionModes
+  });
+
+  // Auto-pay combat rewards when an encounter ends (p.46, p.48). When off, the GM
+  // pays out manually via the Combat Tracker control. World-scoped so the table
+  // shares one policy.
+  game.settings.register("smt-rpg", "autoGrantRewards", {
+    name: "SMT.Settings.AutoGrantRewards",
+    hint: "SMT.Settings.AutoGrantRewardsHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
   // Demon fusion (p.79): a GM keybinding opens the fusion dialog. Dynamic import
   // keeps fusion.mjs out of the init bundle (mirrors the combat-helper pattern) and
   // the onDown handler is gated GM-side inside openFusionDialog.
@@ -140,7 +166,8 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/chat/ailment-result.hbs",
     "systems/smt-rpg/templates/chat/item-use.hbs",
     "systems/smt-rpg/templates/chat/fusion-result.hbs",
-    "systems/smt-rpg/templates/chat/negotiation.hbs"
+    "systems/smt-rpg/templates/chat/negotiation.hbs",
+    "systems/smt-rpg/templates/chat/reward-result.hbs"
   ]);
 
   console.log("smt-rpg | System initialized");
@@ -204,6 +231,19 @@ function _isResponsibleClient(actor) {
     .filter(u => u.active && actor.testUserPermission(u, "OWNER"))
     .sort((a, b) => a.id.localeCompare(b.id))[0];
   return owner?.id === game.user.id;
+}
+
+// Elect EXACTLY ONE GM for a world-wide automated write (no per-actor scope). With
+// several GMs connected, _isResponsibleClient(actor) returns true for all of them;
+// a combat-wide payout must instead run on a single client, so this returns true
+// only for the lowest-id active GM. Used by the encounter-end reward auto-payout so
+// two GM clients cannot both pass the persisted rewardsPaid check before either
+// stamps it (a cross-client TOCTOU the per-client in-flight Set cannot close).
+function _isResponsibleGM() {
+  const gm = game.users
+    .filter(u => u.active && u.isGM)
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  return gm?.id === game.user.id;
 }
 
 // ═══════════════════════════════════════════════
@@ -371,13 +411,27 @@ Hooks.on("updateCombat", async (combat, changed) => {
   await processAilmentTurnStart(actor);
 });
 
-// Encounter end: clear any lingering temporary setup-action stances (Defend and
-// Concentrate, p.64) from every combatant so they never bleed across encounters.
-// Buff/debuff effects persist by design (no rules basis for auto-clearing them
-// here) and are managed via Dekaja/Dekunda or manual removal. Run as the active
-// GM so the batch clears every combatant regardless of token ownership.
+// Encounter end: pay out combat rewards (p.46, p.48), then clear any lingering
+// temporary setup-action stances (Defend and Concentrate, p.64) from every
+// combatant so they never bleed across encounters. Rewards run FIRST, while the
+// combatants' end-state HP is still readable, and only when the auto-grant setting
+// is on (otherwise the GM pays out manually via the tracker control). The payout is
+// idempotent (persisted flag + in-flight Set), so a manual payout before ending the
+// encounter makes this a no-op. Buff/debuff effects persist by design (no rules
+// basis for auto-clearing them here) and are managed via Dekaja/Dekunda or manual
+// removal. Run as the active GM so the batch covers every combatant regardless of
+// token ownership.
 Hooks.on("deleteCombat", async (combat) => {
   if (!game.user.isGM) return;
+
+  // Auto-payout runs on a single elected GM (lowest-id active GM) so multiple GM
+  // clients cannot race the persisted rewardsPaid flag. The persisted flag + the
+  // in-flight Set inside grantCombatRewards still guard the manual-button path.
+  if (_isResponsibleGM() && game.settings.get("smt-rpg", "autoGrantRewards")) {
+    const { grantCombatRewards } = await import("./module/helpers/rewards.mjs");
+    await grantCombatRewards(combat);
+  }
+
   const { clearDefend, dropConcentrateOnAilment } = await import("./module/helpers/effects.mjs");
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
@@ -388,6 +442,59 @@ Hooks.on("deleteCombat", async (combat) => {
     // same one wanted at encounter end.
     await dropConcentrateOnAilment(actor);
   }
+});
+
+// ═══════════════════════════════════════════════
+// Combat Tracker payout control (p.46, p.48)
+// ═══════════════════════════════════════════════
+// Inject a GM-only "pay out rewards" button into the Combat Tracker controls so the
+// GM can grant EXP/macca/loot before ending the encounter (the common workflow:
+// pay out, review the card, then delete the combat). The render hook fires for the
+// v13/v14 ApplicationV2 CombatTracker; `html` is its rendered HTMLElement. The
+// button is added once per render, only for a GM with an active combat, and calls
+// the same idempotent grantCombatRewards the auto-payout uses — so clicking it and
+// then ending the encounter cannot double-pay. A header-control hook is not used:
+// hook-added ApplicationV2 header controls cannot run a custom click handler
+// (their action must be one the application already defines), so a native control
+// in the tracker's own controls bar is the portable, self-contained choice.
+Hooks.on("renderCombatTracker", (app, html, data) => {
+  if (!game.user.isGM) return;
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  if (!root?.querySelector) return;
+
+  const combat = data?.combat ?? app?.viewed ?? game.combat;
+  if (!combat) return;
+
+  // Re-render safety: never add a second button.
+  if (root.querySelector("[data-action='smt-grant-rewards']")) return;
+
+  // Find the tracker's controls bar across v13/v14 markup; fall back to the root so
+  // the control is always reachable even if the container class shifts.
+  const controls = root.querySelector(".combat-controls")
+    ?? root.querySelector("#combat-controls")
+    ?? root.querySelector("nav.combat-controls")
+    ?? root.querySelector(".combat-tracker-controls")
+    ?? root;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.action = "smt-grant-rewards";
+  button.classList.add("smt-grant-rewards");
+  button.innerHTML = `<i class="fas fa-coins"></i> ${game.i18n.localize("SMT.Rewards.PayOut")}`;
+  button.title = game.i18n.localize("SMT.Rewards.PayOutHint");
+  // Disable once the encounter has already paid out so the state reads clearly.
+  if (combat.getFlag("smt-rpg", "rewardsPaid")) {
+    button.disabled = true;
+    button.classList.add("paid");
+  }
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    const { grantCombatRewards } = await import("./module/helpers/rewards.mjs");
+    await grantCombatRewards(combat, { notifyEmpty: true });
+  });
+
+  controls.appendChild(button);
 });
 
 async function _bindAttackButtons(message, html) {

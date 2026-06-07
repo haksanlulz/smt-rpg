@@ -399,6 +399,53 @@ SMT.panic = {
 SMT.initiativeTieBreakDie = 10;
 
 // ═══════════════════════════════════════════════
+// Combat-end rewards (p.46, p.48)
+// ═══════════════════════════════════════════════
+// Config-authoritative source for the reward maths the engine in
+// helpers/rewards.mjs reads. EXP is granted IN FULL to every participant, never
+// divided (p.48 "All characters who participated in the combat ... gain this
+// EXP"). Macca distribution is NOT specified by the book, so the model is a world
+// setting (see maccaDistributionDefault) the engine honours rather than a number
+// invented here.
+SMT.rewards = {
+  // p.48 "Notice": when a defeated demon is 10 or more levels above the party
+  // level, the EXP it grants doubles once for each full 10 levels it is above the
+  // party level. threshold is the gap at which the bonus begins; step is the gap
+  // per doubling; factor is the multiplier applied per step. The multiplier is
+  // therefore factor ^ floor(gap / step) once gap >= threshold (and 1 below it).
+  expBonus: {
+    threshold: 10,
+    step: 10,
+    factor: 2
+  },
+
+  // Macca distribution model when an encounter pays out (p.48 leaves this to the
+  // table). "shared" splits the harvested macca total evenly across the eligible
+  // PCs (remainder dropped, never minted); "per-pc" grants the full harvested
+  // total to EACH eligible PC. Mirrored by the maccaDistribution world setting,
+  // whose choices derive from these keys; this constant is the registration
+  // default and the fallback when the setting is unreadable.
+  maccaDistributionDefault: "shared",
+  maccaDistributionModes: {
+    shared: "SMT.Rewards.MaccaShared",
+    "per-pc": "SMT.Rewards.MaccaPerPc"
+  },
+
+  // Token dispositions whose downed actors are NOT harvested as defeated foes when
+  // a friendly-led party ends an encounter (p.48 rewards come from defeated
+  // DEMONS/foes, not from a party member who happened to fall). A friendly-
+  // disposition combatant that ends at 0 HP is a casualty, not loot — it is
+  // excluded from the foe harvest. Read as a Set of foundry.CONST.TOKEN_DISPOSITIONS
+  // values via rewards.harvestFoes.
+  excludedFoeDispositions: ["FRIENDLY"],
+
+  // Upper clamp on any single EXP/macca value the reward engine writes, mirroring
+  // the chat/HP delta guards (MAX_FLAG_VALUE / MAX_HP_DELTA). Guards against an
+  // author-forged drops field driving an absurd EXP/macca grant.
+  maxValue: 1_000_000
+};
+
+// ═══════════════════════════════════════════════
 // Demon fusion (p.79-82)
 // ═══════════════════════════════════════════════
 // Config-authoritative source for the fusion maths the engine in
