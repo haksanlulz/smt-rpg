@@ -1,0 +1,28 @@
+<div class="smt-roll negotiation {{cssClass}}">
+  <h3>{{talkerName}} &rarr; {{targetName}}</h3>
+  <div class="negotiation-skill">{{skillName}}{{#if impressMatch}} &middot; {{localize "SMT.Talk.ImpressMatch"}}{{/if}}</div>
+  <div class="roll-result">
+    <span class="roll-value">{{roll}}</span>
+    <span class="roll-tn">/ {{tn}}%</span>
+  </div>
+  <div class="roll-outcome {{cssClass}}">{{outcome}}</div>
+
+  <div class="negotiation-hint">{{localize "SMT.Talk.GMHint"}}</div>
+  <div class="negotiation-buttons">
+    <div class="negotiation-demands">
+      <span class="negotiation-group-label">{{localize "SMT.Talk.DemandLabel"}}</span>
+      <button type="button" data-action="negotiation-demand" data-kind="none">{{localize "SMT.Talk.Demand.None"}}</button>
+      <button type="button" data-action="negotiation-demand" data-kind="macca">{{localize "SMT.Talk.Demand.Macca"}}</button>
+      <button type="button" data-action="negotiation-demand" data-kind="hp">{{localize "SMT.Talk.Demand.HP"}}</button>
+      <button type="button" data-action="negotiation-demand" data-kind="item">{{localize "SMT.Talk.Demand.Item"}}</button>
+    </div>
+    <div class="negotiation-outcomes">
+      <span class="negotiation-group-label">{{localize "SMT.Talk.OutcomeGroup"}}</span>
+      <button type="button" data-action="negotiation-outcome" data-outcome="deal">{{localize "SMT.Talk.OutcomeLabel.deal"}}</button>
+      <button type="button" data-action="negotiation-outcome" data-outcome="gift">{{localize "SMT.Talk.OutcomeLabel.gift"}}</button>
+      <button type="button" data-action="negotiation-outcome" data-outcome="leave">{{localize "SMT.Talk.OutcomeLabel.leave"}}</button>
+      <button type="button" data-action="negotiation-outcome" data-outcome="angry">{{localize "SMT.Talk.OutcomeLabel.angry"}}</button>
+      <button type="button" data-action="negotiation-outcome" data-outcome="break">{{localize "SMT.Talk.OutcomeLabel.break"}}</button>
+    </div>
+  </div>
+</div>

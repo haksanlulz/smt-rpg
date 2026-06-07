@@ -229,9 +229,16 @@ SMT.ailmentRate = {
 // Derived stat modifiers (base-actor.mjs prepareDerivedData)
 SMT.tnPerStat = 5;     // TN = (stat x tnPerStat) + level
 SMT.dodgeBonus = 10;   // dodgeTN = agilityTN + dodgeBonus
-SMT.negotiation = {    // negotiationTN = (luck x multiplier) + bonus
+SMT.negotiation = {    // negotiationTN = (luck x multiplier) + bonus (p.35)
   multiplier: 2,
-  bonus: 20
+  bonus: 20,
+  // Every talk skill (approach or support) grants +talkBonus% to the Negotiation
+  // check (p.75 "they gain +20% to this check"; the Talk Skills "Mod" column, p.112).
+  talkBonus: 20,
+  // Matching the skill's impress type widens the check's critical range to TN /
+  // impressCritDivisor (p.76 "one-fifth of the TN"). Reuses the Might widening path
+  // (CONFIG.SMT.check.mightCritDivisor) so the two crit-widen rules share one number.
+  impressCritDivisor: 5
 };
 
 // Boss trait: double HP and MP (p.123)
@@ -455,4 +462,97 @@ SMT.fusion = {
     "gabriel", "raphael", "uriel", "ganesha", "valkyrie", "arahabaki",
     "kurama tengu", "hanuman", "cu chulainn", "garuda", "gurulu", "albion"
   ]
+};
+
+// ═══════════════════════════════════════════════
+// Negotiation / demon-talk (p.72-78, p.112)
+// ═══════════════════════════════════════════════
+// Config-authoritative source for the talk pillar. The flowchart navigation, the
+// demand-met judgement, and the demon's Reason are GM concerns the rulebook hands
+// to the GM (p.74-75); the engine never invents a probability for them. What IS
+// rulebook-exact — the Negotiation check (the +20% talk bonus and the impress-type
+// crit widening above), the demand formulas, and the four 1d10 tables — lives here
+// and is the only place those numbers are written. helpers/negotiation.mjs reads
+// CONFIG.SMT.talk and never hard-codes a constant.
+SMT.talk = {
+  // The two talk-skill types (p.72). These ARE the skillType keys (CONFIG.SMT.skillTypes
+  // "talk-approach"/"talk-support"), restated here so negotiation logic can branch on
+  // them without re-deriving the prefix: an approach skill begins a negotiation, a
+  // support skill interjects into one already underway.
+  approachType: "talk-approach",
+  supportType: "talk-support",
+
+  // Conversation stoppers (p.73): situations where the talking action is unavailable.
+  // The two the engine can read off actor state are encoded here so the gate stays
+  // config-authoritative; the rest ("Kagutsuchi is Full", "8+ demon cards", "when the
+  // GM says so") are GM calls surfaced as an override, not invented by the engine.
+  //  - bossBlocks: a Boss demon cannot be talked to (reads isBoss, p.73).
+  //  - cannotActAilments: a target made unable to act by one of these ailments cannot
+  //    be talked to (Dead/Stoned/Shocked/Frozen/Restrained/Sleeping/Panicked, p.73).
+  //    Death is the special deathAilment flag; the rest are common-slot ailments.
+  bossBlocks: true,
+  cannotActAilments: ["stone", "shock", "freeze", "restrain", "sleep", "panic"],
+
+  // Demon demands (p.75). Each demand's offering is rulebook-exact:
+  //  - none: the demon asks for nothing.
+  //  - macca: (maccaPerLevel x demon level) + (1d10 x maccaDieMultiplier).
+  //  - hp:    hpPercent% of the DEMON's own max HP (the cost the talker pays, p.76).
+  //  - item:  roll 1d10 on the Item Demand Table for the demanded item.
+  // The GM picks which demand a flowchart space shows; the engine only rolls the
+  // amount once a demand is chosen.
+  demands: ["none", "macca", "hp", "item"],
+  demand: {
+    maccaPerLevel: 10,       // macca = (10 x level) + (1d10 x 10), p.75
+    maccaDie: "1d10",
+    maccaDieMultiplier: 10,
+    hpPercent: 10            // HP demand = 10% of the demon's own max HP, p.76
+  },
+
+  // Item Demand Table (1d10, p.76): the item a demon demands. Inclusive [min,max]
+  // bands over a 1d10; the 0 face (read as 10) is the GM's choice and is surfaced
+  // as such rather than auto-resolved to a specific item.
+  itemDemandTable: [
+    { min: 1, max: 4, label: "SMT.Talk.Item.LifeStone" },
+    { min: 5, max: 7, label: "SMT.Talk.Item.ChakraDrop" },
+    { min: 8, max: 8, label: "SMT.Talk.Item.RevivalBead" },
+    { min: 9, max: 9, label: "SMT.Talk.Item.Bead" },
+    { min: 10, max: 10, label: "SMT.Talk.Item.GMChoice" }
+  ],
+
+  // Gift Table (1d10, p.73): rolled on a Deal reached via a no-demand ("Nothing")
+  // space, or when talking to an already-recruited demon. Each band is an inclusive
+  // [min,max] over a 1d10 mapping to a gift kind + localized line. `gem` chains into
+  // the Random Gem Table; `hp` heals the talker; macca/item award the post-combat
+  // drop equivalents — all GM-narrated except the dice the engine rolls.
+  giftTable: [
+    { min: 1, max: 3, kind: "cheer", label: "SMT.Talk.Gift.Cheer" },
+    { min: 4, max: 5, kind: "hp", label: "SMT.Talk.Gift.HP" },
+    { min: 6, max: 7, kind: "macca", label: "SMT.Talk.Gift.Macca" },
+    { min: 8, max: 9, kind: "item", label: "SMT.Talk.Gift.Item" },
+    { min: 10, max: 10, kind: "gem", label: "SMT.Talk.Gift.Gem" }
+  ],
+
+  // Random Gem Table (1d10, p.73): the gem granted by a `gem` Gift result (and by the
+  // Stone Hunt 5-7 band). Faces 1-9 map to a named gem; the 0 face is Aquamarine.
+  gemTable: [
+    { min: 1, max: 1, label: "SMT.Talk.Gem.Sapphire" },
+    { min: 2, max: 2, label: "SMT.Talk.Gem.Ruby" },
+    { min: 3, max: 3, label: "SMT.Talk.Gem.Opal" },
+    { min: 4, max: 4, label: "SMT.Talk.Gem.Amethyst" },
+    { min: 5, max: 5, label: "SMT.Talk.Gem.Agate" },
+    { min: 6, max: 6, label: "SMT.Talk.Gem.Turquoise" },
+    { min: 7, max: 7, label: "SMT.Talk.Gem.Garnet" },
+    { min: 8, max: 8, label: "SMT.Talk.Gem.Onyx" },
+    { min: 9, max: 9, label: "SMT.Talk.Gem.Coral" },
+    { min: 10, max: 10, label: "SMT.Talk.Gem.Aquamarine" }
+  ],
+
+  // Terminal negotiation outcomes (p.75). The GM moves the talk to one of these on
+  // the flowchart; each is a button the engine resolves with its rulebook-exact dice:
+  //  - deal:  the demon joins / fulfils the request (recruit a demon -> demon card).
+  //  - gift:  roll once on the Gift Table, then the demon leaves.
+  //  - leave: the demon simply leaves.
+  //  - angry: the demon is angered and cannot be talked to until it acts again.
+  //  - break: the talk breaks down (the Break field of the current space).
+  outcomes: ["deal", "gift", "leave", "angry", "break"]
 };

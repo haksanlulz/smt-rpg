@@ -27,6 +27,9 @@ const {
   computeFusionLevel, inheritedSkillCount, elementClanFor,
   isExceptionDemon, selectInheritedSkills
 } = await import("../module/helpers/fusion.mjs");
+const {
+  lookupBand, maccaDemand, hpDemand, talkCheckBonus, negotiationBlockReason
+} = await import("../module/helpers/negotiation.mjs");
 
 // --- Tiny assertion harness ---
 let passed = 0;
@@ -134,6 +137,77 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(selectInheritedSkills(many, { count: 9, initialCount: cap }).length, 0, "no room when already at the cap");
   // An initial skill name is not re-added.
   eq(selectInheritedSkills([{ name: "Agi" }, { name: "Bufu" }], { count: 5, initialNames: ["Agi"] }).map(s => s.name), ["Bufu"], "skips a skill already among initial skills");
+}
+
+// ═══════════════════════════════════════════════
+// Negotiation / demon-talk (p.72-78, p.112)
+// ═══════════════════════════════════════════════
+{
+  // --- lookupBand: inclusive [min,max] band tables, with the 0/10 face handled. ---
+  // Gift Table (p.73): 1-3 cheer, 4-5 hp, 6-7 macca, 8-9 item, 10/0 gem.
+  eq(lookupBand(SMT.talk.giftTable, 1).kind, "cheer", "gift roll 1 -> cheer");
+  eq(lookupBand(SMT.talk.giftTable, 3).kind, "cheer", "gift roll 3 -> cheer (band upper bound)");
+  eq(lookupBand(SMT.talk.giftTable, 4).kind, "hp", "gift roll 4 -> HP recovery");
+  eq(lookupBand(SMT.talk.giftTable, 7).kind, "macca", "gift roll 7 -> macca");
+  eq(lookupBand(SMT.talk.giftTable, 9).kind, "item", "gift roll 9 -> item");
+  eq(lookupBand(SMT.talk.giftTable, 10).kind, "gem", "gift roll 10 -> gem");
+  eq(lookupBand(SMT.talk.giftTable, 0).kind, "gem", "gift roll 0 reads as 10 -> gem");
+  // Item Demand Table (p.76): 1-4 Life Stone, 5-7 Chakra Drop, 8 Revival Bead, 9 Bead, 0 GM.
+  eq(lookupBand(SMT.talk.itemDemandTable, 1).label, "SMT.Talk.Item.LifeStone", "item demand 1 -> Life Stone");
+  eq(lookupBand(SMT.talk.itemDemandTable, 5).label, "SMT.Talk.Item.ChakraDrop", "item demand 5 -> Chakra Drop");
+  eq(lookupBand(SMT.talk.itemDemandTable, 8).label, "SMT.Talk.Item.RevivalBead", "item demand 8 -> Revival Bead");
+  eq(lookupBand(SMT.talk.itemDemandTable, 9).label, "SMT.Talk.Item.Bead", "item demand 9 -> Bead");
+  eq(lookupBand(SMT.talk.itemDemandTable, 0).label, "SMT.Talk.Item.GMChoice", "item demand 0 -> GM choice");
+  // Random Gem Table (p.73): faces map 1:1 to a gem; the 0 face is Aquamarine.
+  eq(lookupBand(SMT.talk.gemTable, 1).label, "SMT.Talk.Gem.Sapphire", "gem 1 -> Sapphire");
+  eq(lookupBand(SMT.talk.gemTable, 9).label, "SMT.Talk.Gem.Coral", "gem 9 -> Coral");
+  eq(lookupBand(SMT.talk.gemTable, 0).label, "SMT.Talk.Gem.Aquamarine", "gem 0 -> Aquamarine");
+  eq(lookupBand([], 5), null, "empty table returns null");
+
+  // --- maccaDemand: (10 x level) + (dieRoll x 10), floored at 0 (p.75). ---
+  eq(maccaDemand(5, 3), 80, "macca demand: (10*5)+(3*10) = 80");
+  eq(maccaDemand(20, 10), 300, "macca demand: (10*20)+(10*10) = 300");
+  eq(maccaDemand(1, 1), 20, "macca demand: (10*1)+(1*10) = 20");
+  eq(maccaDemand(0, 0), 0, "macca demand floors at 0");
+  eq(maccaDemand(-5, -5), 0, "negative inputs floor at 0");
+
+  // --- hpDemand: 10% of the demon's OWN max HP, floored (p.76). ---
+  eq(hpDemand(100), 10, "HP demand: 10% of 100 = 10");
+  eq(hpDemand(95), 9, "HP demand floors: 10% of 95 = 9");
+  eq(hpDemand(0), 0, "HP demand of 0 max HP = 0");
+
+  // --- talkCheckBonus: +20% for any talk skill, 0 otherwise (p.75/112). ---
+  eq(talkCheckBonus(true), 20, "a talk skill grants +20% to the Negotiation check");
+  eq(talkCheckBonus(false), 0, "a non-talk action grants no bonus");
+  eq(talkCheckBonus(true), SMT.negotiation.talkBonus, "the bonus is the config value, not a literal");
+
+  // --- negotiationBlockReason: conversation stoppers off actor state (p.73). ---
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "none", deathAilment: false }),
+    null, "a negotiable, non-boss, able target can be talked to");
+  eq(negotiationBlockReason({ negotiable: false, isBoss: false, ailment: "none" }),
+    "SMT.Talk.Block.NotNegotiable", "a non-negotiable target is blocked");
+  eq(negotiationBlockReason({ negotiable: true, isBoss: true, ailment: "none" }),
+    "SMT.Talk.Block.Boss", "a Boss demon is blocked (reads isBoss)");
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, deathAilment: true, ailment: "none" }),
+    "SMT.Talk.Block.CannotAct", "a Dead target cannot act -> blocked");
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "freeze" }),
+    "SMT.Talk.Block.CannotAct", "a Frozen target cannot act -> blocked");
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "sleep" }),
+    "SMT.Talk.Block.CannotAct", "a Sleeping target cannot act -> blocked");
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "panic" }),
+    "SMT.Talk.Block.CannotAct", "a Panicked target cannot act -> blocked");
+  // A common ailment that does NOT incapacitate (e.g. Poison) does not block talk.
+  eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "poison" }),
+    null, "a Poisoned (but able) target can still be talked to");
+  // Non-negotiable takes precedence over a clear ailment slot; boss over ailment, etc.
+  eq(negotiationBlockReason({ negotiable: false, isBoss: true, ailment: "freeze" }),
+    "SMT.Talk.Block.NotNegotiable", "non-negotiable is reported first");
+  eq(negotiationBlockReason(null), null, "missing system object is treated as no block");
+
+  // The block reason reads isBoss/negotiable, which now exist on BOTH demon and npc
+  // data models — the same plain-object shape the engine passes in either case.
+  eq(negotiationBlockReason({ negotiable: true, isBoss: true }),
+    "SMT.Talk.Block.Boss", "isBoss block works on a minimal (npc-shaped) system object");
 }
 
 // --- Report ---
