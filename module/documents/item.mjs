@@ -50,6 +50,24 @@ export default class SMTItem extends Item {
     return this.type === "skill" && !!e && e !== "none";
   }
 
+  /**
+   * Whether this skill is a talk skill (p.72): an approach or support talk skill.
+   * Approach skills begin a negotiation; support skills interject into one already
+   * underway. Sourced from CONFIG.SMT.talk so the talk-skill set stays
+   * config-authoritative. Read by SMTItem.use to route into the negotiation flow.
+   * @returns {boolean}
+   */
+  get isTalkSkill() {
+    if (this.type !== "skill") return false;
+    return this.system.skillType === CONFIG.SMT.talk.approachType
+      || this.system.skillType === CONFIG.SMT.talk.supportType;
+  }
+
+  /** Whether this is specifically an approach talk skill (begins a negotiation, p.72). */
+  get isApproachSkill() {
+    return this.type === "skill" && this.system.skillType === CONFIG.SMT.talk.approachType;
+  }
+
   // Main skill use flow: pay cost -> check -> power roll -> pending attacks
   async use() {
     const actor = this.parent;
@@ -91,6 +109,16 @@ export default class SMTItem extends Item {
     // pipeline (p.96). They auto-succeed and skip the hit/power rolls entirely.
     if (this.isBuffSkill) {
       await this._castBuff(actor);
+      return;
+    }
+
+    // Talk skills resolve via the negotiation flow (p.72), not the attack pipeline.
+    // An approach skill begins a negotiation with one demon; a support skill is an
+    // interjection into a negotiation already underway. Either way the talk does not
+    // roll a hit/power check itself (the Negotiation check is rolled inside the
+    // negotiation engine, with the +20% talk bonus, p.75).
+    if (this.isTalkSkill) {
+      await this._talk(actor);
       return;
     }
 
@@ -254,6 +282,57 @@ export default class SMTItem extends Item {
       const summary = await applyBuff(target, key, { source: actor });
       await postBuffCard(actor, summary);
     }
+  }
+
+  /**
+   * Resolve a talk skill (p.72). An approach skill begins a negotiation with one
+   * targeted demon: the negotiation engine rolls the rulebook Negotiation check (with
+   * the +20% talk bonus and the impress-type crit widening) and posts the card whose
+   * GM-driven buttons resolve demands, gifts, and the final Deal/Break (p.73-76). A
+   * support skill is an interjection into a negotiation already underway — it has no
+   * standalone target, so it posts a short interjection notice granting its +20% and
+   * leaves the flowchart move to the GM (the support-skill effects — restart, halve a
+   * macca demand, negate a Break — are GM judgement calls on the active negotiation).
+   * Targeting one demon uses the manual target (the book's "1 enemy demon").
+   *
+   * @param {SMTActor} actor - the talking actor.
+   * @returns {Promise<void>}
+   */
+  async _talk(actor) {
+    const { startNegotiation } = await import("../helpers/negotiation.mjs");
+    const { postEffectNotice } = await import("../helpers/effects.mjs");
+
+    if (this.isApproachSkill) {
+      // Approach: negotiate with one demon (the book's "1 enemy demon"). Prefer the
+      // manual target; fall back to a single auto-resolved foe so a one-foe encounter
+      // needs no manual targeting.
+      const { resolveTargets } = await import("../helpers/combat.mjs");
+      const target = game.user.targets.first()?.actor
+        ?? resolveTargets(actor, "All Foes")[0]?.actor
+        ?? null;
+      if (!target) {
+        ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
+        return;
+      }
+      // Impress-type match (p.76) depends on the skill's impress type and the demon's
+      // behavioural patterns — a GM/table call, not schema data — so confirm it once
+      // here. A yes widens the Negotiation check's crit range to one-fifth of the TN.
+      const impressMatch = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize("SMT.Talk.ImpressPrompt") },
+        content: `<p>${game.i18n.format("SMT.Talk.ImpressQuestion", { name: target.name })}</p>`,
+        rejectClose: false,
+        modal: false
+      }).catch(() => false);
+      await startNegotiation({ talker: actor, target, skillName: this.name, impressMatch: !!impressMatch });
+      return;
+    }
+
+    // Support: interjection notice (p.72). The +20% is the talk-skill bonus the GM
+    // applies to the active negotiation's next check; the specific support effect is
+    // resolved on that negotiation's card by the GM.
+    await postEffectNotice(actor, game.i18n.format("SMT.Talk.Interjection", {
+      name: actor.name, skill: this.name
+    }));
   }
 
   /**

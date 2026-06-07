@@ -139,7 +139,8 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/chat/dodge-result.hbs",
     "systems/smt-rpg/templates/chat/ailment-result.hbs",
     "systems/smt-rpg/templates/chat/item-use.hbs",
-    "systems/smt-rpg/templates/chat/fusion-result.hbs"
+    "systems/smt-rpg/templates/chat/fusion-result.hbs",
+    "systems/smt-rpg/templates/chat/negotiation.hbs"
   ]);
 
   console.log("smt-rpg | System initialized");
@@ -186,6 +187,7 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindAttackButtons(message, html);
   _bindFateCheckButtons(message, html);
   _bindFateDamageButtons(message, html);
+  _bindNegotiationButtons(message, html);
 });
 
 // ═══════════════════════════════════════════════
@@ -484,4 +486,62 @@ async function _bindFateDamageButtons(message, html) {
   });
 
   container.append(halveBtn);
+}
+
+/**
+ * Bind the negotiation card's GM-driven controls (p.73-76): the demand-roll buttons
+ * (None/Macca/HP/Item) and the terminal-outcome buttons (Deal/Gift/Leave/Angry/Break).
+ * Mirrors the attack-button protocol: strips the controls once the card is resolved,
+ * gates so only the GM or an owner of the talker/target can drive it (negotiation is a
+ * GM-mediated flow whose writes touch those actors), and resolves via dynamic import
+ * into negotiation.mjs. Demand buttons stay live across clicks (a negotiation makes
+ * several demands before a Deal/Break, p.75); an outcome button spends the card, so
+ * all outcome buttons are disabled on the first outcome click to avoid a race.
+ */
+async function _bindNegotiationButtons(message, html) {
+  const data = message.getFlag("smt-rpg", "negotiationData");
+  if (!data) return;
+  if (data.resolved) {
+    html.querySelector(".negotiation-buttons")?.remove();
+    return;
+  }
+  const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
+  const talker = getActorFromTokenUuid(data.talkerTokenUuid);
+  const target = getActorFromTokenUuid(data.targetTokenUuid);
+
+  const buttons = [...html.querySelectorAll(".negotiation-buttons button")];
+  // Gate: GM, or an owner of either side whose state a resolver mutates (the demon's
+  // recruit flag / the talker's HP). Non-permitted users see disabled controls.
+  const permitted = game.user.isGM
+    || (talker && talker.canUserModify(game.user, "update"))
+    || (target && target.canUserModify(game.user, "update"));
+  if (!permitted) {
+    for (const btn of buttons) btn.disabled = true;
+    return;
+  }
+
+  const outcomeBtns = buttons.filter(b => b.dataset.action === "negotiation-outcome");
+
+  for (const btn of buttons) {
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const { resolveDemand, resolveNegotiationOutcome } = await import("./module/helpers/negotiation.mjs");
+      if (btn.dataset.action === "negotiation-demand") {
+        // Demands repeat; disable just this button briefly so a double-click cannot
+        // double-post the same demand, then re-enable for the next demand.
+        btn.disabled = true;
+        try {
+          await resolveDemand(message, btn.dataset.kind);
+        } finally {
+          btn.disabled = false;
+        }
+      } else {
+        // Outcome spends the card: disable every outcome button up front so the
+        // in-flight resolution cannot be raced (resolveNegotiationOutcome also
+        // re-reads the resolved flag).
+        for (const o of outcomeBtns) o.disabled = true;
+        await resolveNegotiationOutcome(message, btn.dataset.outcome);
+      }
+    });
+  }
 }

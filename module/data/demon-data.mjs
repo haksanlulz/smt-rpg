@@ -29,7 +29,13 @@ export default class DemonData extends SMTBaseActorData {
         macca: new NumberField({ integer: true, min: 0, initial: 0 }),
         exp: new NumberField({ integer: true, min: 0, initial: 0 })
       }),
-      negotiable: new BooleanField({ initial: true })
+      negotiable: new BooleanField({ initial: true }),
+      // Recruit record: set when a Deal is reached in negotiation (p.75 "the demon
+      // gives you their demon card"). recruited marks the demon card obtained;
+      // recruitedBy names the talker who recruited it. The negotiation engine writes
+      // these without unsummoning the token or fabricating a new actor.
+      recruited: new BooleanField({ initial: false }),
+      recruitedBy: new StringField({ initial: "" })
     };
   }
 

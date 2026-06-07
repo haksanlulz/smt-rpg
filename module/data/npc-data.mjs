@@ -19,7 +19,11 @@ export default class NPCData extends SMTBaseActorData {
         macca: new NumberField({ integer: true, min: 0, initial: 0 }),
         exp: new NumberField({ integer: true, min: 0, initial: 0 })
       }),
-      negotiable: new BooleanField({ initial: true })
+      negotiable: new BooleanField({ initial: true }),
+      // Recruit record set on a negotiation Deal (p.75), mirroring DemonData so the
+      // negotiation engine writes the same fields on demon- and npc-type targets.
+      recruited: new BooleanField({ initial: false }),
+      recruitedBy: new StringField({ initial: "" })
     };
   }
 

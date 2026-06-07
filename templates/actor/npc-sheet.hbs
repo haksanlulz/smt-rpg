@@ -26,6 +26,13 @@
             {{localize "SMT.Negotiable"}}
           </label>
         </div>
+        <div class="resource">
+          <label>
+            <input type="checkbox" name="system.recruited" {{#if system.recruited}}checked{{/if}} />
+            {{localize "SMT.Recruited"}}
+          </label>
+          {{#if system.recruitedBy}}<span class="recruited-by" title="{{localize 'SMT.RecruitedBy'}}">{{system.recruitedBy}}</span>{{/if}}
+        </div>
       </div>
       {{> "systems/smt-rpg/templates/actor/partials/conditions.hbs"}}
     </div>
