@@ -1,21 +1,9 @@
-// ═══════════════════════════════════════════════
-// run-tests.mjs — node-runnable unit tests for the PURE rules helpers.
-//
-// The system has no test runner and no build step, so this is a zero-dependency
-// harness: `node test/run-tests.mjs` (exit 0 = pass, 1 = fail). It covers only the
-// pure, document-free functions — evaluatePercentile (checks.mjs), calculateDamage
-// (damage.mjs), and the fusion maths (fusion.mjs) — by importing them directly and
-// stubbing the two globals Foundry would otherwise provide:
-//   - CONFIG.SMT  : the real config object from config.mjs (the rules SSoT), so the
-//                   tests exercise the same constants the live system reads.
-//   - Math.clamp  : Foundry adds this to Math; Node does not, so we polyfill the
-//                   exact same (value, min, max) semantics the helpers rely on.
-// No Foundry, no DOM, no network. Keep new pure helpers covered here.
-// ═══════════════════════════════════════════════
+// Zero-dependency tests for the pure rules helpers: `node test/run-tests.mjs` (exit 0 pass, 1 fail).
+// Stubs the two globals Foundry provides (CONFIG.SMT, Math.clamp); no Foundry, DOM, or network.
 
 import { SMT } from "../module/config.mjs";
 
-// --- Foundry global stubs (must precede importing the helpers under test) ---
+// Foundry global stubs (before importing the helpers under test)
 if (typeof Math.clamp !== "function") {
   Math.clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 }
@@ -38,7 +26,7 @@ const {
   resolvePassiveEffect, passiveMultiplierBonuses, hasMightEffect
 } = await import("../module/helpers/passives.mjs");
 
-// --- Tiny assertion harness ---
+// Assertion harness
 let passed = 0;
 let failed = 0;
 const failures = [];
@@ -51,9 +39,7 @@ function eq(actual, expected, label) {
 }
 function ok(cond, label) { eq(!!cond, true, label); }
 
-// ═══════════════════════════════════════════════
 // evaluatePercentile (p.64)
-// ═══════════════════════════════════════════════
 {
   // TN 50: crit threshold floor(50/10)=5; auto-fail >=96; fumble ==100.
   eq(evaluatePercentile(1, 50).isCritical, true, "roll 1 is always critical");
@@ -71,9 +57,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(evaluatePercentile(96, 99).isSuccess, false, "96 auto-fails even when TN is 99");
 }
 
-// ═══════════════════════════════════════════════
 // calculateDamage (p.64-65)
-// ═══════════════════════════════════════════════
 {
   // Normal: 100 power, 20 resist -> 80.
   eq(calculateDamage({ rawPower: 100, affinity: "normal", resistance: 20, isCritical: false }).finalDamage, 80, "normal hit subtracts resistance");
@@ -98,9 +82,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(calculateDamage({ rawPower: 10, affinity: "normal", resistance: 50, isCritical: false }).finalDamage, 0, "damage floors at 0");
 }
 
-// ═══════════════════════════════════════════════
 // Fusion maths (p.79-82)
-// ═══════════════════════════════════════════════
 {
   // Level = floor((L1+L2)/2)+2.
   eq(computeFusionLevel(2, 5), 5, "fusion level: floor((2+5)/2)+2 = 5");
@@ -146,11 +128,9 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(selectInheritedSkills([{ name: "Agi" }, { name: "Bufu" }], { count: 5, initialNames: ["Agi"] }).map(s => s.name), ["Bufu"], "skips a skill already among initial skills");
 }
 
-// ═══════════════════════════════════════════════
 // Negotiation / demon-talk (p.72-78, p.112)
-// ═══════════════════════════════════════════════
 {
-  // --- lookupBand: inclusive [min,max] band tables, with the 0/10 face handled. ---
+  // lookupBand: inclusive [min,max] band tables, 0/10 face handled.
   // Gift Table (p.73): 1-3 cheer, 4-5 hp, 6-7 macca, 8-9 item, 10/0 gem.
   eq(lookupBand(SMT.talk.giftTable, 1).kind, "cheer", "gift roll 1 -> cheer");
   eq(lookupBand(SMT.talk.giftTable, 3).kind, "cheer", "gift roll 3 -> cheer (band upper bound)");
@@ -171,24 +151,24 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(lookupBand(SMT.talk.gemTable, 0).label, "SMT.Talk.Gem.Aquamarine", "gem 0 -> Aquamarine");
   eq(lookupBand([], 5), null, "empty table returns null");
 
-  // --- maccaDemand: (10 x level) + (dieRoll x 10), floored at 0 (p.75). ---
+  // maccaDemand: (10 x level) + (dieRoll x 10), floored at 0 (p.75).
   eq(maccaDemand(5, 3), 80, "macca demand: (10*5)+(3*10) = 80");
   eq(maccaDemand(20, 10), 300, "macca demand: (10*20)+(10*10) = 300");
   eq(maccaDemand(1, 1), 20, "macca demand: (10*1)+(1*10) = 20");
   eq(maccaDemand(0, 0), 0, "macca demand floors at 0");
   eq(maccaDemand(-5, -5), 0, "negative inputs floor at 0");
 
-  // --- hpDemand: 10% of the demon's OWN max HP, floored (p.76). ---
+  // hpDemand: 10% of the demon's own max HP, floored (p.76).
   eq(hpDemand(100), 10, "HP demand: 10% of 100 = 10");
   eq(hpDemand(95), 9, "HP demand floors: 10% of 95 = 9");
   eq(hpDemand(0), 0, "HP demand of 0 max HP = 0");
 
-  // --- talkCheckBonus: +20% for any talk skill, 0 otherwise (p.75/112). ---
+  // talkCheckBonus: +20% for any talk skill, 0 otherwise (p.75/112).
   eq(talkCheckBonus(true), 20, "a talk skill grants +20% to the Negotiation check");
   eq(talkCheckBonus(false), 0, "a non-talk action grants no bonus");
   eq(talkCheckBonus(true), SMT.negotiation.talkBonus, "the bonus is the config value, not a literal");
 
-  // --- negotiationBlockReason: conversation stoppers off actor state (p.73). ---
+  // negotiationBlockReason: conversation stoppers off actor state (p.73).
   eq(negotiationBlockReason({ negotiable: true, isBoss: false, ailment: "none", deathAilment: false }),
     null, "a negotiable, non-boss, able target can be talked to");
   eq(negotiationBlockReason({ negotiable: false, isBoss: false, ailment: "none" }),
@@ -217,9 +197,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
     "SMT.Talk.Block.Boss", "isBoss block works on a minimal (npc-shaped) system object");
 }
 
-// ═══════════════════════════════════════════════
 // Combat-end rewards (p.46, p.48)
-// ═══════════════════════════════════════════════
 {
   // sanitizeRewardValue: floor, clamp [0, max], non-finite -> 0.
   eq(sanitizeRewardValue(12.9), 12, "reward value floors");
@@ -274,9 +252,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(parseDropItems("   "), [], "whitespace-only drops string -> no items");
 }
 
-// ═══════════════════════════════════════════════
 // Passive-skill resolution (p.109-110)
-// ═══════════════════════════════════════════════
 {
   const reg = SMT.passiveEffects;
   const skill = (name, passiveEffect) => ({ name, system: { passiveEffect } });
@@ -340,7 +316,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
   ok(hasMightEffect(legacy, reg), "legacy-name-only actor keeps prior Might detection");
 }
 
-// --- Report ---
+// Report
 console.log(`\nsmt-rpg pure-helper tests: ${passed} passed, ${failed} failed`);
 if (failed) {
   console.log("\nFailures:");

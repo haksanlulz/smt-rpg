@@ -1,65 +1,16 @@
-// ═══════════════════════════════════════════════
-// negotiation.mjs — demon-talk / negotiation resolution helpers (p.72-78, p.112).
-//
-// Role: the rules engine behind the negotiation chat-card flow. A talk skill
-// (skillType "talk-approach" / "talk-support") routes through SMTItem.use ->
-// startNegotiation, which rolls the rulebook Negotiation check and posts a
-// negotiation card. smt-rpg.mjs binds that card's buttons and calls the resolvers
-// here via dynamic import (mirrors the combat-helper pattern, breaking the cycle).
-//
-// Division of labour (faithful to the book): the flowchart navigation, the demand-
-// met judgement, and the demon's Reason are GM concerns (p.74-75) — the engine
-// never invents a probability for them. What IS rulebook-exact is automated:
-//   - the Negotiation check (d100 vs negotiationTN, +CONFIG.SMT.negotiation.talkBonus%
-//     for any talk skill, crit range widened to TN/impressCritDivisor on an
-//     impress-type match — reusing evaluatePercentile's hasMight crit-widen path);
-//   - the demon-demand amounts (macca / HP / Item Demand Table);
-//   - the Gift, Random Gem, and Item Demand tables (all 1d10).
-// The GM drives the rest from buttons on the card.
-//
-// ChatMessage flag (namespace "smt-rpg"): negotiationData. Like every other flag it
-// is author-forgeable, so the resolvers re-read it, gate on canModifyEffects, and
-// coerce numerics before they feed a roll or an actor write.
-//
-// Section index:
-//   - Pure helpers           (lookupBand … negotiationBlockReason)
-//   - Negotiation check       (startNegotiation)
-//   - Outcome resolution      (resolveNegotiationOutcome)
-//   - Demand / Gift rolls      (resolveDemand … resolveGift)
-// ═══════════════════════════════════════════════
+// negotiation.mjs — demon-talk / negotiation helpers (p.72-78, p.112)
 
 import { SMT } from "../config.mjs";
 import { evaluatePercentile } from "./checks.mjs";
 
-// ═══════════════════════════════════════════════
-// Pure helpers (document-free; covered by test/run-tests.mjs)
-// ═══════════════════════════════════════════════
-
-/**
- * Look a 1d10-style roll up in an inclusive-[min,max]-band table (the Gift, Random
- * Gem, and Item Demand tables, p.73/76). Returns the matching entry, or the last
- * band as a fallback so the 0/10 face never falls through. Pure.
- *
- * @param {{min:number,max:number}[]} table - band table from CONFIG.SMT.talk.*.
- * @param {number} roll                       - the rolled value (1-10; 0 read as 10).
- * @returns {object|null} the matching band entry, or null for an empty table.
- */
+// Look a 1d10 roll up in an inclusive [min,max] band table; last band catches 0/10.
 export function lookupBand(table, roll) {
   if (!Array.isArray(table) || !table.length) return null;
   const r = roll === 0 ? 10 : roll;
   return table.find(e => r >= e.min && r <= e.max) ?? table[table.length - 1];
 }
 
-/**
- * Macca a demon demands (p.75): (maccaPerLevel × level) + (dieRoll × maccaDieMultiplier).
- * The level term is deterministic; the caller rolls CONFIG.SMT.talk.demand.maccaDie and
- * passes its total as dieRoll so this stays pure and unit-testable. Negative inputs
- * floor at 0. Pure.
- *
- * @param {number} level   - the demon's level.
- * @param {number} dieRoll - the rolled CONFIG.SMT.talk.demand.maccaDie total.
- * @returns {number} the macca demanded.
- */
+// Macca demand (p.75): maccaPerLevel*level + dieRoll*maccaDieMultiplier.
 export function maccaDemand(level, dieRoll) {
   const d = SMT.talk.demand;
   const lvl = Math.max(0, Math.floor(Number(level) || 0));
@@ -67,46 +18,19 @@ export function maccaDemand(level, dieRoll) {
   return (lvl * d.maccaPerLevel) + (die * d.maccaDieMultiplier);
 }
 
-/**
- * HP a demon demands as a cost (p.76): hpPercent% of the DEMON's own max HP, floored.
- * "This damage cannot be reduced via any means." Pure.
- *
- * @param {number} demonMaxHp - the demon's maximum HP.
- * @returns {number} the HP cost.
- */
+// HP demand (p.76): hpPercent% of the demon's own max HP, floored.
 export function hpDemand(demonMaxHp) {
   const max = Math.max(0, Math.floor(Number(demonMaxHp) || 0));
   return Math.floor(max * SMT.talk.demand.hpPercent / 100);
 }
 
-/**
- * The Negotiation-check bonus a talk skill grants (p.75/112). Every approach and
- * support talk skill grants the same flat +talkBonus%; a non-talk action grants 0.
- * Pure.
- *
- * @param {boolean} isTalkSkill - whether the initiating action is a talk skill.
- * @returns {number} the +% to add to negotiationTN.
- */
+// Negotiation-check bonus a talk skill grants (p.75/112).
 export function talkCheckBonus(isTalkSkill) {
   return isTalkSkill ? SMT.negotiation.talkBonus : 0;
 }
 
-/**
- * Why a target cannot be talked to right now, or null if negotiation is permitted
- * (p.73 "Conversation Stoppers"). Reads only the fields the rulebook ties to actor
- * state, so the gate works on both demon- and npc-type targets (both carry isBoss /
- * negotiable, and the shared ailment slot + deathAilment flag):
- *   - the target is not negotiable (system.negotiable === false);
- *   - the target is a Boss demon (system.isBoss, when CONFIG.SMT.talk.bossBlocks);
- *   - the target is made unable to act by Death or a CONFIG.SMT.talk.cannotActAilments
- *     ailment (Stoned/Shocked/Frozen/Restrained/Sleeping/Panicked).
- * The remaining stoppers (Kagutsuchi Full, 8+ demon cards, "when the GM says so") are
- * GM calls and are intentionally NOT decided here. Pure (reads a plain system object).
- *
- * @param {object} system - the target actor's system data (system.isBoss/negotiable/
- *                          ailment/deathAilment).
- * @returns {?string} an i18n key describing the block, or null if talk is allowed.
- */
+// Conversation stoppers the engine can decide (p.73); returns an i18n key or null.
+// The rest (Kagutsuchi Full, 8+ cards, GM call) are GM-only and not handled here.
 export function negotiationBlockReason(system) {
   if (!system) return null;
   if (system.negotiable === false) return "SMT.Talk.Block.NotNegotiable";
@@ -119,49 +43,21 @@ export function negotiationBlockReason(system) {
   return null;
 }
 
-// ═══════════════════════════════════════════════
-// Idempotency (mirrors combat.mjs)
-// ═══════════════════════════════════════════════
-// Each resolver re-reads the persisted `resolved` flag and bails, but that guard is
-// written only after the first await — so two concurrent clicks could both pass it.
-// This synchronous in-flight set, keyed by message id, closes that window: a resolver
-// claims its id before its first await and frees it in a finally. Layers on top of the
-// `resolved` re-read; does not replace it.
+// Synchronous in-flight guard (keyed by message id) closing the await window the
+// persisted `resolved` flag leaves open between concurrent clicks.
 const _inFlight = new Set();
 
-// Reuse the chat-handler gate (effects.canModifyEffects: GM or owner) so a
-// negotiation write only ever runs on a permitted client. A negotiation's writes can
-// touch either side — the demon's recruit flag (Deal) or the talker's HP (gift) — so
-// the GM or an owner of EITHER actor may drive the card, matching _bindNegotiationButtons.
+// GM or owner of either side may drive the card (recruit flag or talker HP).
 async function _canDriveNegotiation(talker, target) {
   const { canModifyEffects } = await import("./effects.mjs");
   return (talker && canModifyEffects(talker)) || (target && canModifyEffects(target));
 }
 
-// ═══════════════════════════════════════════════
-// Negotiation check (p.72-75)
-// ═══════════════════════════════════════════════
-
-/**
- * Begin a negotiation with a single target demon (p.72 "Approaching"). Resolves the
- * conversation-stopper gate (p.73), rolls the rulebook Negotiation check (d100 vs the
- * talker's negotiationTN, +CONFIG.SMT.negotiation.talkBonus% for the talk skill, crit
- * range widened to TN/impressCritDivisor when impressMatch is set, p.76), and posts a
- * negotiation card with the GM-driven outcome controls. The check itself is rolled
- * here; the flowchart navigation that follows is the GM's (the card surfaces the
- * outcome buttons but never auto-moves the demon).
- *
- * @param {object}   params
- * @param {SMTActor} params.talker        - the actor initiating the talk (rolls the check).
- * @param {SMTActor} params.target        - the demon/npc being negotiated with.
- * @param {string}   params.skillName     - the talk skill's display name.
- * @param {boolean}  [params.impressMatch=false] - GM flag: target matches the skill's impress type (p.76).
- * @returns {Promise<?ChatMessage>} the negotiation card, or null if blocked.
- */
+// Begin a negotiation (p.72): gate, roll the check, post the GM-driven card.
 export async function startNegotiation({ talker, target, skillName, impressMatch = false }) {
   if (!talker || !target) return null;
 
-  // Conversation stoppers (p.73). A blocked target posts nothing and warns the user.
+  // Conversation stoppers (p.73).
   const block = negotiationBlockReason(target.system);
   if (block) {
     ui.notifications.warn(game.i18n.format("SMT.Talk.Blocked", {
@@ -170,10 +66,7 @@ export async function startNegotiation({ talker, target, skillName, impressMatch
     return null;
   }
 
-  // Negotiation check: talk skills grant +talkBonus% (p.75/112). The impress-type
-  // match widens the crit range to TN/impressCritDivisor, which is exactly the Might
-  // crit-widen path in evaluatePercentile — so we route it through hasMight rather
-  // than duplicating the threshold rule.
+  // +talkBonus% (p.75/112); impress match widens crit via the hasMight path (p.76).
   const baseTN = Number(talker.system.negotiationTN) || 0;
   const tn = baseTN + talkCheckBonus(true);
 
@@ -229,28 +122,12 @@ export async function startNegotiation({ talker, target, skillName, impressMatch
   return message;
 }
 
-// ═══════════════════════════════════════════════
-// Demand / Gift rolls (p.73-76) — rulebook-exact dice
-// ═══════════════════════════════════════════════
+// Demand / Gift rolls (p.73-76)
 
-/**
- * Roll a demon demand (p.75) for the negotiation on this card. The GM chooses WHICH
- * demand a flowchart space shows; this rolls its rulebook-exact amount:
- *   - macca: (maccaPerLevel × demon level) + (CONFIG.SMT.talk.demand.maccaDie × maccaDieMultiplier);
- *   - hp:    hpPercent% of the demon's own max HP;
- *   - item:  1d10 on the Item Demand Table;
- *   - none:  the demon asks for nothing.
- * Posts a short demand notice with any roll. Reads the live flag; does not consume the
- * card (a negotiation makes several demands before a Deal/Break, p.75), but is gated +
- * single-fire so two clicks cannot double-post.
- *
- * @param {ChatMessage} message - the negotiation card.
- * @param {string}      kind    - a CONFIG.SMT.talk.demands entry ("none"|"macca"|"hp"|"item").
- * @returns {Promise<void>}
- */
+// Roll one demand (p.75). Does not consume the card; gated + single-fire.
 export async function resolveDemand(message, kind) {
   const data = message.getFlag("smt-rpg", "negotiationData");
-  if (!data || data.resolved) return; // a terminal outcome has closed the talk
+  if (!data || data.resolved) return;
   if (!SMT.talk.demands.includes(kind)) return;
 
   if (_inFlight.has(message.id)) return;
@@ -298,20 +175,7 @@ export async function resolveDemand(message, kind) {
   }
 }
 
-/**
- * Resolve a terminal negotiation outcome (p.75): the GM moves the talk here on the
- * flowchart and this applies the rulebook-exact result, then spends the card so the
- * buttons cannot be re-used. Re-reads the live flag and bails if already resolved.
- *   - deal:  the demon joins / fulfils the request — recruit a demon to a demon card.
- *   - gift:  roll once on the Gift Table (resolveGift), then the demon leaves.
- *   - leave: the demon simply leaves.
- *   - angry: the demon is angered (cannot be talked to until it acts again).
- *   - break: the talk breaks down.
- *
- * @param {ChatMessage} message - the negotiation card.
- * @param {string}      outcome - a CONFIG.SMT.talk.outcomes entry.
- * @returns {Promise<void>}
- */
+// Apply a terminal outcome (p.75) and spend the card.
 export async function resolveNegotiationOutcome(message, outcome) {
   const live = message.getFlag("smt-rpg", "negotiationData");
   if (!live || live.resolved) return;
@@ -354,8 +218,6 @@ export async function resolveNegotiationOutcome(message, outcome) {
         break;
     }
 
-    // Spend the card: persist resolved + the chosen outcome so a re-render strips the
-    // buttons and shows the final state.
     await message.setFlag("smt-rpg", "negotiationData", { ...live, resolved: true, outcome });
     await _postNotice(talker ?? target, line);
   } finally {
@@ -363,20 +225,7 @@ export async function resolveNegotiationOutcome(message, outcome) {
   }
 }
 
-/**
- * Roll once on the Gift Table (p.73) and apply its rulebook-exact effect. Most gift
- * kinds are GM-narrated (the demon cheers, hands over macca/an item equal to its
- * drop); the two with mechanical effects are automated:
- *   - hp:  the talker recovers HP equal to a 1d10 effect roll (the book's "effect roll
- *          + the demon's Spell Effect"; the Spell-Effect bonus is the GM's to add);
- *   - gem: chain into the Random Gem Table (1d10) for the specific gem.
- * The demon then leaves (handled by the caller's outcome line).
- *
- * @param {ChatMessage} message - the negotiation card (for idempotent gating context).
- * @param {?SMTActor}   talker  - the talking actor (HP gift recipient).
- * @param {SMTActor}    target  - the demon giving the gift (chat speaker).
- * @returns {Promise<void>}
- */
+// Roll on the Gift Table (p.73); hp heals the talker, gem chains the Gem Table.
 export async function resolveGift(message, talker, target) {
   const roll = await new Roll("1d10").evaluate();
   const entry = lookupBand(SMT.talk.giftTable, roll.total);
@@ -390,7 +239,6 @@ export async function resolveGift(message, talker, target) {
     const before = talker.system.hp.value;
     const newHp = Math.min(before + heal, talker.system.hp.max);
     await talker.update({ "system.hp.value": newHp });
-    // Report the HP actually restored after the max cap, not the raw roll.
     detail = game.i18n.format("SMT.Talk.Gift.HPLine", { name: talker.name, amount: newHp - before });
   } else if (entry?.kind === "gem") {
     const gemRoll = await new Roll("1d10").evaluate();
@@ -406,21 +254,8 @@ export async function resolveGift(message, talker, target) {
   await _postNotice(target, game.i18n.format("SMT.Talk.GiftPrefix", { name: target.name, gift: detail }), rolls);
 }
 
-/**
- * Recruit a demon on a Deal (p.75 "the demon fulfils their side of the bargain, giving
- * you their demon card"). The negotiation engine automates the rulebook dice and the
- * recruit record but leaves party-roster bookkeeping to the GM: it flags the target
- * actor as recruited (system.recruited / system.recruitedBy) so the demon card is
- * recorded, without unsummoning the token or fabricating a new actor. Gated by the
- * caller (resolveNegotiationOutcome).
- *
- * @param {?SMTActor} talker - the recruiting actor (recorded as the recruiter).
- * @param {SMTActor}  target - the demon joining.
- * @returns {Promise<void>}
- */
+// Flag a demon recruited on a Deal (p.75); roster bookkeeping stays with the GM.
 async function _recruitDemon(talker, target) {
-  // Only demon/npc targets carry the recruited fields; guard so a stray Deal on an
-  // actor without them is a no-op write rather than a schema error.
   if (!("recruited" in target.system)) return;
   await target.update({
     "system.recruited": true,
@@ -428,16 +263,7 @@ async function _recruitDemon(talker, target) {
   });
 }
 
-/**
- * Post a short negotiation notice card, optionally carrying its dice. Mirrors
- * effects.postEffectNotice's markup so negotiation lines read like the other
- * automation notices; rolls are attached when present so they are auditable.
- *
- * @param {SMTActor}  actor   - chat speaker.
- * @param {string}    text    - already-localized body.
- * @param {Roll[]}    [rolls] - dice to attach (omitted when empty).
- * @returns {Promise<void>}
- */
+// Post a short notice card, attaching dice when present.
 async function _postNotice(actor, text, rolls = []) {
   const content = `<div class="smt-roll effect-notice"><p>${text}</p></div>`;
   const data = {

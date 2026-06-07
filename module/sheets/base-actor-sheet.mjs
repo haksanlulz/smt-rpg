@@ -37,9 +37,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   };
 
-  // Stat entries for template. `base` is the SOURCE stat (what the editable input
-  // binds to) so derived/magatama-fed mutations never round-trip back into the
-  // stored stat on submit; `total`/`tn` stay prepared for display.
+  // `base` binds to the source stat so derived/magatama mutations don't round-trip on submit.
   _prepareStatEntries() {
     const sys = this.document.system;
     const src = this.document._source.system ?? {};
@@ -62,7 +60,6 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     });
   }
 
-  // Tooltip showing stat bonus sources
   _getStatBonusSources(actor, stat, totalBonus) {
     if (!totalBonus) return "";
     const sources = [];
@@ -78,27 +75,21 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return `${game.i18n.localize("SMT.StatBonuses")}: +${totalBonus}`;
   }
 
-  // Affinity entries for template. The editable <select> binds to `rating` (the
-  // SOURCE affinity), while `effective` is the prepared value used only to colour
-  // the cell — so a Fiend's active-magatama affinity override (applied in
-  // prepareDerivedData) is shown by colour without being written back into the
-  // stored affinity on submit.
+  // `rating` binds the source affinity; `effective` only colours the cell, so a magatama
+  // override shows without being written back on submit.
   _prepareAffinityEntries() {
     const affinities = this.document.system.affinities;
     const source = this.document._source.system.affinities ?? {};
     return ELEMENTS.map(key => ({
       key,
       label: SMT.elements[key],
-      // Fall back to the prepared value if a key is absent from source (e.g. an
-      // actor stored before the element existed) so the <select> still has a
-      // matching option.
+      // Fall back to the prepared value if the key is absent from source (older actor).
       rating: source[key] ?? affinities[key],
       effective: affinities[key]
     }));
   }
 
-  // Ailment affinity entries for template. `rating` is the SOURCE value bound by
-  // the editable <select>; `effective` is the prepared value for cell colouring.
+  // `rating` binds the source value; `effective` is for cell colouring.
   _prepareAilmentAffinityEntries() {
     const ailmentAffinities = this.document.system.ailmentAffinities;
     const source = this.document._source.system.ailmentAffinities ?? {};
@@ -110,7 +101,6 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }));
   }
 
-  // Skill items for template
   _prepareSkills() {
     return this.document.skills.map(s => ({
       ...s.toObject(),
@@ -121,14 +111,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }));
   }
 
-  /**
-   * Active buff/debuff and Concentrate/Defend effects for the combat tab, as chips
-   * with display data. Reads actor.appliedEffects (effects whose changes are live)
-   * and keeps only the ones carrying our bookkeeping flags — so the ailment-mirror
-   * effects (which are status-only, no changes, and shown by the conditions strip)
-   * are never rendered as chips. Buff chips carry their stack count (p.96).
-   * @returns {{id:string,name:string,img:string,stacks:number,kind:string}[]}
-   */
+  // Buff/Concentrate/Defend effects as combat-tab chips. Keeps only effects with our flags,
+  // so the status-only ailment-mirror effects never show here. Buff chips carry stacks (p.96).
   _prepareEffectChips() {
     const chips = [];
     for (const e of this.document.appliedEffects) {
@@ -146,14 +130,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return chips;
   }
 
-  /**
-   * Condition-strip data for the sheet header: the single common-ailment slot
-   * (p.68), the two special Death/Curse flags (p.67), and the active buff/stance
-   * effects rendered as small icons. The common ailment and the special flags each
-   * get a one-click clear control; the buff/stance icons are display-only (removed
-   * from the combat-tab chips). Sourced from CONFIG.SMT.ailments for the labels.
-   * @returns {{ailment:?{key:string,label:string}, death:boolean, curse:boolean, marks:{img:string,name:string}[]}}
-   */
+  // Condition-strip data: common-ailment slot (p.68), Death/Curse flags (p.67), and buff/stance
+  // icons. Ailment + flags get a clear control; the icons are display-only.
   _prepareConditions() {
     const sys = this.document.system;
     const ailmentKey = sys.ailment ?? "none";
@@ -163,13 +141,11 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const marks = this._prepareEffectChips().map(c => ({ img: c.img, name: c.name }));
     const death = !!sys.deathAilment;
     const curse = !!sys.curseAilment;
-    // `any` precomputed so the conditions partial can gate on one boolean rather
-    // than an `or` helper (keeps the template dependency-free).
+    // `any` precomputed so the partial gates on one boolean, no `or` helper.
     const any = !!ailment || death || curse || marks.length > 0;
     return { ailment, death, curse, marks, any };
   }
 
-  // Enrich HTML bio fields for ProseMirror
   async _prepareEnrichedFields() {
     const sys = this.document.system;
     const fields = ["background1", "background2", "goal", "contacts", "bonds", "notes"];
@@ -180,19 +156,9 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return enriched;
   }
 
-  /**
-   * Coerce blanked numeric inputs before the form submit validates. v14 sheets
-   * drop the legacy `data-dtype` attribute (TypeDataModel handles coercion), but
-   * a number input the user clears submits an empty string — which a non-nullable
-   * NumberField casts to NaN and rejects, silently dropping the edit. Map each
-   * empty `system.*` value that targets a NumberField to a safe fallback (null
-   * when the field is nullable, otherwise its initial or 0) so clearing a field
-   * sticks. Only string values are touched; everything else passes through.
-   * @param {SubmitEvent} event
-   * @param {HTMLFormElement} form
-   * @param {FormDataExtended} formData
-   * @returns {object}
-   */
+  // Coerce blanked numeric inputs before validation: v14 drops data-dtype, so a cleared number
+  // input submits "" which a non-nullable NumberField rejects. Map empty system.* NumberFields
+  // to null (nullable) or initial/0 so the clear sticks.
   _prepareSubmitData(event, form, formData) {
     const obj = formData.object;
     const schema = this.document.system.schema;
@@ -221,7 +187,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return super._onDropItem(event, item);
   }
 
-  // --- Action handlers ---
+  // Action handlers
 
   static #onRollCheck(event, target) {
     const tn = parseInt(target.dataset.tn);
@@ -231,11 +197,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Basic melee strike: percentile vs Strength TN, then power roll + pending attacks
-   * (shares buildCheckData / postAttacksToTargets with item.use and #onShoot).
-   * Might detection reads the actor getter.
-   */
+  // Basic melee strike: percentile vs Strength TN, then power roll + pending attacks.
   static async #onStrike() {
     const actor = this.document;
     const { postAttacksToTargets, buildCheckData, resolveTargets, applyStunHitCap } = await import("../helpers/combat.mjs");
@@ -246,10 +208,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const hasMight = actor.system.hasMightPassive;
     let label = `${skillName} (${game.i18n.localize("SMT.Stat.Strength")})`;
 
-    // Concentrate: spend any bonus held for this named action, adding its +% to the
-    // hit TN (p.64). Consumed regardless of the result; mirrors item.use(). The stun
-    // cap (p.66) is applied to the single TN after the Concentrate bonus so it flows
-    // identically into the roll and buildCheckData (keeping any Fate re-eval consistent).
+    // Spend any Concentrate bonus for this action onto the hit TN (p.64), then the stun cap (p.66).
     let tn = actor.system.strengthTN;
     const concentrate = await consumeConcentrate(actor, skillName);
     if (concentrate) {
@@ -291,11 +250,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Ranged shot: spends one ammo, percentile vs the ranged-weapon TN, then power roll
-   * + pending attacks (shares buildCheckData / postAttacksToTargets). Ranged
-   * attacks do not benefit from Might, so hasMight stays at its false default.
-   */
+  // Ranged shot: spends one ammo, percentile vs ranged-weapon TN, then power roll + attacks.
+  // Ranged attacks don't benefit from Might, so hasMight stays false.
   static async #onShoot() {
     const actor = this.document;
     const { postAttacksToTargets, buildCheckData, resolveTargets, applyStunHitCap } = await import("../helpers/combat.mjs");
@@ -316,8 +272,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const skillName = game.i18n.localize("SMT.Shoot");
     let label = `${skillName} (${game.i18n.localize("SMT.Stat.Agility")})`;
 
-    // Concentrate (p.64) then the stun cap (p.66), applied to the single TN so the
-    // same value flows into the roll and buildCheckData (Fate re-eval stays consistent).
+    // Concentrate (p.64) then the stun cap (p.66) onto the TN.
     let tn = rw.tn;
     const concentrate = await consumeConcentrate(actor, skillName);
     if (concentrate) {
@@ -358,14 +313,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Concentrate (p.64): pick one of the actor's strike/shoot/non-passive skills via
-   * DialogV2, then hold a +CONFIG.SMT.concentrate.bonusPct% bonus for that named
-   * action's next hit check. The named action's string must match what the attack
-   * site passes to consumeConcentrate (the basic-attack/shoot label, or a skill's
-   * name). Gated inside applyConcentrate (GM/owner); user-supplied skill names are
-   * HTML-escaped in the option list.
-   */
+  // Concentrate (p.64): pick an action via DialogV2, then hold a bonus for its next hit check.
+  // The picked string must match what the attack site passes to consumeConcentrate.
   static async #onConcentrate() {
     const actor = this.document;
     const { applyConcentrate, postEffectNotice, canModifyEffects } = await import("../helpers/effects.mjs");
@@ -374,8 +323,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       return;
     }
 
-    // Offer the basic strike, ranged shot (if armed), and every non-passive skill —
-    // the actions that make a hit check and can therefore carry a Concentrate bonus.
+    // Actions that make a hit check: basic strike, ranged shot (if armed), non-passive skills.
     const options = [game.i18n.localize("SMT.BasicAttack")];
     if (actor.system.hasRangedWeapon) options.push(game.i18n.localize("SMT.Shoot"));
     for (const skill of actor.skills) if (!skill.isPassive) options.push(skill.name);
@@ -402,11 +350,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Defend (p.64): forego an action for +CONFIG.SMT.defend.dodgeBonus% dodge until
-   * the start of the actor's next turn. Gated inside applyDefend (GM/owner); the
-   * effect is auto-cleared at turn start / encounter end by the combat hooks.
-   */
+  // Defend (p.64): forego an action for a dodge bonus until the actor's next turn.
   static async #onDefend() {
     const actor = this.document;
     const { applyDefend, postEffectNotice } = await import("../helpers/effects.mjs");
@@ -416,10 +360,6 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Remove a buff/debuff or Concentrate/Defend effect from the combat-tab chip
-   * strip. Gated (GM/owner) so a non-permitted viewer cannot delete it.
-   */
   static async #onRemoveEffect(event, target) {
     const { canModifyEffects } = await import("../helpers/effects.mjs");
     const actor = this.document;
@@ -432,10 +372,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (effect) await effect.delete();
   }
 
-  /**
-   * Clear the actor's common-ailment slot from the conditions strip (p.68). Writing
-   * system.ailment fires the updateActor hook, which re-mirrors the HUD icons.
-   */
+  // Clear the common-ailment slot (p.68). The write fires updateActor, re-mirroring HUD icons.
   static async #onClearAilment() {
     const { canModifyEffects } = await import("../helpers/effects.mjs");
     const actor = this.document;
@@ -446,7 +383,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (actor.system.ailment !== "none") await actor.update({ "system.ailment": "none" });
   }
 
-  /** Clear the special Death flag from the conditions strip (p.67). */
+  // Clear the Death flag (p.67).
   static async #onClearDeath() {
     const { canModifyEffects } = await import("../helpers/effects.mjs");
     const actor = this.document;
@@ -457,7 +394,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (actor.system.deathAilment) await actor.update({ "system.deathAilment": false });
   }
 
-  /** Clear the special Curse flag from the conditions strip (p.67). */
+  // Clear the Curse flag (p.67).
   static async #onClearCurse() {
     const { canModifyEffects } = await import("../helpers/effects.mjs");
     const actor = this.document;
@@ -468,10 +405,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (actor.system.curseAilment) await actor.update({ "system.curseAilment": false });
   }
 
-  /**
-   * Use a skill. Awaits the full use() flow and disables the triggering button while
-   * in-flight so a double-click cannot double-spend the skill's cost.
-   */
+  // Disables the button while use() is in-flight so a double-click can't double-spend the cost.
   static async #onUseSkill(event, target) {
     const itemId = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(itemId);
@@ -484,10 +418,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     }
   }
 
-  /**
-   * Use a consumable. Awaits useConsumable() and disables the triggering button while
-   * in-flight so a double-click cannot consume two of the item.
-   */
+  // Disables the button while useConsumable() is in-flight so a double-click can't consume two.
   static async #onUseItem(event, target) {
     const itemId = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(itemId);
@@ -550,7 +481,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (item) item.update({ "system.quantity": parseInt(target.value) || 0 });
   }
 
-  /** Open the v13+ FilePicker to choose the actor image (replaces deprecated `new FilePicker`). */
+  // v13+ FilePicker (replaces deprecated `new FilePicker`).
   static #onEditImage(event, target) {
     new foundry.applications.apps.FilePicker.implementation({
       type: "image",

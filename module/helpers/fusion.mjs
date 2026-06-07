@@ -1,44 +1,15 @@
-// ═══════════════════════════════════════════════
-// fusion.mjs — demon fusion engine (p.79-82).
-//
-// Role: turn two ingredient demons into one fused demon. The hard, rules-exact
-// maths lives in the PURE functions at the top (no document or Foundry access, so
-// they are unit-testable in plain node — see test/run-tests.mjs):
-//   - computeFusionLevel : (L1 + L2) / 2 + 2, floored (p.80).
-//   - inheritedSkillCount : the p.80 "Number of Inherited Skills" band table,
-//                           keyed by the COMBINED skill total of the ingredients.
-//   - elementClanFor      : same-clan fusion -> the Element clan it is born as
-//                           (p.81), else null (a cross-clan result the GM names).
-//   - selectInheritedSkills : honour inheritanceType + the 8-skill total cap (p.80).
-//   - isExceptionDemon    : the p.80 exception-demon guard.
-// Every constant is read from CONFIG.SMT.fusion, never hard-coded here.
-//
-// performFusion() is the orchestration layer: GM-gated, it reads two demon actors,
-// derives the new demon's level/EXP/skills via the pure helpers, creates the actor
-// (EXP set to the floor for the new level, p.48), and posts a result card. It does
-// NOT consume or delete the ingredients — fusion in the book yields a card the PC
-// later manifests, so the source demons are left intact for the GM to handle.
-// ═══════════════════════════════════════════════
+// Demon fusion engine (p.79-82). Pure rules maths up top (unit-testable, no
+// document access — see test/run-tests.mjs); performFusion is the GM-gated
+// orchestration. Ingredients are left intact — fusion yields a card to manifest.
 
 import { SMT } from "../config.mjs";
 
 const FLAG_SCOPE = "smt-rpg";
 
-// ═══════════════════════════════════════════════
-// Pure fusion maths (no document access — unit-testable)
-// ═══════════════════════════════════════════════
+// Pure fusion maths
 
-/**
- * Level of the demon produced by a normal fusion (p.80):
- *   floor((L1 + L2) / levelDivisor) + levelBonus
- * The book then rounds this up to the nearest demon that actually exists in the
- * result clan; that data-dependent step is the GM's, so this returns the raw
- * target level the GM rounds from. Floors at 1 so a fusion never yields level 0.
- *
- * @param {number} levelA - first ingredient demon's level.
- * @param {number} levelB - second ingredient demon's level.
- * @returns {number} the target fusion level (>= 1).
- */
+// Target level (p.80): floor((L1+L2)/divisor)+bonus, floored at 1. The book then
+// rounds up to the nearest existing demon in the result clan — that's the GM's.
 export function computeFusionLevel(levelA, levelB) {
   const a = Number(levelA) || 0;
   const b = Number(levelB) || 0;
@@ -46,14 +17,8 @@ export function computeFusionLevel(levelA, levelB) {
   return Math.max(1, Math.floor((a + b) / levelDivisor) + levelBonus);
 }
 
-/**
- * Number of skills the fused demon may inherit, from the p.80 band table, keyed by
- * the COMBINED number of skills the two ingredients had before fusion. Falls to 0
- * for a non-positive total (no skills to inherit).
- *
- * @param {number} combinedSkillTotal - skillsA + skillsB before fusion.
- * @returns {number} how many skills may be inherited.
- */
+// How many skills may be inherited, off the p.80 band table keyed by the combined
+// ingredient skill total.
 export function inheritedSkillCount(combinedSkillTotal) {
   const total = Number(combinedSkillTotal) || 0;
   if (total <= 0) return 0;
@@ -63,16 +28,8 @@ export function inheritedSkillCount(combinedSkillTotal) {
   return 0;
 }
 
-/**
- * The Element clan a same-clan fusion is born as (p.81), or null for a cross-clan
- * fusion (whose result clan comes from the Normal Fusion Chart — a data-dependent
- * lookup the GM resolves, so the engine leaves it to the dialog). Clan keys are
- * compared case-insensitively against CONFIG.SMT.fusion.elementBorn.
- *
- * @param {string} clanA - first ingredient demon's clan.
- * @param {string} clanB - second ingredient demon's clan.
- * @returns {?string} the Element clan key (e.g. "aeros"), or null if not same-clan.
- */
+// The Element clan a same-clan fusion is born as (p.81), else null (cross-clan
+// results come from the Normal Fusion Chart, resolved by the GM). Case-insensitive.
 export function elementClanFor(clanA, clanB) {
   const a = String(clanA ?? "").toLowerCase();
   const b = String(clanB ?? "").toLowerCase();
@@ -80,40 +37,16 @@ export function elementClanFor(clanA, clanB) {
   return CONFIG.SMT.fusion.elementBorn[a] ?? null;
 }
 
-/**
- * Whether a demon name is on the p.80 exception list (cannot be created by normal
- * fusion). Case/whitespace-insensitive.
- *
- * @param {string} name - candidate result demon name.
- * @returns {boolean}
- */
+// Whether a demon name is on the p.80 exception list (cannot be normally fused).
 export function isExceptionDemon(name) {
   const n = String(name ?? "").trim().toLowerCase();
   if (!n) return false;
   return CONFIG.SMT.fusion.exceptionDemons.includes(n);
 }
 
-/**
- * Choose which ingredient skills the fused demon inherits (p.80). Rules honoured:
- *  - at most `count` skills are inherited (the p.80 band count);
- *  - the fused demon's TOTAL skills may not exceed CONFIG.SMT.fusion.skillCap,
- *    counting the initial skills it already has (`initialCount`);
- *  - a skill carrying an inheritanceType is only inheritable when the result demon
- *    shares that inheritance trait (`resultInheritance`); typeless skills always
- *    qualify;
- *  - duplicates by name (case-insensitive) are dropped, and a skill already among
- *    the initial skills (`initialNames`) is skipped so it is not added twice.
- * Selection is order-preserving over `candidates` so callers (and tests) get a
- * deterministic result; the dialog feeds candidates in the GM's chosen order.
- *
- * @param {Array<{name:string, inheritanceType?:string}>} candidates - ingredient skills.
- * @param {object} [options]
- * @param {number} [options.count=Infinity]        - max inherited (p.80 band count).
- * @param {string} [options.resultInheritance=""]  - the result demon's inheritance trait.
- * @param {number} [options.initialCount=0]         - skills the result already has.
- * @param {string[]} [options.initialNames=[]]      - names of those initial skills.
- * @returns {Array<{name:string, inheritanceType?:string}>} the skills to inherit.
- */
+// Pick inherited skills (p.80): at most `count`, total capped at skillCap counting
+// initialCount, typed skills gated on a matching resultInheritance, dupes/initials
+// dropped. Order-preserving over candidates for deterministic output.
 export function selectInheritedSkills(candidates, { count = Infinity, resultInheritance = "", initialCount = 0, initialNames = [] } = {}) {
   const cap = CONFIG.SMT.fusion.skillCap;
   const trait = String(resultInheritance ?? "").trim().toLowerCase();
@@ -128,7 +61,7 @@ export function selectInheritedSkills(candidates, { count = Infinity, resultInhe
     const key = name.toLowerCase();
     if (taken.has(key)) continue;
 
-    // Inheritance-type gate (p.80): a typed skill needs a matching result trait.
+    // Typed skill needs a matching result trait (p.80).
     const skillTrait = String(skill?.inheritanceType ?? "").trim().toLowerCase();
     if (skillTrait && skillTrait !== trait) continue;
 
@@ -139,35 +72,16 @@ export function selectInheritedSkills(candidates, { count = Infinity, resultInhe
   return chosen;
 }
 
-// ═══════════════════════════════════════════════
 // Orchestration (document access — GM-gated)
-// ═══════════════════════════════════════════════
 
-/**
- * Whether the current user may perform a fusion. Fusion creates a world Actor, so
- * it is GM-only (mirrors the GM gate the chat/effect mutators use for writes that
- * are not scoped to an owned actor).
- * @returns {boolean}
- */
+// Fusion creates a world Actor, so GM-only.
 export function canFuse() {
   return game.user.isGM;
 }
 
-/**
- * Build the system payload for a fused demon from its ingredients (p.79-82). Pure
- * apart from reading CONFIG; returns plain data (no Actor created). Stats are the
- * per-stat average of the two ingredients (a sensible, deterministic starting
- * point the GM then adjusts per the advancement rules), affinities are inherited
- * from the higher-level ingredient, and EXP is set to the floor for the new level
- * for a demon (p.48 EXP-inheritance: a fused demon sits at "just reached" EXP).
- *
- * @param {SMTActor} demonA - first ingredient demon.
- * @param {SMTActor} demonB - second ingredient demon.
- * @param {object}   [opts]
- * @param {number}   [opts.level]       - override the computed fusion level.
- * @param {string}   [opts.expMultiplier=1.3] - EXP multiplier for the result (demon = 1.3).
- * @returns {object} a `system` object for Actor.create.
- */
+// Build the `system` payload for a fused demon (p.79-82). Stats are the per-stat
+// average, affinities follow the higher-level ingredient, EXP is the floor for the
+// new level (p.48). Returns plain data — no Actor created.
 export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } = {}) {
   const a = demonA.system;
   const b = demonB.system;
@@ -180,9 +94,8 @@ export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } 
     stats[stat] = Math.clamp(Math.round((av + bv) / 2), 0, 40);
   }
 
-  // Affinities follow the higher-level ingredient (its thesis dominates); ties go
-  // to the first. Read from _source so a transient magatama/effect override on a
-  // prepared value never bleeds into the new demon's stored affinities.
+  // Higher-level ingredient wins (ties → first). Read _source so a transient
+  // override on a prepared value doesn't bleed into stored affinities.
   const dominant = (Number(b.level) || 0) > (Number(a.level) || 0) ? demonB : demonA;
   const affinities = foundry.utils.deepClone(dominant._source.system.affinities ?? {});
   const ailmentAffinities = foundry.utils.deepClone(dominant._source.system.ailmentAffinities ?? {});
@@ -190,34 +103,17 @@ export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } 
   return {
     ...stats,
     level: newLevel,
-    // p.48: a fused demon's EXP is the amount needed to have just reached its level.
-    exp: Math.floor(Math.pow(newLevel, 3) * expMultiplier),
-    hp: { value: 9_999_999 }, // clamped to the derived max on first prepare
+    exp: Math.floor(Math.pow(newLevel, 3) * expMultiplier), // floor for the level (p.48)
+    hp: { value: 9_999_999 }, // clamped to derived max on first prepare
     mp: { value: 9_999_999 },
     affinities,
     ailmentAffinities
   };
 }
 
-/**
- * Perform a normal fusion of two demon actors and create the resulting demon (p.79-82).
- * GM-only. The caller supplies the result demon's name and clan (cross-clan results
- * come from the Normal Fusion Chart, a data lookup outside the engine; same-clan
- * results default to the Element clan from elementClanFor). The new demon is created
- * with the computed level, EXP set for that level, the per-stat average of the two
- * ingredients, the dominant ingredient's affinities, and the inherited skills chosen
- * by the GM (capped + inheritance-type filtered). A summary card is posted. The two
- * ingredients are left intact (fusion yields a card to manifest later, p.79).
- *
- * @param {object}   params
- * @param {SMTActor} params.demonA          - first ingredient demon.
- * @param {SMTActor} params.demonB          - second ingredient demon.
- * @param {string}   params.resultName       - name of the fused demon.
- * @param {string}   [params.resultClan]     - clan key for the result (defaults to the Element clan / first ingredient's clan).
- * @param {string}   [params.resultInheritance=""] - inheritance trait of the result (gates typed skills).
- * @param {Item[]}   [params.inheritSkills]  - GM-selected ingredient skill items to inherit (in priority order).
- * @returns {Promise<SMTActor|null>} the created demon actor, or null if blocked.
- */
+// Normally fuse two demon actors into a new one (p.79-82). GM-only. Caller supplies
+// name + clan (cross-clan from the Fusion Chart; same-clan defaults to the Element
+// clan). Ingredients are left intact.
 export async function performFusion({ demonA, demonB, resultName, resultClan, resultInheritance = "", inheritSkills = null }) {
   if (!canFuse()) {
     ui.notifications.warn(game.i18n.localize("SMT.Warnings.FusionGM"));
@@ -239,10 +135,8 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   const system = buildFusedSystem(demonA, demonB);
   system.clan = clan;
 
-  // Inherited skills: GM selection if provided, else every ingredient skill in
-  // ingredient order. selectInheritedSkills applies the p.80 band count + the
-  // 8-skill total cap + the inheritance-type gate; a fused demon starts with no
-  // initial skills here (it is a fresh card), so initialCount/Names are empty.
+  // GM selection if provided, else every ingredient skill in order. Fresh card, so
+  // initialCount/Names are empty.
   const ingredientSkills = inheritSkills ?? [
     ...demonA.items.filter(i => i.type === "skill"),
     ...demonB.items.filter(i => i.type === "skill")
@@ -284,14 +178,6 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   return actor;
 }
 
-/**
- * Post a fusion-result chat card summarising the ingredients, the new demon, its
- * level/clan, and the inherited skills. Flags an exception-demon result (p.80) so
- * the GM knows to bump a rank. GM is the speaker.
- *
- * @param {object} params - see fields below.
- * @returns {Promise<void>}
- */
 export async function postFusionCard({ demonA, demonB, actor, clan, level, isException, inheritedNames, allowed, combinedTotal }) {
   const clanLabel = SMT.demonClans[clan]
     ? game.i18n.localize(SMT.demonClans[clan])
@@ -318,15 +204,8 @@ export async function postFusionCard({ demonA, demonB, actor, clan, level, isExc
   });
 }
 
-/**
- * Open the GM fusion dialog (p.79): pick two demon actors and a result name, see a
- * live preview of the computed level / Element clan / inheritance count, then fuse.
- * Pre-selects the two selected/targeted demon tokens if exactly two are to hand.
- * GM-only; a non-GM gets a warning. Built with DialogV2 + native DOM (v14 form
- * rules) — no <form> markup of our own, escaped option labels for user-named demons.
- *
- * @returns {Promise<SMTActor|null>} the created demon, or null if cancelled/blocked.
- */
+// GM fusion dialog (p.79): pick two demons + a result name with a live level/clan/
+// inheritance preview, then fuse. Pre-fills two controlled demon tokens if present.
 export async function openFusionDialog() {
   if (!canFuse()) {
     ui.notifications.warn(game.i18n.localize("SMT.Warnings.FusionGM"));
@@ -339,7 +218,7 @@ export async function openFusionDialog() {
     return null;
   }
 
-  // Pre-fill from the controlled/targeted demon tokens when exactly two are at hand.
+  // Pre-fill from controlled demon tokens when two are at hand.
   const picked = (canvas?.tokens?.controlled ?? [])
     .map(t => t.actor)
     .filter(a => a?.type === "demon");
@@ -369,9 +248,7 @@ export async function openFusionDialog() {
       <div class="fusion-preview" data-preview></div>
     </div>`;
 
-  // Live preview: recompute level / clan / inheritance from the current selections.
-  // `root` is the dialog's rendered element (HTMLElement). Guard against a missing
-  // root so a render-callback shape change never throws inside the listener.
+  // Recompute level/clan/inheritance from the current selections.
   const refresh = (root) => {
     if (!root?.querySelector) return;
     const a = game.actors.get(root.querySelector("[name=demonA]").value);
@@ -414,8 +291,6 @@ export async function openFusionDialog() {
       { action: "cancel", label: game.i18n.localize("SMT.Cancel") }
     ],
     render: (event, dialog) => {
-      // DialogV2 render hook: `dialog` is the application; its `.element` is the
-      // rendered root. Fall back to the event target if the shape ever differs.
       const root = dialog?.element ?? event?.target;
       if (!root?.querySelectorAll) return;
       for (const sel of root.querySelectorAll("select")) sel.addEventListener("change", () => refresh(root));

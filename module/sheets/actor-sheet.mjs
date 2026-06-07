@@ -17,7 +17,7 @@ export default class SMTActorSheet extends SMTBaseActorSheet {
     }
   };
 
-  // Track active tab per sheet instance
+  // Active tab, per instance.
   _activeTab = "combat";
 
   async _prepareContext(options) {

@@ -27,24 +27,16 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
     }
   };
 
-  /** Dynamic template based on item type. */
+  // Template per item type.
   _configureRenderParts(options) {
     const parts = super._configureRenderParts(options);
     parts.sheet.template = `systems/smt-rpg/templates/item/${this.document.type}-sheet.hbs`;
     return parts;
   }
 
-  /**
-   * Coerce blanked numeric inputs before validation. With `data-dtype` removed in
-   * v14, a cleared number field (power, cost, quantity, ammo, magatama stat
-   * bonuses, …) submits an empty string that a non-nullable NumberField casts to
-   * NaN and rejects, dropping the edit. Map each empty `system.*` NumberField to
-   * null (when nullable) or its initial/0 so the clear persists.
-   * @param {SubmitEvent} event
-   * @param {HTMLFormElement} form
-   * @param {FormDataExtended} formData
-   * @returns {object}
-   */
+  // Coerce blanked numeric inputs before validation: v14 drops data-dtype, so a cleared number
+  // field submits "" which a non-nullable NumberField rejects. Map empty system.* NumberFields
+  // to null (nullable) or initial/0 so the clear persists.
   _prepareSubmitData(event, form, formData) {
     const obj = formData.object;
     const schema = this.document.system.schema;
@@ -102,7 +94,7 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
     return context;
   }
 
-  /** Open the v13+ FilePicker to choose the item image (replaces deprecated `new FilePicker`). */
+  // v13+ FilePicker (replaces deprecated `new FilePicker`).
   static #onEditImage(event, target) {
     new foundry.applications.apps.FilePicker.implementation({
       type: "image",

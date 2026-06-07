@@ -14,11 +14,7 @@ import SMTActorSheet from "./module/sheets/actor-sheet.mjs";
 import SMTNPCSheet from "./module/sheets/npc-sheet.mjs";
 import SMTItemSheet from "./module/sheets/item-sheet.mjs";
 
-// Token-HUD icons for the single common-ailment slot and the two special
-// ailment flags (p.67-68). Presentation only — the rules state of record is
-// system.ailment / system.deathAilment / system.curseAilment, which these icons
-// merely mirror (see syncAilmentStatus). Keyed by the CONFIG.SMT.ailments id so
-// a registered status maps cleanly back onto that slot.
+// Token-HUD ailment icons, keyed by CONFIG.SMT.ailments id (p.67-68). Mirror system.ailment; see syncAilmentStatus.
 const AILMENT_ICONS = {
   death: "icons/svg/skull.svg",
   stone: "icons/svg/paralysis.svg",
@@ -54,10 +50,7 @@ Hooks.once("init", () => {
     }
   });
 
-  // Macca distribution model for combat-end rewards (p.48 leaves the split to the
-  // table). Choices derive from CONFIG.SMT.rewards.maccaDistributionModes so the
-  // setting and the reward engine read one source. EXP is always granted in full
-  // per participant (p.48) and is not configurable.
+  // Macca split model for combat-end rewards (p.48). EXP is always full per participant.
   game.settings.register("smt-rpg", "maccaDistribution", {
     name: "SMT.Settings.MaccaDistribution",
     hint: "SMT.Settings.MaccaDistributionHint",
@@ -68,9 +61,7 @@ Hooks.once("init", () => {
     choices: SMT.rewards.maccaDistributionModes
   });
 
-  // Auto-pay combat rewards when an encounter ends (p.46, p.48). When off, the GM
-  // pays out manually via the Combat Tracker control. World-scoped so the table
-  // shares one policy.
+  // Auto-pay combat rewards on encounter end (p.46, p.48); off = manual via tracker control.
   game.settings.register("smt-rpg", "autoGrantRewards", {
     name: "SMT.Settings.AutoGrantRewards",
     hint: "SMT.Settings.AutoGrantRewardsHint",
@@ -80,9 +71,7 @@ Hooks.once("init", () => {
     default: true
   });
 
-  // Demon fusion (p.79): a GM keybinding opens the fusion dialog. Dynamic import
-  // keeps fusion.mjs out of the init bundle (mirrors the combat-helper pattern) and
-  // the onDown handler is gated GM-side inside openFusionDialog.
+  // GM keybind opens the fusion dialog (p.79). Dynamic import keeps fusion.mjs out of init.
   game.keybindings.register("smt-rpg", "openFusion", {
     name: "SMT.Keybind.OpenFusion",
     hint: "SMT.Keybind.OpenFusionHint",
@@ -106,24 +95,14 @@ Hooks.once("init", () => {
 
   CONFIG.Actor.documentClass = SMTActor;
   CONFIG.Item.documentClass = SMTItem;
-  // SMTCombat adds the rulebook's flat initiative tie-break die-off (p.63) on top
-  // of the standard initiative roll below.
+  // SMTCombat adds the initiative tie-break die-off (p.63).
   CONFIG.Combat.documentClass = SMTCombat;
 
-  // Initiative is declared authoritatively in system.json
-  // ("1d10x10 + @agilityTotal", p.298). Mirror that one declaration onto
-  // CONFIG.Combat.initiative so any runtime roll path agrees with it without
-  // re-typing the formula here (SMTActor.getRollData exposes @agilityTotal).
+  // Mirror the system.json initiative formula (p.298) so runtime roll paths agree with it.
   if (game.system.initiative) {
     CONFIG.Combat.initiative = { formula: game.system.initiative, decimals: 0 };
   }
 
-  // Register the buff/stance and ailment statuses on the token HUD. CONCATENATE
-  // onto Foundry's defaults — never replace them — so core conditions remain
-  // available. Buff/stance ids and icons are the same ones the cast helpers use
-  // (CONFIG.SMT.buffs[*].statusId / actionEffects[*].statusId), so a HUD toggle
-  // and a cast share one definition; the ailment ids are the CONFIG.SMT.ailments
-  // keys mirrored from the system.ailment slot.
   _registerStatusEffects();
 
   foundry.documents.collections.Actors.unregisterSheet("core", foundry.appv1.sheets.ActorSheet);
@@ -173,16 +152,8 @@ Hooks.once("init", () => {
   console.log("smt-rpg | System initialized");
 });
 
-/**
- * Register the buff/debuff, Concentrate/Defend, and ailment statuses on the token
- * HUD without discarding Foundry's defaults. Buff/stance ids are smt-prefixed and
- * never collide with core, so they are concatenated. Ailment ids reuse the
- * CONFIG.SMT.ailments keys (poison, stun, …) — some of which match a core status
- * id — so for those we OVERRIDE the matching core entry's label/icon in place
- * rather than append a duplicate, keeping exactly one HUD entry per id (the same
- * id syncAilmentStatus mirrors). Ids with no core match are appended. The list is
- * sourced from config so the HUD, the cast helpers, and the ailment SSoT agree.
- */
+// Register buff/stance/ailment statuses on the HUD, concatenating onto core defaults.
+// Ailment ids reuse CONFIG.SMT.ailments keys; ids matching a core status override it in place.
 function _registerStatusEffects() {
   const list = [...CONFIG.statusEffects];
   const indexById = new Map(list.map((s, i) => [s.id, i]));
@@ -196,12 +167,11 @@ function _registerStatusEffects() {
     }
   };
 
-  // Buff / debuff statuses (p.96) — id + icon from CONFIG.SMT.buffs (smt-prefixed).
+  // Buff / debuff statuses (p.96).
   for (const def of Object.values(SMT.buffs)) upsert(def.statusId, def.label, def.icon);
-  // Concentrate / Defend setup-action statuses (p.64).
+  // Concentrate / Defend (p.64).
   for (const def of Object.values(SMT.actionEffects)) upsert(def.statusId, def.label, def.icon);
-  // Ailment slot icons (p.67-68) — one per CONFIG.SMT.ailments id; overrides any
-  // core status sharing the id so a single entry maps onto the system.ailment slot.
+  // Ailment slot icons (p.67-68); overrides any core status sharing the id.
   for (const [id, label] of Object.entries(SMT.ailments)) {
     upsert(id, label, AILMENT_ICONS[id] ?? "icons/svg/aura.svg");
   }
@@ -209,7 +179,7 @@ function _registerStatusEffects() {
   CONFIG.statusEffects = list;
 }
 
-// --- Chat message button handlers ---
+// Chat message button handlers
 Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindAttackButtons(message, html);
   _bindFateCheckButtons(message, html);
@@ -217,14 +187,8 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindNegotiationButtons(message, html);
 });
 
-// ═══════════════════════════════════════════════
-// Shared-mutation client election
-// ═══════════════════════════════════════════════
-// Several hooks fire on every connected client but must run their write exactly
-// once. Funnel each through one responsible client: the active GM if any GM is
-// connected (writes succeed regardless of token ownership), otherwise the
-// connected owner with the lowest user id. Keeps automation single-fire without
-// a socket relay.
+// Elect one responsible client so a hook that fires everywhere writes once: active GM if
+// any is connected, else the lowest-id connected owner.
 function _isResponsibleClient(actor) {
   if (game.users.some(u => u.active && u.isGM)) return game.user.isGM;
   const owner = game.users
@@ -233,12 +197,8 @@ function _isResponsibleClient(actor) {
   return owner?.id === game.user.id;
 }
 
-// Elect EXACTLY ONE GM for a world-wide automated write (no per-actor scope). With
-// several GMs connected, _isResponsibleClient(actor) returns true for all of them;
-// a combat-wide payout must instead run on a single client, so this returns true
-// only for the lowest-id active GM. Used by the encounter-end reward auto-payout so
-// two GM clients cannot both pass the persisted rewardsPaid check before either
-// stamps it (a cross-client TOCTOU the per-client in-flight Set cannot close).
+// Lowest-id active GM, for a world-wide write (e.g. reward payout) that must run on one client
+// even with several GMs connected.
 function _isResponsibleGM() {
   const gm = game.users
     .filter(u => u.active && u.isGM)
@@ -246,23 +206,14 @@ function _isResponsibleGM() {
   return gm?.id === game.user.id;
 }
 
-// ═══════════════════════════════════════════════
-// Token-HUD status backfill (buff / stance casts via the HUD)
-// ═══════════════════════════════════════════════
-// Toggling a buff/debuff or Concentrate/Defend status from the token HUD creates
-// a bare ActiveEffect with only its `statuses` set — no rolled magnitude and no
-// ADD-mode changes. Back-fill one cast's worth of data (a rolled CONFIG.SMT.buffDie
-// per buff axis, or the fixed Concentrate/Defend bonus) so a HUD toggle behaves
-// exactly like casting the effect once. Runs only on the client that created the
-// effect, and skips any effect already carrying our flag/changes (a real cast),
-// so it never double-applies.
+// Toggling a buff/stance status from the token HUD makes a bare ActiveEffect (statuses only).
+// Backfill one cast's worth of magnitude/changes so a HUD toggle matches casting once.
 Hooks.on("createActiveEffect", async (effect, options, userId) => {
   if (game.user.id !== userId) return;
   const actor = effect.parent;
   if (!(actor instanceof Actor)) return;
 
-  // A cast made through effects.mjs already carries our bookkeeping flag and the
-  // ADD-mode changes — leave it untouched.
+  // A real cast already carries our flag + changes — leave it untouched.
   const flags = effect.flags?.["smt-rpg"];
   if (flags?.buff || flags?.concentrate || flags?.defend !== undefined) return;
   if (effect.changes?.length) return;
@@ -270,8 +221,7 @@ Hooks.on("createActiveEffect", async (effect, options, userId) => {
   const statusId = [...effect.statuses][0];
   if (!statusId) return;
 
-  // Only buff/stance statuses are backfilled. Ailment statuses are mirrored from
-  // system.ailment (syncAilmentStatus) and carry no magnitude, so they are skipped.
+  // Only buff/stance statuses backfill; ailments are mirrored from system.ailment and skipped.
   const buffKey = Object.keys(SMT.buffs).find(k => SMT.buffs[k].statusId === statusId);
   const isConcentrate = statusId === SMT.actionEffects.concentrate.statusId;
   const isDefend = statusId === SMT.actionEffects.defend.statusId;
@@ -281,8 +231,7 @@ Hooks.on("createActiveEffect", async (effect, options, userId) => {
 
   if (buffKey) {
     const def = SMT.buffs[buffKey];
-    // One non-exploding CONFIG.SMT.buffDie, signed, written as an ADD change per
-    // axis — mirrors applyBuff's first-stack branch (p.96).
+    // One signed buffDie as an ADD change per axis; mirrors applyBuff's first-stack branch (p.96).
     const roll = await new Roll(SMT.buffDie).evaluate();
     const magnitude = (Number(roll.total) || 0) * def.sign;
     const changes = def.axes.map(axis => ({
@@ -300,8 +249,7 @@ Hooks.on("createActiveEffect", async (effect, options, userId) => {
     await effect.update({
       name: `${game.i18n.localize(SMT.actionEffects.concentrate.label)} +${bonus}%`,
       changes: [{ key: "system.concentrate.amount", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(bonus) }],
-      // Empty action: a HUD-toggled Concentrate applies to the next named action,
-      // since consumeConcentrate treats a falsy held action as "any" (p.64).
+      // Empty action: consumeConcentrate treats a falsy held action as "any" (p.64).
       "flags.smt-rpg.concentrate": { action: "" }
     });
   } else {
@@ -314,18 +262,8 @@ Hooks.on("createActiveEffect", async (effect, options, userId) => {
   }
 });
 
-// ═══════════════════════════════════════════════
-// Actor ailment automation
-// ═══════════════════════════════════════════════
-// When system.ailment changes:
-//   (a) a new common ailment landing drops the actor's Concentrate (p.64) — a
-//       held setup bonus is lost the moment an ailment takes hold;
-//   (b) the token-HUD ailment icons are re-mirrored from the single source of
-//       truth (system.ailment + the death/curse flags) via syncAilmentStatus.
-// One-directional (slot → HUD) and idempotent: it only ever creates/deletes the
-// ailment-tagged ActiveEffects it owns and never writes system.ailment, so it
-// cannot loop with itself or with the createActiveEffect backfill above.
-// Funnelled through the responsible client so the writes happen exactly once.
+// Ailment automation: a new common ailment drops Concentrate (p.64), then re-mirror the HUD
+// icons from system.ailment + death/curse flags. Slot → HUD only, idempotent.
 Hooks.on("updateActor", async (actor, changed) => {
   const ailmentChanged = changed.system?.ailment !== undefined;
   const deathChanged = changed.system?.deathAilment !== undefined;
@@ -335,37 +273,26 @@ Hooks.on("updateActor", async (actor, changed) => {
 
   const { dropConcentrateOnAilment } = await import("./module/helpers/effects.mjs");
 
-  // (a) A new common ailment (not a clear to "none") drops Concentrate (p.64).
   if (ailmentChanged && changed.system.ailment !== "none") {
     await dropConcentrateOnAilment(actor);
   }
 
-  // (b) Mirror the ailment slot + special flags onto the HUD.
   await _syncAilmentStatus(actor);
 });
 
-/**
- * Mirror an actor's ailment state onto its token-HUD status icons (p.67-68).
- * The single common-ailment slot (system.ailment) plus the two special flags
- * (system.deathAilment / system.curseAilment) are the source of truth; this only
- * adds/removes the ailment-tagged ActiveEffects it owns to match. At most one
- * common-slot icon shows at a time (priority replaces, p.68); Death and Curse
- * stack alongside it as their own icons. Stale ailment effects are removed first.
- *
- * @param {Actor} actor
- * @returns {Promise<void>}
- */
+// Mirror system.ailment + death/curse flags onto the HUD icons (p.67-68). One common-slot
+// icon at a time; Death/Curse stack alongside. Removes stale ailment effects first.
 async function _syncAilmentStatus(actor) {
   const ailmentIds = Object.keys(SMT.ailments);
 
-  // Desired ailment ids: the one common slot, plus any active special flags.
+  // Desired ids: the common slot plus any active special flags.
   const desired = new Set();
   const current = actor.system.ailment ?? "none";
   if (current !== "none") desired.add(current);
   if (actor.system.deathAilment) desired.add("death");
   if (actor.system.curseAilment) desired.add("curse");
 
-  // Remove any ailment-tagged effect we own whose id is no longer desired.
+  // Remove any owned ailment effect whose id is no longer desired.
   const stale = actor.effects.filter(e => {
     if (e.getFlag("smt-rpg", "ailment") === undefined) return false;
     return [...e.statuses].some(s => ailmentIds.includes(s) && !desired.has(s));
@@ -386,21 +313,8 @@ async function _syncAilmentStatus(actor) {
   if (toCreate.length) await actor.createEmbeddedDocuments("ActiveEffect", toCreate);
 }
 
-// ═══════════════════════════════════════════════
-// Start-of-turn automation (p.64, p.66-68)
-// ═══════════════════════════════════════════════
-// When a combatant's turn begins:
-//   (a) their Defend stance expires — Defend lasts only until the start of their
-//       next turn (p.64);
-//   (b) their common ailment resolves its start-of-turn effect (p.66-68):
-//       Freeze/Shock auto-recover, Sleep regenerates HP/MP, Panic may force a random
-//       action off the Panic table, and a fully incapacitating ailment posts a
-//       "cannot act" notice. Defend is cleared first so a turn the ailment then skips
-//       does not leave a now-irrelevant stance lingering.
-// The hook fires on every client, so both writes are funnelled through the
-// responsible client (the active GM if connected, so they succeed regardless of
-// token ownership; otherwise the actor's lowest-id owner). combat.combatant is the
-// new current combatant after the turn/round change.
+// Start-of-turn automation (p.64, p.66-68): expire Defend, then resolve the common ailment's
+// start-of-turn effect. Defend clears first. Funnelled through the responsible client.
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!("turn" in changed || "round" in changed)) return;
   const actor = combat.combatant?.actor;
@@ -411,22 +325,13 @@ Hooks.on("updateCombat", async (combat, changed) => {
   await processAilmentTurnStart(actor);
 });
 
-// Encounter end: pay out combat rewards (p.46, p.48), then clear any lingering
-// temporary setup-action stances (Defend and Concentrate, p.64) from every
-// combatant so they never bleed across encounters. Rewards run FIRST, while the
-// combatants' end-state HP is still readable, and only when the auto-grant setting
-// is on (otherwise the GM pays out manually via the tracker control). The payout is
-// idempotent (persisted flag + in-flight Set), so a manual payout before ending the
-// encounter makes this a no-op. Buff/debuff effects persist by design (no rules
-// basis for auto-clearing them here) and are managed via Dekaja/Dekunda or manual
-// removal. Run as the active GM so the batch covers every combatant regardless of
-// token ownership.
+// Encounter end: pay out rewards (p.46, p.48), then clear Defend/Concentrate (p.64) from every
+// combatant. Rewards run first (end-state HP still readable) and only if auto-grant is on; the
+// payout is idempotent. Buff/debuff effects persist by design.
 Hooks.on("deleteCombat", async (combat) => {
   if (!game.user.isGM) return;
 
-  // Auto-payout runs on a single elected GM (lowest-id active GM) so multiple GM
-  // clients cannot race the persisted rewardsPaid flag. The persisted flag + the
-  // in-flight Set inside grantCombatRewards still guard the manual-button path.
+  // Single elected GM so multiple GM clients cannot race the rewardsPaid flag.
   if (_isResponsibleGM() && game.settings.get("smt-rpg", "autoGrantRewards")) {
     const { grantCombatRewards } = await import("./module/helpers/rewards.mjs");
     await grantCombatRewards(combat);
@@ -437,26 +342,15 @@ Hooks.on("deleteCombat", async (combat) => {
     const actor = combatant.actor;
     if (!actor) continue;
     await clearDefend(actor);
-    // dropConcentrateOnAilment deletes the Concentrate effect if present; the
-    // name reflects its other caller, but the action (clear Concentrate) is the
-    // same one wanted at encounter end.
+    // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);
   }
 });
 
-// ═══════════════════════════════════════════════
-// Combat Tracker payout control (p.46, p.48)
-// ═══════════════════════════════════════════════
-// Inject a GM-only "pay out rewards" button into the Combat Tracker controls so the
-// GM can grant EXP/macca/loot before ending the encounter (the common case:
-// pay out, review the card, then delete the combat). The render hook fires for the
-// v13/v14 ApplicationV2 CombatTracker; `html` is its rendered HTMLElement. The
-// button is added once per render, only for a GM with an active combat, and calls
-// the same idempotent grantCombatRewards the auto-payout uses — so clicking it and
-// then ending the encounter cannot double-pay. A header-control hook is not used:
-// hook-added ApplicationV2 header controls cannot run a custom click handler
-// (their action must be one the application already defines), so a native control
-// in the tracker's own controls bar is the portable, self-contained choice.
+// Inject a GM-only "pay out rewards" button into the Combat Tracker controls (p.46, p.48).
+// Added once per render; calls the same idempotent grantCombatRewards the auto-payout uses.
+// Native control rather than a header-control hook: hook-added AppV2 header controls can't run
+// a custom click handler.
 Hooks.on("renderCombatTracker", (app, html, data) => {
   if (!game.user.isGM) return;
   const root = html instanceof HTMLElement ? html : html?.[0];
@@ -468,8 +362,7 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   // Re-render safety: never add a second button.
   if (root.querySelector("[data-action='smt-grant-rewards']")) return;
 
-  // Find the tracker's controls bar across v13/v14 markup; fall back to the root so
-  // the control is always reachable even if the container class shifts.
+  // Controls bar across v13/v14 markup; fall back to root if the container class shifts.
   const controls = root.querySelector(".combat-controls")
     ?? root.querySelector("#combat-controls")
     ?? root.querySelector("nav.combat-controls")
@@ -482,7 +375,7 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   button.classList.add("smt-grant-rewards");
   button.innerHTML = `<i class="fas fa-coins"></i> ${game.i18n.localize("SMT.Rewards.PayOut")}`;
   button.title = game.i18n.localize("SMT.Rewards.PayOutHint");
-  // Disable once the encounter has already paid out so the state reads clearly.
+  // Disable if already paid out.
   if (combat.getFlag("smt-rpg", "rewardsPaid")) {
     button.disabled = true;
     button.classList.add("paid");
@@ -506,9 +399,7 @@ async function _bindAttackButtons(message, html) {
   }
   const { resolveAttack, getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
 
-  // Only the GM or an owner of the target (whose HP/ailment/dodge this mutates) may
-  // resolve the attack. Flags are author-forgeable, so this gate is the access control
-  // until a GM-socket relay lands (later). Non-permitted users see disabled buttons.
+  // Only GM/target-owner may resolve. Flags are forgeable, so this gate is the access control.
   const target = getActorFromTokenUuid(attackData.targetTokenUuid);
   const dodgeBtn = html.querySelector("[data-action='dodge']");
   const applyBtn = html.querySelector("[data-action='apply-damage']");
@@ -518,8 +409,7 @@ async function _bindAttackButtons(message, html) {
     return;
   }
 
-  // Disable BOTH buttons on the first click so the in-flight dodge roll cannot be
-  // raced against Apply-damage (resolveAttack also re-checks the resolved flag).
+  // Disable both on first click so an in-flight dodge can't be raced against Apply-damage.
   const disableBoth = () => {
     if (dodgeBtn) dodgeBtn.disabled = true;
     if (applyBtn) applyBtn.disabled = true;
@@ -595,16 +485,8 @@ async function _bindFateDamageButtons(message, html) {
   container.append(halveBtn);
 }
 
-/**
- * Bind the negotiation card's GM-driven controls (p.73-76): the demand-roll buttons
- * (None/Macca/HP/Item) and the terminal-outcome buttons (Deal/Gift/Leave/Angry/Break).
- * Mirrors the attack-button protocol: strips the controls once the card is resolved,
- * gates so only the GM or an owner of the talker/target can drive it (negotiation is a
- * GM-mediated flow whose writes touch those actors), and resolves via dynamic import
- * into negotiation.mjs. Demand buttons stay live across clicks (a negotiation makes
- * several demands before a Deal/Break, p.75); an outcome button spends the card, so
- * all outcome buttons are disabled on the first outcome click to avoid a race.
- */
+// Bind the negotiation card's demand and outcome buttons (p.73-76). Demands stay live across
+// clicks; an outcome spends the card, so all outcome buttons disable on the first outcome click.
 async function _bindNegotiationButtons(message, html) {
   const data = message.getFlag("smt-rpg", "negotiationData");
   if (!data) return;
@@ -617,8 +499,7 @@ async function _bindNegotiationButtons(message, html) {
   const target = getActorFromTokenUuid(data.targetTokenUuid);
 
   const buttons = [...html.querySelectorAll(".negotiation-buttons button")];
-  // Gate: GM, or an owner of either side whose state a resolver mutates (the demon's
-  // recruit flag / the talker's HP). Non-permitted users see disabled controls.
+  // Gate: GM, or an owner of either side a resolver mutates.
   const permitted = game.user.isGM
     || (talker && talker.canUserModify(game.user, "update"))
     || (target && target.canUserModify(game.user, "update"));
@@ -634,8 +515,7 @@ async function _bindNegotiationButtons(message, html) {
       event.preventDefault();
       const { resolveDemand, resolveNegotiationOutcome } = await import("./module/helpers/negotiation.mjs");
       if (btn.dataset.action === "negotiation-demand") {
-        // Demands repeat; disable just this button briefly so a double-click cannot
-        // double-post the same demand, then re-enable for the next demand.
+        // Disable just this button briefly so a double-click can't double-post the demand.
         btn.disabled = true;
         try {
           await resolveDemand(message, btn.dataset.kind);
@@ -643,9 +523,7 @@ async function _bindNegotiationButtons(message, html) {
           btn.disabled = false;
         }
       } else {
-        // Outcome spends the card: disable every outcome button up front so the
-        // in-flight resolution cannot be raced (resolveNegotiationOutcome also
-        // re-reads the resolved flag).
+        // Outcome spends the card: disable every outcome button up front against a race.
         for (const o of outcomeBtns) o.disabled = true;
         await resolveNegotiationOutcome(message, btn.dataset.outcome);
       }

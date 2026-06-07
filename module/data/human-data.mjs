@@ -11,13 +11,9 @@ export default class HumanData extends SMTBaseActorData {
         initial: "potential",
         choices: Object.keys(CONFIG.SMT.humanSubclasses)
       })
-      // isManikin is NOT persisted — it is derived from subclass in
-      // prepareDerivedData (see get isManikin / assignment below, p.47).
+      // isManikin not persisted; derived from subclass below (p.47).
     };
   }
-
-  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
-  // (CONFIG.SMT.hpMultipliers.human = 4, mpMultipliers.human = 2, p.36).
 
   get expMultiplier() {
     return 0.8;
@@ -27,7 +23,7 @@ export default class HumanData extends SMTBaseActorData {
     super.prepareDerivedData();
 
     this.affinities.light = "null"; // Humans can't be exorcized (p.47)
-    // Manikins are a human subclass with extra rules (p.47); derived, not stored.
+    // Manikin: human subclass with extra rules (p.47).
     this.isManikin = this.subclass === "manikin";
     this._applyEquippedGear();
     this._clampCurrentValues();

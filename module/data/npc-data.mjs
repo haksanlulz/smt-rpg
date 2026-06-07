@@ -20,15 +20,11 @@ export default class NPCData extends SMTBaseActorData {
         exp: new NumberField({ integer: true, min: 0, initial: 0 })
       }),
       negotiable: new BooleanField({ initial: true }),
-      // Recruit record set on a negotiation Deal (p.75), mirroring DemonData so the
-      // negotiation engine writes the same fields on demon- and npc-type targets.
+      // Recruit record set on a negotiation Deal (p.75).
       recruited: new BooleanField({ initial: false }),
       recruitedBy: new StringField({ initial: "" })
     };
   }
-
-  // hpMultiplier/mpMultiplier inherited from SMTBaseActorData
-  // (CONFIG.SMT.hpMultipliers.npc = 6, mpMultipliers.npc = 3, p.36).
 
   prepareDerivedData() {
     super.prepareDerivedData();
@@ -42,10 +38,8 @@ export default class NPCData extends SMTBaseActorData {
     this._clampCurrentValues();
   }
 
-  // Scale current HP/MP when boss trait is toggled to preserve ratio (p.123).
-  // v14: _preUpdate(changes, options, user) is async; returning false vetoes.
+  // Scale current HP/MP when boss trait toggles, preserving ratio (p.123). v14: async, false vetoes.
   async _preUpdate(changed, options, user) {
-    // Honor a veto from the parent's pre-update hook.
     const result = await super._preUpdate(changed, options, user);
     if (result === false) return false;
 
