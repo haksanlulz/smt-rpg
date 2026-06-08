@@ -23,6 +23,7 @@
   "SMT.Active": "Active",
   "SMT.Equipped": "Equipped",
   "SMT.Power": "Power",
+  "SMT.Heal.Line": "{name} recovers {amount} HP.",
   "SMT.Cost": "Cost",
   "SMT.TN": "TN",
   "SMT.AutoSuccess": "Auto-Success",

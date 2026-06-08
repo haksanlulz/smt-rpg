@@ -104,14 +104,16 @@ function _isExcludedFoeDisposition(disposition) {
   return CONFIG.SMT.rewards.excludedFoeDispositions.some(name => D[name] === disposition);
 }
 
-// Defeated foes (p.48): distinct combatants at 0 HP, minus friendly casualties.
+// Defeated foes (p.48): distinct combatants at 0 HP OR flagged Defeated in the tracker, minus friendly casualties.
 export function harvestFoes(combat) {
   const foes = [];
   const seen = new Set();
   for (const combatant of combat?.combatants ?? []) {
     const actor = combatant.actor;
     if (!actor || seen.has(actor.id)) continue;
-    if ((Number(actor.system?.hp?.value) || 0) > 0) continue;
+    // Downed = 0 HP OR the combat tracker's Defeated flag (skull). Either qualifies for rewards.
+    const downed = (Number(actor.system?.hp?.value) || 0) <= 0 || combatant.isDefeated === true;
+    if (!downed) continue;
     const disposition = combatant.token?.disposition
       ?? actor.prototypeToken?.disposition
       ?? foundry.CONST.TOKEN_DISPOSITIONS.HOSTILE;

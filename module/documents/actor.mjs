@@ -41,6 +41,22 @@ export default class SMTActor extends Actor {
     return this.items.filter(i => i.type === "consumable");
   }
 
+  // Clamp persisted HP/MP into [0, derived max] on every write. The derived _clampCurrentValues
+  // only fixes the displayed value, not the stored _source — so manual bar edits (e.g. typing 9999)
+  // and heal-to-full sentinels would otherwise persist above max. This pins the source value.
+  async _preUpdate(changed, options, user) {
+    const allowed = await super._preUpdate(changed, options, user);
+    if (allowed === false) return false;
+    for (const res of ["hp", "mp"]) {
+      const v = foundry.utils.getProperty(changed, `system.${res}.value`);
+      const max = this.system?.[res]?.max;
+      if (v !== undefined && Number.isFinite(max)) {
+        foundry.utils.setProperty(changed, `system.${res}.value`, Math.clamp(Math.floor(Number(v) || 0), 0, max));
+      }
+    }
+    return allowed;
+  }
+
   // Set level, reset EXP to that level's floor via the shared curve (p.48). Heals to full.
   async setLevel(level) {
     if (!(game.user.isGM || this.canUserModify(game.user, "update"))) {
@@ -49,13 +65,10 @@ export default class SMTActor extends Actor {
     }
     const target = Math.clamp(Math.floor(Number(level) || 0), 1, CONFIG.SMT.advancement.maxLevel);
     const exp = expThresholdForLevel(target, this.system.expMultiplier ?? 1);
-    await this.update({
-      "system.level": target,
-      "system.exp": exp,
-      // Heal to full (p.49); clamps to derived max once level re-derives hp/mp.max.
-      "system.hp.value": 9_999_999,
-      "system.mp.value": 9_999_999
-    });
+    // Apply level/exp first so hp/mp.max re-derive, then heal to the NEW full (p.49). _preUpdate
+    // clamps the heal to the freshly-derived max (no giant sentinel left in the source).
+    await this.update({ "system.level": target, "system.exp": exp });
+    await this.update({ "system.hp.value": this.system.hp.max, "system.mp.value": this.system.mp.max });
     return this;
   }
 
