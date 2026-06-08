@@ -71,6 +71,11 @@ export async function applyBuff(actor, key, { stacks = 1, source = null } = {}) 
   const newStacks = prior + added;
 
   const magnitude = magnitudeOf(existing) + (rolled * def.sign);
+
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Buff Applied", {
+    actor: actor.name, key, addedStacks: added, rolled, rolls,
+    totalStacks: newStacks, magnitude, axes: def.axes, formula: `${added}${SMT.buffDie}`
+  });
   const changes = def.axes.map(axis => ({
     key: `system.buffs.${axis}`,
     mode: CONST.ACTIVE_EFFECT_MODES.ADD,
@@ -102,6 +107,32 @@ export async function applyBuff(actor, key, { stacks = 1, source = null } = {}) 
     rolls, rolled, total: Math.abs(magnitude), stacks: newStacks, max: SMT.buffMaxStacks,
     targetName: actor.name, casterName: source?.name ?? actor.name, capped: false
   };
+}
+
+// Provoke (p.105): a foe loses 1d10 resistance but gains the same amount to BOTH physical and
+// magical power (one non-exploding roll, the "reckless" debuff). Stored as a removable smt-rpg effect.
+export async function applyProvoke(actor, { source = null } = {}) {
+  if (!actor) return null;
+  if (!canModifyEffects(actor)) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+    return null;
+  }
+  const roll = await new Roll("1d10").evaluate();
+  const amount = Math.max(1, Number(roll.total) || 1);
+  const label = game.i18n.localize("SMT.Buff.Provoke");
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    name: `${label} (−${amount} resist / +${amount} power)`,
+    img: "icons/svg/downgrade.svg",
+    changes: [
+      { key: "system.buffs.resist", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(-amount) },
+      { key: "system.buffs.physicalPower", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(amount) },
+      { key: "system.buffs.magicalPower", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: String(amount) }
+    ],
+    disabled: false,
+    flags: { [FLAG_SCOPE]: { [BUFF_KEY]: { effect: "provoke", group: "provoke", stacks: 1 } } }
+  }]);
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Provoke", { caster: source?.name, target: actor.name, amount });
+  return { amount, targetName: actor.name };
 }
 
 // Clear every buff/debuff of a group (Dekaja → "kaja", Dekunda → "nda"; p.96).

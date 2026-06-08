@@ -41,6 +41,12 @@ export default class SMTItem extends Item {
     return this.system.skillType === "recovery";
   }
 
+  // Provoke (p.105): support debuff hitting all foes (resist down, power up). Name-match keeps it
+  // working on skills authored before the "provoke" buffEffect key existed.
+  get isProvoke() {
+    return this.system.buffEffect === "provoke" || (this.name ?? "").trim().toLowerCase() === "provoke";
+  }
+
   // Magic that Mute seals (p.66): spell or magical attack.
   get isMagicSkill() {
     return this.type === "skill" && CONFIG.SMT.muteBlockedSkillTypes.includes(this.system.skillType);
@@ -104,6 +110,12 @@ export default class SMTItem extends Item {
     // Firearm skills resolve through the ranged-weapon power path (p.63), spending ammo per shot.
     if (this.isRangedSkill) {
       await this._rangedAttack(actor);
+      return;
+    }
+
+    // Provoke (p.105): debuff all foes (resist down, power up). Checked before the generic buff path.
+    if (this.isProvoke) {
+      await this._castProvoke(actor);
       return;
     }
 
@@ -395,6 +407,34 @@ export default class SMTItem extends Item {
     for (const target of targets) {
       const summary = await applyBuff(target, key, { source: actor });
       await postBuffCard(actor, summary);
+    }
+  }
+
+  // Provoke (p.105): auto-success; one 1d10 debuffs every foe (−resist, +phys/mag power).
+  async _castProvoke(actor) {
+    const { getAutoTargets } = await import("../helpers/combat.mjs");
+    const { applyProvoke } = await import("../helpers/effects.mjs");
+    const targets = getAutoTargets(actor, "All Foes").map(t => t.actor).filter(Boolean);
+    if (!targets.length) {
+      ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
+      return;
+    }
+    const intro = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/auto-success.hbs",
+      { name: this.name, effectDescription: this.system.effectDescription }
+    );
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
+
+    const lines = [];
+    for (const foe of targets) {
+      const res = await applyProvoke(foe, { source: actor });
+      if (res) lines.push(`${foe.name}: −${res.amount} resist, +${res.amount} power`);
+    }
+    if (lines.length) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
+      });
     }
   }
 
