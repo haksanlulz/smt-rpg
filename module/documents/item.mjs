@@ -137,7 +137,7 @@ export default class SMTItem extends Item {
 
       if (this.hasPowerRoll) {
         const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`);
+        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, false, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : "");
         await this._postPendingAttacks(actor, powerResult);
       }
 
@@ -211,7 +211,7 @@ export default class SMTItem extends Item {
 
     if (checkResult.isSuccess && this.hasPowerRoll) {
       const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-      const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical);
+      const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : "");
       await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
     }
 

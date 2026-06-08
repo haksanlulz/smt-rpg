@@ -113,9 +113,9 @@ export default class SMTActor extends Actor {
     return { result, outcome, cssClass, isCritical, isSuccess, messageId: msg.id };
   }
 
-  // Power roll: 1d10x10 + base + skill power, doubled on crit. Posts a card.
-  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false) {
-    const roll = new Roll("1d10x10");
+  // Power roll: 1d10x10 + base + skill power (+ extraDice, e.g. Powerful Strikes +1d10), doubled on crit. Posts a card.
+  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false, extraDice = "") {
+    const roll = new Roll(extraDice ? `1d10x10 + ${extraDice}` : "1d10x10");
     await roll.evaluate();
     let total = basePower + skillPower + roll.total;
     if (isCritical) total *= 2;

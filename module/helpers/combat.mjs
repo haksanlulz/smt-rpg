@@ -523,7 +523,8 @@ async function _continueSkillFlow(checkData, actor, checkMessageId) {
   const powerResult = await actor.rollPower(
     basePower, skillPower,
     `${checkData.skillName} — ${game.i18n.localize("SMT.Power")}`,
-    checkData.isCritical
+    checkData.isCritical,
+    checkData.isPhysical ? actor.system.physicalPowerBonusDice : ""
   );
 
   const targetUuids = checkData.targetTokenUuids ?? [];

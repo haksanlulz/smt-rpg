@@ -40,3 +40,23 @@ export function hasMightEffect(skills, registry) {
   }
   return false;
 }
+
+// Total flat bonus to the ranged-weapon (Shoot) TN from "shootTn" passives (e.g. Sure Shot, p.109).
+export function shootTnBonus(skills, registry) {
+  let bonus = 0;
+  for (const skill of skills ?? []) {
+    const resolved = resolvePassiveEffect(skill, registry);
+    if (resolved?.entry?.kind === "shootTn") bonus += Number(resolved.entry.value) || 0;
+  }
+  return bonus;
+}
+
+// Extra power-roll dice fragments from "powerDie" passives (e.g. Powerful Strikes +1d10). Returns an array.
+export function physicalPowerDice(skills, registry) {
+  const dice = [];
+  for (const skill of skills ?? []) {
+    const resolved = resolvePassiveEffect(skill, registry);
+    if (resolved?.entry?.kind === "powerDie" && resolved.entry.value) dice.push(String(resolved.entry.value));
+  }
+  return dice;
+}
