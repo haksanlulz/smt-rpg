@@ -133,6 +133,34 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     return chips;
   }
 
+  // Full active-effects list for the Effects tab: our buff/debuff/concentrate/defend effects with
+  // current magnitude + stack count and a remove control. Ailments render separately from `conditions`.
+  _prepareEffectsList() {
+    const list = [];
+    for (const e of this.document.appliedEffects) {
+      const f = e.flags?.["smt-rpg"];
+      if (!f) continue;
+      const mag = Number(e.changes?.[0]?.value) || 0;
+      let kind = null;
+      let detail = "";
+      if (f.buff) {
+        const def = SMT.buffs[f.buff.effect];
+        kind = (def?.sign ?? 1) < 0 ? "debuff" : "buff";
+        const stacks = Number(f.buff.stacks) || 0;
+        detail = `${mag >= 0 ? "+" : ""}${mag} ×${stacks}`;
+      } else if (f.concentrate) {
+        kind = "concentrate";
+        detail = `+${mag}%`;
+      } else if (f.defend !== undefined) {
+        kind = "defend";
+        detail = `+${mag}%`;
+      }
+      if (!kind) continue;
+      list.push({ id: e.id, name: e.name, img: e.img, kind, detail });
+    }
+    return list;
+  }
+
   // Condition-strip data: common-ailment slot (p.68), Death/Curse flags (p.67), and buff/stance
   // icons. Ailment + flags get a clear control; the icons are display-only.
   _prepareConditions() {

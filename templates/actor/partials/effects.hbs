@@ -1,0 +1,51 @@
+{{!-- Effects tab: all active buff/debuff/stance effects (magnitude + stacks, removable) plus the
+  common ailment and Death/Curse flags (each with a clear control). --}}
+<div class="items-list effects-list">
+  <div class="items-header">
+    <span class="item-name">{{localize "SMT.Effects.Label"}}</span>
+    <span class="item-detail">{{localize "SMT.Effects.Value"}}</span>
+    <span class="item-controls"></span>
+  </div>
+
+  {{#each effectsList as |fx|}}
+  <div class="item effect-row {{fx.kind}}" data-effect-id="{{fx.id}}">
+    <span class="item-name"><img src="{{fx.img}}" width="18" height="18" alt="" /> {{fx.name}}</span>
+    <span class="item-detail">{{fx.detail}}</span>
+    <span class="item-controls">
+      <a class="item-control" data-action="removeEffect" title="{{localize 'SMT.Effects.Remove'}}"><i class="fas fa-times"></i></a>
+    </span>
+  </div>
+  {{/each}}
+
+  {{#if conditions.ailment}}
+  <div class="item effect-row ailment">
+    <span class="item-name"><i class="fas fa-skull-crossbones"></i> {{localize conditions.ailment.label}}</span>
+    <span class="item-detail">{{localize "SMT.Effects.Ailment"}}</span>
+    <span class="item-controls">
+      <a class="item-control" data-action="clearAilment" title="{{localize 'SMT.ClearCondition'}}"><i class="fas fa-times"></i></a>
+    </span>
+  </div>
+  {{/if}}
+  {{#if conditions.death}}
+  <div class="item effect-row ailment">
+    <span class="item-name"><i class="fas fa-skull"></i> {{localize "SMT.Ailment.Death"}}</span>
+    <span class="item-detail">{{localize "SMT.Effects.Ailment"}}</span>
+    <span class="item-controls">
+      <a class="item-control" data-action="clearDeath" title="{{localize 'SMT.ClearCondition'}}"><i class="fas fa-times"></i></a>
+    </span>
+  </div>
+  {{/if}}
+  {{#if conditions.curse}}
+  <div class="item effect-row ailment">
+    <span class="item-name"><i class="fas fa-ghost"></i> {{localize "SMT.Ailment.Curse"}}</span>
+    <span class="item-detail">{{localize "SMT.Effects.Ailment"}}</span>
+    <span class="item-controls">
+      <a class="item-control" data-action="clearCurse" title="{{localize 'SMT.ClearCondition'}}"><i class="fas fa-times"></i></a>
+    </span>
+  </div>
+  {{/if}}
+
+  {{#unless conditions.any}}{{#unless effectsList.length}}
+  <p class="empty-note">{{localize "SMT.Effects.None"}}</p>
+  {{/unless}}{{/unless}}
+</div>

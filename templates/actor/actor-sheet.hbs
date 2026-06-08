@@ -79,6 +79,7 @@
       <a class="item {{#if (eq activeTab 'gear')}}active{{/if}}" data-tab="gear" data-action="switchTab">{{localize "SMT.Tab.Gear"}}</a>
     {{/if}}
     <a class="item {{#if (eq activeTab 'inventory')}}active{{/if}}" data-tab="inventory" data-action="switchTab">{{localize "SMT.Tab.Inventory"}}</a>
+    <a class="item {{#if (eq activeTab 'effects')}}active{{/if}}" data-tab="effects" data-action="switchTab">{{localize "SMT.Tab.Effects"}}</a>
     <a class="item {{#if (eq activeTab 'bio')}}active{{/if}}" data-tab="bio" data-action="switchTab">{{localize "SMT.Tab.Bio"}}</a>
   </nav>
 
@@ -179,6 +180,11 @@
         </div>
         {{/each}}
       </div>
+    </div>
+
+    {{!-- EFFECTS TAB --}}
+    <div class="tab effects {{#if (eq activeTab 'effects')}}active{{/if}}" data-tab="effects">
+      {{> "systems/smt-rpg/templates/actor/partials/effects.hbs"}}
     </div>
 
     {{!-- BIO TAB --}}
