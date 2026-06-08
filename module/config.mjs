@@ -243,7 +243,7 @@ SMT.advancement = {
 // Buffs / debuffs (p.96)
 // Flat 1d10 per stack; effects on the same axis share one 4-stack cap.
 SMT.buffMaxStacks = 4;
-SMT.buffDie = "1d10"; // non-exploding
+SMT.buffDie = "d10"; // per-stack die, rolled as `${stacks}d10`, non-exploding. MUST be "d10" not "1d10" (string-concat -> "11d10")
 
 // Buff axes; keys match system.buffs.<axis>. "accuracy" = attack-check TNs, "dodge" = dodge TN.
 SMT.buffAxes = {
@@ -261,8 +261,8 @@ SMT.buffs = {
   makakaja: { axes: ["magicalPower"], sign: 1, group: "kaja", label: "SMT.Buff.Makakaja", statusId: "smtBuffMagic", icon: "icons/magic/control/buff-flight-wings-blue.webp" },
   rakukaja: { axes: ["resist"], sign: 1, group: "kaja", label: "SMT.Buff.Rakukaja", statusId: "smtBuffResist", icon: "icons/magic/defensive/shield-barrier-glowing-blue.webp" },
   sukukaja: { axes: ["accuracy", "dodge"], sign: 1, group: "kaja", label: "SMT.Buff.Sukukaja", statusId: "smtBuffAgility", icon: "icons/magic/movement/trail-streak-zigzag-yellow.webp" },
-  tarunda: { axes: ["physicalPower", "magicalPower"], sign: -1, group: "nda", label: "SMT.Buff.Tarunda", statusId: "smtDebuffPower", icon: "icons/magic/control/debuff-energy-hold-orange.webp" },
-  rakunda: { axes: ["resist"], sign: -1, group: "nda", label: "SMT.Buff.Rakunda", statusId: "smtDebuffResist", icon: "icons/magic/defensive/shield-barrier-crack-blue.webp" },
+  tarunda: { axes: ["physicalPower", "magicalPower"], sign: -1, group: "nda", label: "SMT.Buff.Tarunda", statusId: "smtDebuffPower", icon: "icons/svg/downgrade.svg" },
+  rakunda: { axes: ["resist"], sign: -1, group: "nda", label: "SMT.Buff.Rakunda", statusId: "smtDebuffResist", icon: "icons/svg/downgrade.svg" },
   sukunda: { axes: ["accuracy", "dodge"], sign: -1, group: "nda", label: "SMT.Buff.Sukunda", statusId: "smtDebuffAgility", icon: "icons/magic/movement/trail-streak-impact-blue.webp" }
 };
 

@@ -3,7 +3,7 @@
   "id": "smt-rpg",
   "title": "Shin Megami Tensei: Tokyo Conception",
   "description": "A Foundry VTT system for the Shin Megami Tensei: The Roleplaying Game - Tokyo Conception tabletop RPG. A d100 percentile-based system featuring Fiends, Demons, and Humans in the post-apocalyptic Vortex World.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "compatibility": {
     "minimum": "13",
     "verified": "14"

@@ -36,6 +36,11 @@ export default class SMTItem extends Item {
     return this.system.skillType === "ranged-attack";
   }
 
+  // Healing skill (p.100): auto-success; restores HP = potency + Magic + Level + power roll.
+  get isHealSkill() {
+    return this.system.skillType === "recovery";
+  }
+
   // Magic that Mute seals (p.66): spell or magical attack.
   get isMagicSkill() {
     return this.type === "skill" && CONFIG.SMT.muteBlockedSkillTypes.includes(this.system.skillType);
@@ -111,6 +116,12 @@ export default class SMTItem extends Item {
     // Talk skills resolve via the negotiation flow (p.72), no hit/power roll here.
     if (this.isTalkSkill) {
       await this._talk(actor);
+      return;
+    }
+
+    // Healing (p.100): auto-success; roll heal power once and restore HP to each target.
+    if (this.isHealSkill) {
+      await this._heal(actor);
       return;
     }
 
@@ -222,6 +233,49 @@ export default class SMTItem extends Item {
           targetTokenUuid: token.document.uuid
         });
       }
+    }
+  }
+
+  // Healing skill (p.100): auto-success. Heal = Skill Potency + Base Magical Power + power roll,
+  // rolled ONCE and applied to every target (one card for the whole group, not one per ally).
+  async _heal(actor) {
+    const { resolveTargets } = await import("../helpers/combat.mjs");
+    const targets = resolveTargets(actor, this.system.targets);
+    if (!targets.length) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoTargets"));
+      return;
+    }
+
+    const intro = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/auto-success.hbs",
+      { name: this.name, effectDescription: this.system.effectDescription }
+    );
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
+
+    const powerResult = await actor.rollPower(
+      actor.system.baseMagicalPower, this.system.power,
+      `${this.name} — ${game.i18n.localize("SMT.Power")}`
+    );
+    const heal = Math.max(0, Math.floor(powerResult.total));
+
+    const lines = [];
+    for (const token of targets) {
+      const t = token.actor;
+      if (!t) continue;
+      const before = t.system.hp.value;
+      const newHp = Math.min(before + heal, t.system.hp.max);
+      await t.update({ "system.hp.value": newHp });
+      lines.push(game.i18n.format("SMT.Heal.Line", { name: t.name, amount: newHp - before }));
+      if (CONFIG.SMT.debug) console.log("smt-rpg | Heal", {
+        healer: actor.name, target: t.name, rolled: heal,
+        restored: newHp - before, newHp, hpMax: t.system.hp.max
+      });
+    }
+    if (lines.length) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
+      });
     }
   }
 
