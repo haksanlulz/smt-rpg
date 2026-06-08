@@ -105,92 +105,85 @@ export function resolveTargets(actor, targetString) {
 
 // Attack / Dodge
 
-// Post one pending-attack card per target.
+// Render the consolidated pending-attack card (one card, one row per target).
+async function _renderPendingCard(attackData) {
+  return foundry.applications.handlebars.renderTemplate(
+    "systems/smt-rpg/templates/chat/attack-pending.hbs",
+    {
+      skillName: attackData.skillName,
+      rawPower: attackData.rawPower,
+      isCritical: attackData.isCritical,
+      element: attackData.element,
+      isPhysical: attackData.isPhysical,
+      targets: attackData.targets
+    }
+  );
+}
+
+// Post ONE pending-attack card covering every target (one power roll applied to all, p.96).
+// Each target is a row with its own Dodge/Apply buttons; single-target is just a 1-row card.
 export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0 }) {
-  if (!targets?.length) {
+  const valid = (targets ?? []).filter(t => t.actor);
+  if (!valid.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
     return 0;
   }
 
-  const attackerTokenUuid = getTokenUuid(attacker) ?? attacker.id;
-  let posted = 0;
-  for (const token of targets) {
-    if (!token.actor) continue;
-    await postPendingAttack({
-      attacker,
-      target: token.actor,
-      attackerTokenUuid,
-      targetTokenUuid: token.document.uuid,
-      rawPower,
-      element,
-      isPhysical,
-      isCritical,
-      skillName,
-      checkMessageId,
-      ailmentType,
-      ailmentRate
-    });
-    posted++;
-  }
-  return posted;
-}
+  const attackData = {
+    attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
+    rawPower, element, isPhysical, isCritical, skillName,
+    ailmentType, ailmentRate,
+    checkMessageId: checkMessageId ?? null,
+    targets: valid.map(t => ({
+      targetTokenUuid: t.document.uuid,
+      name: t.actor.name,
+      resolved: false,
+      outcome: null
+    })),
+    resolved: false
+  };
 
-// Post a single pending-attack card; damage applied later via Dodge/Apply.
-export async function postPendingAttack({ attacker, target, attackerTokenUuid, targetTokenUuid, rawPower, element, isPhysical, isCritical, skillName, checkMessageId, ailmentType = "none", ailmentRate = 0 }) {
-  const atkUuid = attackerTokenUuid ?? getTokenUuid(attacker);
-  const tgtUuid = targetTokenUuid ?? getTokenUuid(target);
-
-  const content = await foundry.applications.handlebars.renderTemplate(
-    "systems/smt-rpg/templates/chat/attack-pending.hbs",
-    {
-      skillName,
-      targetName: target.name,
-      rawPower,
-      isCritical,
-      element,
-      isPhysical
-    }
-  );
-
+  const content = await _renderPendingCard(attackData);
   const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: attacker }),
     content
   });
-
-  await message.setFlag("smt-rpg", "attackData", {
-    attackerTokenUuid: atkUuid,
-    targetTokenUuid: tgtUuid,
-    rawPower,
-    element,
-    isPhysical,
-    isCritical,
-    skillName,
-    ailmentType,
-    ailmentRate,
-    checkMessageId: checkMessageId ?? null,
-    resolved: false
-  });
+  await message.setFlag("smt-rpg", "attackData", attackData);
+  return valid.length;
 }
 
-// Resolve a pending attack: optional dodge roll, apply damage, then ailment on a hit.
-export async function resolveAttack(message, attackData, skipDodge = false) {
-  const live = message.getFlag("smt-rpg", "attackData");
-  if (!live || live.resolved) return;
-  attackData = live;
+// Mark one target row resolved with a brief outcome string, then re-render the card in place.
+async function _markTargetResolved(message, index, outcome) {
+  const fresh = message.getFlag("smt-rpg", "attackData");
+  if (!fresh || !Array.isArray(fresh.targets)) return;
+  const targets = fresh.targets.map((t, i) => (i === index ? { ...t, resolved: true, outcome } : t));
+  const attackData = { ...fresh, targets, resolved: targets.every(t => t.resolved) };
+  const content = await _renderPendingCard(attackData);
+  await message.update({ content, "flags.smt-rpg.attackData": attackData });
+}
 
-  if (_inFlight.has(message.id)) return;
-  _inFlight.add(message.id);
+// Resolve ONE target row of a consolidated pending card: optional dodge, apply damage, ailment on hit.
+// Detailed dodge/damage cards still post; a brief outcome folds into the row, which re-renders in place.
+export async function resolveAttack(message, index, skipDodge = false) {
+  const live = message.getFlag("smt-rpg", "attackData");
+  if (!live || !Array.isArray(live.targets)) return;
+  const row = live.targets[index];
+  if (!row || row.resolved) return;
+
+  const lockKey = `${message.id}:${index}`;
+  if (_inFlight.has(lockKey)) return;
+  _inFlight.add(lockKey);
   try {
-    const attacker = getActorFromTokenUuid(attackData.attackerTokenUuid);
-    const target = getActorFromTokenUuid(attackData.targetTokenUuid);
+    const attacker = getActorFromTokenUuid(live.attackerTokenUuid);
+    const target = getActorFromTokenUuid(row.targetTokenUuid);
     if (!attacker || !target) return;
 
-    let rawPower = _sanitizeAmount(attackData.rawPower);
-    const element = _sanitizeElement(attackData.element);
-    const ailmentType = _sanitizeAilmentType(attackData.ailmentType);
-    const ailmentRate = _sanitizeAilmentRate(attackData.ailmentRate);
-    const isPhysical = !!attackData.isPhysical;
-    let isCritical = !!attackData.isCritical;
+    let rawPower = _sanitizeAmount(live.rawPower);
+    const element = _sanitizeElement(live.element);
+    const ailmentType = _sanitizeAilmentType(live.ailmentType);
+    const ailmentRate = _sanitizeAilmentRate(live.ailmentRate);
+    const isPhysical = !!live.isPhysical;
+    let isCritical = !!live.isCritical;
     let dodgeFumble = false;
     let dodgeOutcome = null;
 
@@ -210,23 +203,23 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
 
       switch (dodgeOutcome) {
         case "miss":
-          await _postDodgeResult(attacker, target, attackData.skillName, "miss");
-          await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
+          await _postDodgeResult(attacker, target, live.skillName, "miss");
+          await _markTargetResolved(message, index, game.i18n.localize("SMT.DodgeDodged"));
           return;
 
         case "downgrade":
           rawPower = Math.floor(rawPower / 2);
           isCritical = false;
-          await _postDodgeResult(attacker, target, attackData.skillName, "downgrade");
+          await _postDodgeResult(attacker, target, live.skillName, "downgrade");
           break;
 
         case "fumble":
           dodgeFumble = true;
-          await _postDodgeResult(attacker, target, attackData.skillName, "fumble");
+          await _postDodgeResult(attacker, target, live.skillName, "fumble");
           break;
 
         case "fail":
-          await _postDodgeResult(attacker, target, attackData.skillName, "fail");
+          await _postDodgeResult(attacker, target, live.skillName, "fail");
           break;
       }
     }
@@ -245,7 +238,7 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
       isPhysical,
       isCritical,
       attacker,
-      skillName: attackData.skillName,
+      skillName: live.skillName,
       dodgeFumble
     });
 
@@ -263,14 +256,23 @@ export async function resolveAttack(message, attackData, skipDodge = false) {
         element,
         isCritical,
         dodgeFumble,
-        targetTokenUuid: attackData.targetTokenUuid
+        targetTokenUuid: row.targetTokenUuid
       });
     }
 
-    await message.setFlag("smt-rpg", "attackData", { ...attackData, resolved: true });
+    await _markTargetResolved(message, index, _damageOutcomeLabel(dmgResult, isCritical));
   } finally {
-    _inFlight.delete(message.id);
+    _inFlight.delete(lockKey);
   }
+}
+
+// Brief per-row outcome for the consolidated card (the full damage card still posts separately).
+function _damageOutcomeLabel(dmgResult, isCritical) {
+  if (!dmgResult) return "—";
+  if (dmgResult.isNull) return "Null";
+  if (dmgResult.isDrain) return `Drain +${dmgResult.drainedAmount ?? 0}`;
+  if (dmgResult.isRepel) return `Repel ${dmgResult.reflectedDamage ?? 0}`;
+  return `−${dmgResult.finalDamage ?? 0}${isCritical ? " ★" : ""}`;
 }
 
 // p.66

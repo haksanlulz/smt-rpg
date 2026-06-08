@@ -1,13 +1,24 @@
 <div class="smt-roll attack-pending {{#if isCritical}}critical{{/if}}">
-  <h3>{{skillName}} → {{targetName}}</h3>
+  <h3>{{skillName}}</h3>
   <div class="roll-breakdown">
     <span>{{localize "SMT.Damage.Raw"}}: {{rawPower}}</span>
     {{#if isCritical}}
       <span class="roll-outcome critical">{{localize "SMT.Roll.Critical"}}</span>
     {{/if}}
   </div>
-  <div class="attack-buttons">
-    <button type="button" data-action="dodge">{{localize "SMT.DodgeButton"}}</button>
-    <button type="button" data-action="apply-damage">{{localize "SMT.DodgeApplyDamage"}}</button>
+  <div class="attack-targets">
+    {{#each targets as |t i|}}
+    <div class="attack-target-row" data-index="{{i}}">
+      <span class="target-name">{{t.name}}</span>
+      {{#if t.resolved}}
+        <span class="target-outcome">{{t.outcome}}</span>
+      {{else}}
+        <span class="attack-buttons">
+          <button type="button" data-action="dodge" data-index="{{i}}">{{localize "SMT.DodgeButton"}}</button>
+          <button type="button" data-action="apply-damage" data-index="{{i}}">{{localize "SMT.DodgeApplyDamage"}}</button>
+        </span>
+      {{/if}}
+    </div>
+    {{/each}}
   </div>
 </div>

@@ -395,39 +395,47 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
 
 async function _bindAttackButtons(message, html) {
   const attackData = message.getFlag("smt-rpg", "attackData");
-  if (!attackData) return;
+  if (!attackData || !Array.isArray(attackData.targets)) return;
   if (attackData.resolved) {
-    html.querySelector(".attack-buttons")?.remove();
+    html.querySelectorAll(".attack-buttons").forEach(el => el.remove());
     return;
   }
   const { resolveAttack, getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
 
-  // Only GM/target-owner may resolve. Flags are forgeable, so this gate is the access control.
-  const target = getActorFromTokenUuid(attackData.targetTokenUuid);
-  const dodgeBtn = html.querySelector("[data-action='dodge']");
-  const applyBtn = html.querySelector("[data-action='apply-damage']");
-  if (!target || !(game.user.isGM || target.canUserModify(game.user, "update"))) {
-    if (dodgeBtn) dodgeBtn.disabled = true;
-    if (applyBtn) applyBtn.disabled = true;
-    return;
+  // Bind each target row independently; only the GM/target-owner may resolve that row.
+  for (const rowEl of html.querySelectorAll(".attack-target-row")) {
+    const index = Number(rowEl.dataset.index);
+    const row = attackData.targets[index];
+    const dodgeBtn = rowEl.querySelector("[data-action='dodge']");
+    const applyBtn = rowEl.querySelector("[data-action='apply-damage']");
+    if (!row || row.resolved) {
+      rowEl.querySelector(".attack-buttons")?.remove();
+      continue;
+    }
+
+    const target = getActorFromTokenUuid(row.targetTokenUuid);
+    if (!target || !(game.user.isGM || target.canUserModify(game.user, "update"))) {
+      if (dodgeBtn) dodgeBtn.disabled = true;
+      if (applyBtn) applyBtn.disabled = true;
+      continue;
+    }
+
+    // Disable both in this row on first click so an in-flight dodge can't be raced against Apply.
+    const disableBoth = () => {
+      if (dodgeBtn) dodgeBtn.disabled = true;
+      if (applyBtn) applyBtn.disabled = true;
+    };
+    dodgeBtn?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      disableBoth();
+      await resolveAttack(message, index, false);
+    });
+    applyBtn?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      disableBoth();
+      await resolveAttack(message, index, true);
+    });
   }
-
-  // Disable both on first click so an in-flight dodge can't be raced against Apply-damage.
-  const disableBoth = () => {
-    if (dodgeBtn) dodgeBtn.disabled = true;
-    if (applyBtn) applyBtn.disabled = true;
-  };
-
-  dodgeBtn?.addEventListener("click", async (event) => {
-    event.preventDefault();
-    disableBoth();
-    await resolveAttack(message, attackData, false);
-  });
-  applyBtn?.addEventListener("click", async (event) => {
-    event.preventDefault();
-    disableBoth();
-    await resolveAttack(message, attackData, true);
-  });
 }
 
 async function _bindFateCheckButtons(message, html) {
