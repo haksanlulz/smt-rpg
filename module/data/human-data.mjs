@@ -60,7 +60,7 @@ export default class HumanData extends SMTBaseActorData {
       this.rangedWeapon = {
         name: rangedWeapon.name,
         power: rangedWeapon.system.powerBonus + this.agilityTotal,
-        tn: this.agilityTN,
+        tn: this.agilityTN + this.rangedTnBonus,
         ammo: rangedWeapon.system.ammo
       };
     } else {

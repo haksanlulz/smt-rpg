@@ -19,6 +19,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       rollCheck: SMTBaseActorSheet.#onRollCheck,
       strike: SMTBaseActorSheet.#onStrike,
       shoot: SMTBaseActorSheet.#onShoot,
+      reload: SMTBaseActorSheet.#onReload,
       concentrate: SMTBaseActorSheet.#onConcentrate,
       defend: SMTBaseActorSheet.#onDefend,
       levelUp: SMTBaseActorSheet.#onLevelUp,
@@ -242,7 +243,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       const powerResult = await actor.rollPower(
         actor.system.basePhysicalPower, 0,
         `${skillName} — ${game.i18n.localize("SMT.Power")}`,
-        checkResult.isCritical
+        checkResult.isCritical,
+        actor.system.physicalPowerBonusDice
       );
       await postAttacksToTargets({
         attacker: actor,
@@ -318,6 +320,26 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         checkMessageId: checkResult.messageId
       });
     }
+  }
+
+  // Reload the equipped firearm to full (a full action; GM tracks the action cost). p.63.
+  static async #onReload() {
+    const actor = this.document;
+    const weapon = actor.items.find(i => i.type === "gear" && i.system.gearType === "weapon-ranged" && i.system.equipped);
+    if (!weapon) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoRangedWeapon"));
+      return;
+    }
+    const max = Number(weapon.system.ammo?.max) || 0;
+    if ((Number(weapon.system.ammo?.value) || 0) >= max) {
+      ui.notifications.info(game.i18n.localize("SMT.Reload.Full"));
+      return;
+    }
+    await weapon.update({ "system.ammo.value": max });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.Reload.Done", { name: actor.name })}</p></div>`
+    });
   }
 
   // Concentrate (p.64): pick an action via DialogV2, then hold a bonus for its next hit check.

@@ -78,6 +78,9 @@
   "SMT.BasicAttack": "Basic Attack",
   "SMT.HitCheck": "Hit Check",
   "SMT.Shoot": "Shoot",
+  "SMT.Reload.Label": "Reload",
+  "SMT.Reload.Full": "Magazine is already full.",
+  "SMT.Reload.Done": "{name} reloads — ammo restored.",
   "SMT.Ammo": "Ammo",
   "SMT.Affinities": "Affinities",
   "SMT.AilmentAffinities": "Ailment Affinities",
@@ -177,6 +180,8 @@
   "SMT.PassiveEffect.ManaGain": "Mana Gain (+2 MP mult.)",
   "SMT.PassiveEffect.ManaSurge": "Mana Surge (+3 MP mult.)",
   "SMT.PassiveEffect.Might": "Might (crit at TN/5)",
+  "SMT.PassiveEffect.SureShot": "Sure Shot (+10 Shoot TN)",
+  "SMT.PassiveEffect.PowerfulStrikes": "Powerful Strikes (+1d10 phys power)",
 
   "SMT.GearType.Label": "Gear Type",
   "SMT.GearType.WeaponMelee": "Melee Weapon",

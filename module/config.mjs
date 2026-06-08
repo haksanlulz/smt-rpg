@@ -185,7 +185,10 @@ SMT.passiveEffects = {
   manaBonus: { label: "SMT.PassiveEffect.ManaBonus", legacyNames: ["Mana Bonus"], kind: "amplify", resource: "mp", value: 1 },
   manaGain: { label: "SMT.PassiveEffect.ManaGain", legacyNames: ["Mana Gain"], kind: "amplify", resource: "mp", value: 2 },
   manaSurge: { label: "SMT.PassiveEffect.ManaSurge", legacyNames: ["Mana Surge"], kind: "amplify", resource: "mp", value: 3 },
-  might: { label: "SMT.PassiveEffect.Might", legacyNames: ["Might"], kind: "might" }
+  might: { label: "SMT.PassiveEffect.Might", legacyNames: ["Might"], kind: "might" },
+  // shootTn: flat + to the ranged-weapon (Shoot) TN. powerDie: extra die added to physical power rolls.
+  sureShot: { label: "SMT.PassiveEffect.SureShot", legacyNames: ["Sure Shot"], kind: "shootTn", value: 10 },
+  powerfulStrikes: { label: "SMT.PassiveEffect.PowerfulStrikes", legacyNames: ["Powerful Strikes"], kind: "powerDie", value: "1d10" }
 };
 
 // Skill-sheet passive-effect dropdown (key -> label), derived from the registry.

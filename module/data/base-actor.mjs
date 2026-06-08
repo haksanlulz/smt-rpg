@@ -1,5 +1,5 @@
 import { makeAffinitySchema, makeAilmentAffinitySchema, STATS } from "./fields.mjs";
-import { passiveMultiplierBonuses, hasMightEffect } from "../helpers/passives.mjs";
+import { passiveMultiplierBonuses, hasMightEffect, shootTnBonus, physicalPowerDice } from "../helpers/passives.mjs";
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
@@ -97,6 +97,18 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     // Amplify bonuses come only from passive-type skills (p.109).
     const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
     return passiveMultiplierBonuses(passives, CONFIG.SMT.passiveEffects);
+  }
+
+  // Flat +Shoot-TN from passive skills (e.g. Sure Shot +10). Folded into rangedWeapon.tn.
+  get rangedTnBonus() {
+    const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
+    return shootTnBonus(passives, CONFIG.SMT.passiveEffects);
+  }
+
+  // Extra physical power-roll dice (e.g. Powerful Strikes +1d10) as a roll fragment ("" if none).
+  get physicalPowerBonusDice() {
+    const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
+    return physicalPowerDice(passives, CONFIG.SMT.passiveEffects).join(" + ");
   }
 
   // Zero the buff/setup accumulators before effects apply (p.96, p.64).
