@@ -285,6 +285,7 @@ SMT.buffEffectChoices = {
   tarunda: "SMT.Buff.Tarunda",
   rakunda: "SMT.Buff.Rakunda",
   sukunda: "SMT.Buff.Sukunda",
+  provoke: "SMT.Buff.Provoke",
   dekaja: "SMT.Buff.Dekaja",
   dekunda: "SMT.Buff.Dekunda"
 };
