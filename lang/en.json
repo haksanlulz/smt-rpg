@@ -86,6 +86,7 @@
   "SMT.AilmentAffinities": "Ailment Affinities",
 
   "SMT.Tab.Combat": "Combat",
+  "SMT.Tab.Effects": "Effects",
   "SMT.Tab.Skills": "Skills",
   "SMT.Tab.Magatama": "Magatama",
   "SMT.Tab.Gear": "Gear",
@@ -319,6 +320,8 @@
   "SMT.Effects.Label": "Buffs & Actions",
   "SMT.Effects.None": "No active effects.",
   "SMT.Effects.Remove": "Remove",
+  "SMT.Effects.Value": "Value",
+  "SMT.Effects.Ailment": "Ailment",
 
   "SMT.Defeated": "Defeated",
   "SMT.ClearCondition": "Click to clear",

@@ -136,6 +136,7 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/actor/partials/skills.hbs",
     "systems/smt-rpg/templates/actor/partials/affinities.hbs",
     "systems/smt-rpg/templates/actor/partials/conditions.hbs",
+    "systems/smt-rpg/templates/actor/partials/effects.hbs",
     "systems/smt-rpg/templates/chat/percentile-roll.hbs",
     "systems/smt-rpg/templates/chat/power-roll.hbs",
     "systems/smt-rpg/templates/chat/auto-success.hbs",
