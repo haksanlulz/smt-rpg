@@ -131,6 +131,7 @@ SMT.demonClans = {
 
 SMT.skillTypes = {
   "physical-attack": "SMT.SkillType.PhysicalAttack",
+  "ranged-attack": "SMT.SkillType.RangedAttack",
   "magical-attack": "SMT.SkillType.MagicalAttack",
   spell: "SMT.SkillType.Spell",
   recovery: "SMT.SkillType.Recovery",

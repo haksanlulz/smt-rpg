@@ -156,6 +156,7 @@
 
   "SMT.SkillType.Label": "Skill Type",
   "SMT.SkillType.PhysicalAttack": "Physical Attack",
+  "SMT.SkillType.RangedAttack": "Ranged Attack",
   "SMT.SkillType.MagicalAttack": "Magical Attack",
   "SMT.SkillType.Spell": "Spell",
   "SMT.SkillType.Recovery": "Recovery",
@@ -164,6 +165,7 @@
   "SMT.SkillType.Passive": "Passive",
   "SMT.SkillType.TalkApproach": "Talk (Approach)",
   "SMT.SkillType.TalkSupport": "Talk (Support)",
+  "SMT.Shots": "Shots (ranged)",
 
   "SMT.PassiveEffect.Label": "Passive Effect",
   "SMT.PassiveEffect.None": "None",
@@ -268,6 +270,7 @@
   "SMT.Warnings.NoTargets": "No targets selected — damage not applied.",
   "SMT.Warnings.NoItems": "No items remaining.",
   "SMT.Warnings.NoAmmo": "Out of ammo! Use an action to reload.",
+  "SMT.Warnings.NoRangedWeapon": "No firearm equipped.",
   "SMT.Warnings.SkillCap": "Cannot add more skills. Maximum of 8 skills allowed.",
   "SMT.Warnings.PassiveSkill": "Passive skills cannot be used as an action.",
   "SMT.Warnings.InsufficientResource": "Not enough {resource}. Need {cost}.",
