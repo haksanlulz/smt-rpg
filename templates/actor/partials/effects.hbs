@@ -1,5 +1,5 @@
-{{!-- Effects tab: all active buff/debuff/stance effects (magnitude + stacks, removable) plus the
-  common ailment and Death/Curse flags (each with a clear control). --}}
+{{!-- Effects panel: all buff/debuff/stance effects (magnitude + stacks; toggle / edit / remove)
+  plus the common ailment and Death/Curse flags (each with a clear control). --}}
 <div class="items-list effects-list">
   <div class="items-header">
     <span class="item-name">{{localize "SMT.Effects.Label"}}</span>
@@ -8,10 +8,12 @@
   </div>
 
   {{#each effectsList as |fx|}}
-  <div class="item effect-row {{fx.kind}}" data-effect-id="{{fx.id}}">
+  <div class="item effect-row {{fx.kind}}{{#if fx.disabled}} disabled{{/if}}" data-effect-id="{{fx.id}}">
     <span class="item-name"><img src="{{fx.img}}" width="18" height="18" alt="" /> {{fx.name}}</span>
     <span class="item-detail">{{fx.detail}}</span>
     <span class="item-controls">
+      <a class="item-control" data-action="toggleEffect" title="{{localize 'SMT.Effects.Toggle'}}"><i class="fas {{#if fx.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></a>
+      <a class="item-control" data-action="editEffect" title="{{localize 'SMT.Effects.Edit'}}"><i class="fas fa-edit"></i></a>
       <a class="item-control" data-action="removeEffect" title="{{localize 'SMT.Effects.Remove'}}"><i class="fas fa-times"></i></a>
     </span>
   </div>

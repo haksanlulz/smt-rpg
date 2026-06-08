@@ -323,6 +323,8 @@
   "SMT.Effects.Remove": "Remove",
   "SMT.Effects.Value": "Value",
   "SMT.Effects.Ailment": "Ailment",
+  "SMT.Effects.Toggle": "Enable / disable",
+  "SMT.Effects.Edit": "Edit effect",
 
   "SMT.Defeated": "Defeated",
   "SMT.ClearCondition": "Click to clear",
