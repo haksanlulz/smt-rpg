@@ -501,9 +501,11 @@ export async function resolveCheckBoost(message, checkData) {
   }
 }
 
-// Shared by reroll and boost: persist resolved, then trigger power roll on fail->success or cancel attacks on success->fail.
+// Shared by reroll and boost: persist the new check state, then trigger power roll on fail->success or cancel attacks on
+// success->fail. Left UNRESOLVED so more fate points can be spent on the same roll (reroll repeatedly, stack +20% TN; p.59);
+// the per-spend FP-balance check caps it, and _inFlight still guards double-click races. currentTN carries across rerolls.
 async function _cascadeCheckChange(message, oldCheckData, newCheckData, oldSuccess, newSuccess, actor) {
-  await message.setFlag("smt-rpg", "checkData", { ...newCheckData, resolved: true });
+  await message.setFlag("smt-rpg", "checkData", { ...newCheckData, resolved: false });
 
   if (!oldSuccess && newSuccess && newCheckData.hasPowerRoll) {
     if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Cascade: fail→success, triggering power roll");
@@ -581,10 +583,11 @@ export async function resolveHalveDamage(message, damageData) {
       fpRemaining: target.system.fatePoints.value
     });
 
+    // Left UNRESOLVED so the same hit can be halved again (1/4, 1/8, ...) per p.59; capped by FP balance and the oldDamage<=0 guard.
     await message.setFlag("smt-rpg", "damageData", {
       ...damageData,
       currentDamage: newDamage,
-      resolved: true
+      resolved: false
     });
 
     const content = await foundry.applications.handlebars.renderTemplate(
