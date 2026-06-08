@@ -23,11 +23,17 @@ export default class SMTItem extends Item {
   get hasPowerRoll() {
     if (this.type !== "skill") return false;
     const t = this.system.skillType;
+    if (t === "ranged-attack") return true; // power comes from the firearm, not the skill potency
     return (t === "physical-attack" || t === "magical-attack" || t === "spell") && this.system.power > 0;
   }
 
   get isPhysicalSkill() {
     return this.system.skillType === "physical-attack";
+  }
+
+  // Firearm skill (p.63): uses the equipped ranged weapon's power (Agility + gear, no level) and spends ammo.
+  get isRangedSkill() {
+    return this.system.skillType === "ranged-attack";
   }
 
   // Magic that Mute seals (p.66): spell or magical attack.
@@ -69,6 +75,9 @@ export default class SMTItem extends Item {
       return;
     }
 
+    // Firearm skills need an equipped, loaded gun before the action's cost is spent (p.63).
+    if (this.isRangedSkill && !this._readyRangedWeapon(actor)) return;
+
     const cost = this.system.cost;
     if (cost.resource !== "none" && cost.value > 0) {
       const resource = cost.resource;
@@ -86,6 +95,12 @@ export default class SMTItem extends Item {
     // Poison drains HP per non-reactive action (p.66).
     const { applyPoisonDrain } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
+
+    // Firearm skills resolve through the ranged-weapon power path (p.63), spending ammo per shot.
+    if (this.isRangedSkill) {
+      await this._rangedAttack(actor);
+      return;
+    }
 
     // Buff/debuff/dispel resolve via ActiveEffects (p.96); auto-succeed, no rolls.
     if (this.isBuffSkill) {
@@ -205,6 +220,89 @@ export default class SMTItem extends Item {
           isCritical: checkResult.isCritical,
           dodgeFumble: false,
           targetTokenUuid: token.document.uuid
+        });
+      }
+    }
+  }
+
+  // True when a firearm is equipped and has at least one round chambered (p.63).
+  _readyRangedWeapon(actor) {
+    const rw = actor.system.rangedWeapon;
+    const weapon = actor.items.find(i => i.type === "gear" && i.system.gearType === "weapon-ranged" && i.system.equipped);
+    if (!rw || !weapon) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoRangedWeapon"));
+      return false;
+    }
+    if (weapon.system.ammo.value <= 0) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoAmmo"));
+      return false;
+    }
+    return true;
+  }
+
+  // Firearm skill (p.63): fires the equipped gun `shots` times. Power = gun power (Agility + gear, no level)
+  // plus the skill's own potency; hit check vs the gun's Agility TN. One round spent per shot.
+  async _rangedAttack(actor) {
+    const { postAttacksToTargets, buildCheckData, resolveTargets, applyStunHitCap } = await import("../helpers/combat.mjs");
+    const { consumeConcentrate } = await import("../helpers/effects.mjs");
+    const weapon = actor.items.find(i => i.type === "gear" && i.system.gearType === "weapon-ranged" && i.system.equipped);
+    const rw = actor.system.rangedWeapon;
+    if (!weapon || !rw) return;
+
+    const shots = Math.max(1, this.system.shots ?? 1);
+    const skillPower = this.system.power;
+    const statLabel = game.i18n.localize("SMT.Stat.Agility");
+
+    for (let i = 0; i < shots; i++) {
+      if (weapon.system.ammo.value <= 0) {
+        ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoAmmo"));
+        break;
+      }
+      await weapon.update({ "system.ammo.value": weapon.system.ammo.value - 1 });
+
+      let tn = this.system.customTN ? this.system.tn : rw.tn;
+      let label = shots > 1 ? `${this.name} ${i + 1}/${shots} (${statLabel})` : `${this.name} (${statLabel})`;
+
+      // Concentrate applies once to the whole action (p.64); fold it onto the first shot only.
+      if (i === 0) {
+        const concentrate = await consumeConcentrate(actor, this.name);
+        if (concentrate) {
+          tn += concentrate;
+          label += ` +${concentrate}%`;
+        }
+      }
+      tn = applyStunHitCap(actor, tn);
+
+      const checkResult = await actor.rollPercentile(tn, label);
+
+      if (actor.system.fatePoints.value > 0) {
+        const msg = game.messages.get(checkResult.messageId);
+        if (msg) {
+          await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+            actor, checkResult, tn,
+            hasPowerRoll: true, basePower: rw.power,
+            skillPower, element: "phys", isPhysical: true,
+            skillName: this.name, targetsString: this.system.targets,
+            ailmentType: "none", ailmentRate: 0
+          }));
+        }
+      }
+
+      if (checkResult.isSuccess) {
+        const powerResult = await actor.rollPower(
+          rw.power, skillPower,
+          `${this.name} — ${game.i18n.localize("SMT.Power")}`,
+          checkResult.isCritical
+        );
+        await postAttacksToTargets({
+          attacker: actor,
+          targets: resolveTargets(actor, this.system.targets),
+          rawPower: powerResult.total,
+          element: "phys",
+          isPhysical: true,
+          isCritical: powerResult.isCritical,
+          skillName: this.name,
+          checkMessageId: checkResult.messageId
         });
       }
     }

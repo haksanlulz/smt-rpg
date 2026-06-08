@@ -21,6 +21,8 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
         choices: ["strength", "magic", "vitality", "agility", "luck"]
       }),
       power: new NumberField({ integer: true, initial: 0 }),
+      // Shots fired per use for ranged-attack skills (Double Tap = 2); ignored for other types.
+      shots: new NumberField({ integer: true, min: 1, initial: 1 }),
       targets: new StringField({ initial: "1" }),
       // Full element list (incl. recovery/support/none) lives in CONFIG.SMT.elements.
       element: new StringField({
