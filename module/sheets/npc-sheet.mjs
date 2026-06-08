@@ -28,6 +28,7 @@ export default class SMTNPCSheet extends SMTBaseActorSheet {
       affinityEntries: this._prepareAffinityEntries(),
       ailmentAffinityEntries: this._prepareAilmentAffinityEntries(),
       effectChips: this._prepareEffectChips(),
+      effectsList: this._prepareEffectsList(),
       conditions: this._prepareConditions(),
       ailmentChoices: SMT.ailments,
       affinityChoices: SMT.affinityRatings,

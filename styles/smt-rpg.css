@@ -422,6 +422,22 @@
   color: var(--smt-accent);
 }
 
+/* Effects panel: colour-code rows by kind, dim disabled ones. */
+.effect-row .item-name img {
+  vertical-align: middle;
+  border: none;
+  margin-right: 4px;
+}
+.effect-row.disabled {
+  opacity: 0.45;
+}
+.effect-row.buff { border-left: 3px solid #4caf50; }
+.effect-row.debuff { border-left: 3px solid #e05a5a; }
+.effect-row.concentrate,
+.effect-row.defend { border-left: 3px solid var(--smt-accent); }
+.effect-row.ailment { border-left: 3px solid #9c5ab8; }
+.npc-effects { margin-top: 10px; }
+
 .skill-row.passive {
   opacity: 0.7;
   font-style: italic;

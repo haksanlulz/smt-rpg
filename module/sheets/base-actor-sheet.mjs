@@ -24,6 +24,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       defend: SMTBaseActorSheet.#onDefend,
       levelUp: SMTBaseActorSheet.#onLevelUp,
       removeEffect: SMTBaseActorSheet.#onRemoveEffect,
+      editEffect: SMTBaseActorSheet.#onEditEffect,
+      toggleEffect: SMTBaseActorSheet.#onToggleEffect,
       clearAilment: SMTBaseActorSheet.#onClearAilment,
       saveAilment: SMTBaseActorSheet.#onSaveAilment,
       clearDeath: SMTBaseActorSheet.#onClearDeath,
@@ -137,7 +139,8 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
   // current magnitude + stack count and a remove control. Ailments render separately from `conditions`.
   _prepareEffectsList() {
     const list = [];
-    for (const e of this.document.appliedEffects) {
+    // All effects (incl. disabled) so the toggle control can re-enable them.
+    for (const e of this.document.effects) {
       const f = e.flags?.["smt-rpg"];
       if (!f) continue;
       const mag = Number(e.changes?.[0]?.value) || 0;
@@ -147,7 +150,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         const def = SMT.buffs[f.buff.effect];
         kind = (def?.sign ?? 1) < 0 ? "debuff" : "buff";
         const stacks = Number(f.buff.stacks) || 0;
-        detail = `${mag >= 0 ? "+" : ""}${mag} ×${stacks}`;
+        detail = `${mag >= 0 ? "+" : ""}${mag}${stacks > 1 ? ` ×${stacks}` : ""}`;
       } else if (f.concentrate) {
         kind = "concentrate";
         detail = `+${mag}%`;
@@ -156,7 +159,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         detail = `+${mag}%`;
       }
       if (!kind) continue;
-      list.push({ id: e.id, name: e.name, img: e.img, kind, detail });
+      list.push({ id: e.id, name: e.name, img: e.img, kind, detail, disabled: !!e.disabled });
     }
     return list;
   }
@@ -460,6 +463,24 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     const effectId = target.closest("[data-effect-id]")?.dataset.effectId;
     const effect = actor.effects.get(effectId);
     if (effect) await effect.delete();
+  }
+
+  // Open the ActiveEffect config sheet (full changes/duration view).
+  static #onEditEffect(event, target) {
+    const effectId = target.closest("[data-effect-id]")?.dataset.effectId;
+    this.document.effects.get(effectId)?.sheet.render(true);
+  }
+
+  // Enable/disable an effect without deleting it.
+  static async #onToggleEffect(event, target) {
+    const { canModifyEffects } = await import("../helpers/effects.mjs");
+    if (!canModifyEffects(this.document)) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+      return;
+    }
+    const effectId = target.closest("[data-effect-id]")?.dataset.effectId;
+    const effect = this.document.effects.get(effectId);
+    if (effect) await effect.update({ disabled: !effect.disabled });
   }
 
   // Clear the common-ailment slot (p.68). The write fires updateActor, re-mirroring HUD icons.
