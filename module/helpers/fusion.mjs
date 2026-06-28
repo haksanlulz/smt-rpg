@@ -70,6 +70,29 @@ export function crossClanFusion(clanA, clanB) {
   return order.includes(result) ? result : null;
 }
 
+// Rank direction ("up"/"down") when an Element demon is fused with a non-Element one
+// (p.81): the result is the non-Element clan, one rank higher or lower per the Rank
+// Up/Down Table (CONFIG.SMT.fusion.rankShift). Argument order is free — whichever side is
+// the Element clan is used. Returns null unless EXACTLY one side is an Element clan and the
+// pair is on the table; fail-closed and never throws. Case-insensitive. The Cursed reversal
+// (p.81) and the actual rank-resolved demon (level lookup within the clan, needing the demon
+// roster) are out of scope here — this returns only the direction.
+export function rankShiftFusion(clanA, clanB) {
+  const a = String(clanA ?? "").trim().toLowerCase();
+  const b = String(clanB ?? "").trim().toLowerCase();
+  if (!a || !b) return null;
+  const elementClans = CONFIG.SMT?.fusion?.elementClans;
+  const rankShift = CONFIG.SMT?.fusion?.rankShift;
+  if (!elementClans || !rankShift) return null;
+  const aIsElement = a in elementClans;
+  const bIsElement = b in elementClans;
+  if (aIsElement === bIsElement) return null; // need exactly one Element side
+  const element = aIsElement ? a : b;
+  const clan = aIsElement ? b : a;
+  const dir = rankShift[clan]?.[element];
+  return dir === "up" || dir === "down" ? dir : null;
+}
+
 // Whether a demon name is on the p.80 exception list (cannot be normally fused).
 export function isExceptionDemon(name) {
   const n = String(name ?? "").trim().toLowerCase();
