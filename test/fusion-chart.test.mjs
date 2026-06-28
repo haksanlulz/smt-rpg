@@ -11,7 +11,7 @@ if (typeof Math.clamp !== "function") {
 }
 globalThis.CONFIG = { SMT };
 
-const { crossClanFusion } = await import("../module/helpers/fusion.mjs");
+const { crossClanFusion, rankShiftFusion } = await import("../module/helpers/fusion.mjs");
 
 let passed = 0;
 let failed = 0;
@@ -146,6 +146,89 @@ const idx = Object.fromEntries(clanOrder.map((c, i) => [c, i]));
   eq(crossClanFusion("deity", "kishin"), null, "empty chart -> null, no throw");
   CONFIG.SMT = { ...CONFIG.SMT, fusion: realFusion }; // restore
   eq(crossClanFusion("deity", "kishin"), "fury", "restored chart resolves again");
+}
+
+// REGRESSION — the field's single worst liability: an engine that does a naive
+// chart[a]?.[b] ?? chart[b]?.[a] double-read with NO guard that the looked-up result is a
+// real clan on the axis. A transcription typo (off-axis result key) or a stray
+// lower-triangle cell would then silently PROPAGATE a bad clan into fusion instead of
+// failing closed. The shipped engine canonicalises via clanOrder and guards the result with
+// order.includes(result). This block pins that contract so a future regression to the naive
+// double-read can never re-enter: an off-axis stored result must degrade to null, and stored
+// data must stay strictly upper-triangular (no lower-triangle duplicates a mirror could read).
+{
+  const realFusion = CONFIG.SMT.fusion;
+  const real = realFusion.normalChart;
+
+  // (a) Off-axis result key in a cell MUST resolve to null, not propagate the bad clan.
+  const poisoned = {
+    clanOrder: ["aa", "bb", "cc"],
+    chart: { aa: { bb: "zz" } }   // "zz" is NOT on clanOrder -> must be rejected
+  };
+  CONFIG.SMT = { ...CONFIG.SMT, fusion: { ...realFusion, normalChart: poisoned } };
+  eq(crossClanFusion("aa", "bb"), null, "off-axis result key degrades to null (no bad-clan propagation)");
+  eq(crossClanFusion("bb", "aa"), null, "off-axis result key is null on the mirrored read too");
+
+  // A valid on-axis result in the same shape still resolves (guard is targeted, not blanket).
+  const clean = { clanOrder: ["aa", "bb", "cc"], chart: { aa: { bb: "cc" } } };
+  CONFIG.SMT = { ...CONFIG.SMT, fusion: { ...realFusion, normalChart: clean } };
+  eq(crossClanFusion("aa", "bb"), "cc", "a valid on-axis result still resolves");
+  eq(crossClanFusion("bb", "aa"), "cc", "on-axis result is commutative");
+
+  CONFIG.SMT = { ...CONFIG.SMT, fusion: realFusion }; // restore real data
+
+  // (b) The real shipped chart stores ONLY the upper triangle — no lower-triangle cell that a
+  // mirrored read could pick up as a conflicting (and unguarded) value.
+  const order = real.clanOrder;
+  const ix = Object.fromEntries(order.map((c, i) => [c, i]));
+  let lowerTri = 0;
+  for (const [row, cols] of Object.entries(real.chart)) {
+    for (const col of Object.keys(cols)) {
+      if (ix[col] <= ix[row]) lowerTri++;
+    }
+  }
+  eq(lowerTri, 0, "real chart has zero lower-triangle cells (mirror can never read a conflicting value)");
+}
+
+// REGRESSION — rankShift graft (p.81 Rank Up/Down): the table + pure rankShiftFusion helper.
+// Direction values were independently re-verified against the PDF by positional extraction
+// (84/84 cells, 0 mismatches). This pins the graft so it cannot silently rot: the helper is
+// order-free, needs EXACTLY one Element side, is fail-closed, and the table stays complete.
+{
+  const { elementClans, rankShift } = CONFIG.SMT.fusion;
+  const elements = Object.keys(elementClans);          // flaemis, aquans, aeros, erthys
+  eq(elements.length, 4, "four Element clans (flaemis/aquans/aeros/erthys)");
+
+  // Table completeness: 21 non-Element clans x 4 elements = 84 cells, each "up" | "down".
+  let cells = 0, bad = [];
+  for (const [clan, row] of Object.entries(rankShift)) {
+    for (const el of elements) {
+      const v = row[el];
+      if (v !== "up" && v !== "down") bad.push(`${clan}.${el}=${v}`);
+      else cells++;
+    }
+  }
+  eq(rankShift && Object.keys(rankShift).length, 21, "rankShift covers 21 non-Element clans");
+  eq(bad, [], "every rankShift cell is exactly 'up' or 'down'");
+  eq(cells, 84, "rankShift table has 84 complete cells");
+
+  // A few PDF-verified anchors (independently positional-extracted), both argument orders.
+  eq(rankShiftFusion("holy", "flaemis"), "up", "holy + flaemis = up (p.81)");
+  eq(rankShiftFusion("flaemis", "holy"), "up", "rankShift is order-free");
+  eq(rankShiftFusion("lady", "erthys"), "up", "lady + erthys = up (p.81)");
+  eq(rankShiftFusion("deity", "flaemis"), "down", "deity + flaemis = down (p.81)");
+  eq(rankShiftFusion("yoma", "aquans"), "up", "yoma + aquans = up (p.81)");
+
+  // Fail-closed contract: needs exactly one Element side, never throws on garbage.
+  eq(rankShiftFusion("holy", "deity"), null, "two non-Element clans -> null (no Element side)");
+  eq(rankShiftFusion("flaemis", "aquans"), null, "two Element clans -> null");
+  eq(rankShiftFusion("holy", "holy"), null, "same non-Element clan -> null");
+  for (const g of ["", "   ", "notaclan", null, undefined, 0, {}, [], NaN]) {
+    let threw = false, out;
+    try { out = rankShiftFusion(g, "flaemis"); } catch { threw = true; }
+    ok(!threw, `rankShiftFusion(${String(g)}, flaemis) does not throw`);
+    eq(out, null, `rankShiftFusion(${String(g)}, flaemis) is null`);
+  }
 }
 
 console.log(`\nsmt-rpg fusion-chart tests: ${passed} passed, ${failed} failed`);

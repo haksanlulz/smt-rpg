@@ -468,6 +468,38 @@ SMT.fusion = {
       avian: { raptor: "megami", entity: "deity" },
       raptor: { entity: "vile" }
     }
+  },
+
+  // Rank Up/Down Table (p.81): fusing an Element demon with a non-Element demon yields a
+  // demon of the NON-Element clan, one rank higher ("up") or lower ("down"). Direction
+  // depends on the Element and the non-Element clan, per this table. Keyed
+  // rankShift[nonElementClan][elementClan] -> "up" | "down". Read by helpers/fusion.mjs
+  // rankShiftFusion. Cells transcribed from p.81 and independently re-verified by positional
+  // PDF extraction (84/84 cells, 0 mismatches). A Cursed fusion reverses the direction
+  // (p.81) — that flip is the GM's call. The actual rank-resolved demon (the level lookup
+  // within the clan one step up/down) needs the demon roster and is NOT resolved here.
+  rankShift: {
+    deity: { flaemis: "down", aquans: "down", aeros: "down", erthys: "down" },
+    megami: { flaemis: "down", aquans: "down", aeros: "down", erthys: "down" },
+    fury: { flaemis: "down", aquans: "down", aeros: "down", erthys: "down" },
+    lady: { flaemis: "down", aquans: "down", aeros: "down", erthys: "up" },
+    kishin: { flaemis: "down", aquans: "down", aeros: "down", erthys: "up" },
+    holy: { flaemis: "up", aquans: "down", aeros: "down", erthys: "down" },
+    yoma: { flaemis: "down", aquans: "up", aeros: "up", erthys: "down" },
+    fairy: { flaemis: "down", aquans: "up", aeros: "down", erthys: "up" },
+    night: { flaemis: "down", aquans: "down", aeros: "up", erthys: "down" },
+    divine: { flaemis: "up", aquans: "up", aeros: "down", erthys: "down" },
+    fallen: { flaemis: "up", aquans: "down", aeros: "up", erthys: "down" },
+    snake: { flaemis: "up", aquans: "up", aeros: "down", erthys: "down" },
+    beast: { flaemis: "up", aquans: "down", aeros: "up", erthys: "down" },
+    jirae: { flaemis: "down", aquans: "down", aeros: "up", erthys: "up" },
+    brute: { flaemis: "up", aquans: "up", aeros: "down", erthys: "up" },
+    femme: { flaemis: "up", aquans: "up", aeros: "down", erthys: "up" },
+    vile: { flaemis: "down", aquans: "down", aeros: "down", erthys: "down" },
+    tyrant: { flaemis: "down", aquans: "down", aeros: "down", erthys: "down" },
+    wilder: { flaemis: "up", aquans: "up", aeros: "down", erthys: "down" },
+    haunt: { flaemis: "down", aquans: "down", aeros: "up", erthys: "down" },
+    foul: { flaemis: "down", aquans: "up", aeros: "down", erthys: "down" }
   }
 };
 
