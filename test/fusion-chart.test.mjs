@@ -137,6 +137,21 @@ const idx = Object.fromEntries(clanOrder.map((c, i) => [c, i]));
   eq(crossClanFusion("yoma", "vile"), "jirae", "yoma x vile = jirae");
 }
 
+// Independently-transcribed anchor cells (orchestrator's held-out probe, now permanent
+// ground-truth guards). Each verified against p.82 outside the build; both orderings.
+{
+  const probe = [
+    ["deity", "yoma", "megami"], ["deity", "divine", "megami"], ["deity", "fallen", "fury"],
+    ["megami", "yoma", "kishin"], ["megami", "fairy", "fallen"], ["megami", "divine", "holy"],
+    ["megami", "snake", "fairy"], ["fury", "fairy", "brute"], ["fury", "fallen", "vile"],
+    ["fury", "snake", "kishin"], ["lady", "fallen", "fury"],
+  ];
+  for (const [a, b, want] of probe) {
+    eq(crossClanFusion(a, b), want, `probe: ${a} x ${b} = ${want}`);
+    eq(crossClanFusion(b, a), want, `probe mirror: ${b} x ${a} = ${want}`);
+  }
+}
+
 // Graceful degradation if the SSoT is missing/garbled (defensive, mirrors real misconfig).
 {
   const realFusion = CONFIG.SMT.fusion;
