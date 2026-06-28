@@ -11,6 +11,9 @@
     <span>{{localize "SMT.ClanLabel"}}: {{clanLabel}}</span>
     <span>{{localize "SMT.Level"}}: {{level}}</span>
   </div>
+  {{#if crossClan}}
+  <div class="fusion-clan-source cross">{{localize "SMT.Fusion.CrossClanNote"}}</div>
+  {{/if}}
   {{#if isException}}
   <div class="roll-outcome failure">{{localize "SMT.Fusion.ExceptionWarning"}}</div>
   {{/if}}

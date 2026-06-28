@@ -38,6 +38,38 @@ export function elementClanFor(clanA, clanB) {
   return CONFIG.SMT.fusion.elementBorn[a] ?? null;
 }
 
+// Cross-clan Normal Fusion result (p.82). Returns the result clan KEY for two DIFFERENT
+// clans off CONFIG.SMT.fusion.normalChart, else null. Fail-closed by design: same clan,
+// unknown/empty clan, a clan absent from the chart's own clanOrder, or a blank ("-") cell
+// all return null and NEVER throw. Commutative (canonicalised to clanOrder) and
+// case-insensitive, mirroring elementClanFor. The chart diagonal is same-clan's job
+// (elementClanFor), so a===b is null here.
+export function crossClanFusion(clanA, clanB) {
+  const a = String(clanA ?? "").trim().toLowerCase();
+  const b = String(clanB ?? "").trim().toLowerCase();
+  if (!a || !b || a === b) return null;
+
+  const normalChart = CONFIG.SMT?.fusion?.normalChart;
+  const order = normalChart?.clanOrder;
+  const chart = normalChart?.chart;
+  if (!Array.isArray(order) || !chart) return null;
+
+  // Both clans must be on the chart's own axis, else there is no defined result.
+  const ia = order.indexOf(a);
+  const ib = order.indexOf(b);
+  if (ia < 0 || ib < 0) return null;
+
+  // Canonicalise to the stored upper triangle (row before col in clanOrder), then mirror.
+  const row = ia < ib ? a : b;
+  const col = ia < ib ? b : a;
+  const result = chart[row]?.[col];
+  if (typeof result !== "string" || !result) return null;
+
+  // Guard the stored value itself against a stray key (transcription typo): a result not
+  // on the axis is treated as no result rather than silently propagating a bad clan.
+  return order.includes(result) ? result : null;
+}
+
 // Whether a demon name is on the p.80 exception list (cannot be normally fused).
 export function isExceptionDemon(name) {
   const n = String(name ?? "").trim().toLowerCase();
@@ -130,8 +162,17 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   }
 
   const name = String(resultName ?? "").trim() || game.i18n.localize("SMT.Fusion.DefaultName");
+  // Result clan precedence (p.81-82): a GM-supplied clan always wins; else same-clan yields
+  // the Element clan (elementClanFor); else the cross-clan Normal Fusion Chart auto-resolves
+  // it. crossClanFusion is fail-closed, so on null we degrade to the prior GM-pick fallback
+  // (the first ingredient's clan) rather than crashing.
+  const gmClan = String(resultClan ?? "").trim();
   const sameClanElement = elementClanFor(demonA.system.clan, demonB.system.clan);
-  const clan = String(resultClan ?? "").trim() || sameClanElement || demonA.system.clan || "fairy";
+  const crossClan = crossClanFusion(demonA.system.clan, demonB.system.clan);
+  const clan = gmClan || sameClanElement || crossClan || demonA.system.clan || "fairy";
+  // How the clan was decided, for the card note: gm pick wins, then same-clan Element, then
+  // the auto-resolved cross-clan chart, else the legacy fallback.
+  const clanSource = gmClan ? "gm" : sameClanElement ? "element" : crossClan ? "cross" : "fallback";
 
   const system = buildFusedSystem(demonA, demonB);
   system.clan = clan;
@@ -169,6 +210,7 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   await postFusionCard({
     demonA, demonB, actor,
     clan,
+    clanSource,
     level: system.level,
     isException: isExceptionDemon(name),
     inheritedNames: chosen.map(c => c.name),
@@ -179,7 +221,7 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   return actor;
 }
 
-export async function postFusionCard({ demonA, demonB, actor, clan, level, isException, inheritedNames, allowed, combinedTotal }) {
+export async function postFusionCard({ demonA, demonB, actor, clan, clanSource, level, isException, inheritedNames, allowed, combinedTotal }) {
   const clanLabel = SMT.demonClans[clan]
     ? game.i18n.localize(SMT.demonClans[clan])
     : (SMT.fusion.elementClans[clan] ? game.i18n.localize(SMT.fusion.elementClans[clan]) : clan);
@@ -191,6 +233,7 @@ export async function postFusionCard({ demonA, demonB, actor, clan, level, isExc
       ingredientB: demonB.name,
       resultName: actor.name,
       clanLabel,
+      crossClan: clanSource === "cross",
       level,
       inheritedNames,
       inheritedCount: inheritedNames.length,
@@ -259,16 +302,23 @@ export async function openFusionDialog() {
     if (a === b) { out.innerHTML = `<span class="warn">${game.i18n.localize("SMT.Warnings.FusionTwoDemons")}</span>`; return; }
     const level = computeFusionLevel(a.system.level, b.system.level);
     const element = elementClanFor(a.system.clan, b.system.clan);
+    const cross = crossClanFusion(a.system.clan, b.system.clan);
     const chosenClan = root.querySelector("[name=resultClan]").value
-      || element || a.system.clan;
+      || element || cross || a.system.clan;
     const clanLabel = SMT.demonClans[chosenClan]
       ? game.i18n.localize(SMT.demonClans[chosenClan])
       : (SMT.fusion.elementClans[chosenClan] ? game.i18n.localize(SMT.fusion.elementClans[chosenClan]) : chosenClan);
     const combined = a.items.filter(i => i.type === "skill").length + b.items.filter(i => i.type === "skill").length;
     const allowed = inheritedSkillCount(combined);
+    // Note which rule set the clan: same-clan Element, or an auto-resolved cross-clan chart
+    // result (only when the GM hasn't overridden and there's no Element born).
+    const gmOverride = !!root.querySelector("[name=resultClan]").value;
+    const note = element
+      ? `<div class="preview-line element">${game.i18n.localize("SMT.Fusion.SameClanNote")}</div>`
+      : (!gmOverride && cross ? `<div class="preview-line cross">${game.i18n.localize("SMT.Fusion.CrossClanNote")}</div>` : "");
     out.innerHTML = `<div class="preview-line">${game.i18n.format("SMT.Fusion.Preview", {
       level, clan: esc(clanLabel), allowed, combined
-    })}</div>${element ? `<div class="preview-line element">${game.i18n.localize("SMT.Fusion.SameClanNote")}</div>` : ""}`;
+    })}</div>${note}`;
   };
 
   const result = await foundry.applications.api.DialogV2.wait({
