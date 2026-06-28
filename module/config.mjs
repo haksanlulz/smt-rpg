@@ -420,7 +420,55 @@ SMT.fusion = {
     "genbu", "samael", "girimekhala", "aciel", "lilith", "queen mab", "michael",
     "gabriel", "raphael", "uriel", "ganesha", "valkyrie", "arahabaki",
     "kurama tengu", "hanuman", "cu chulainn", "garuda", "gurulu", "albion"
-  ]
+  ],
+
+  // Cross-clan Normal Fusion Chart (p.82) — the config-authoritative SSoT for what two
+  // DIFFERENT clans normally fuse into. Read by helpers/fusion.mjs#crossClanFusion, which
+  // is fail-closed: any key not in clanOrder, any same-clan/unknown input, or any absent
+  // cell yields null and never throws. Same-clan results are elementBorn's job (the chart
+  // diagonal is blank); a "-" cell in the book has no normal result and is omitted here.
+  normalChart: {
+    // p.82 axis order (left-edge rows top->bottom, top columns left->right). This is the
+    // chart's own clan order and differs from SMT.demonClans; the lookup trusts THIS list.
+    clanOrder: [
+      "deity", "megami", "fury", "lady", "kishin", "holy", "yoma", "fairy", "divine", "fallen", "snake", "beast", "jirae", "brute", "femme", "vile", "tyrant", "night", "wilder", "haunt", "foul", "seraph", "wargod", "genma", "dragon", "avatar", "avian", "raptor", "entity"
+    ],
+
+    // Cross-clan Normal Fusion result KEYS (p.82), stored as the upper triangle only:
+    // chart[rowClan][colClan] where colClan comes AFTER rowClan in clanOrder. The lookup
+    // canonicalises (a,b) to that order and mirrors, so it is commutative. Same-clan (the
+    // blank diagonal) and "-" cells from the book are simply absent here -> null on lookup.
+    chart: {
+      deity: { kishin: "fury", holy: "megami", yoma: "megami", fairy: "night", divine: "megami", fallen: "fury", snake: "kishin", beast: "avatar", jirae: "brute", brute: "kishin", femme: "lady", night: "vile", wargod: "kishin", genma: "megami", avatar: "megami", avian: "megami", raptor: "tyrant", entity: "megami" },
+      megami: { fury: "deity", lady: "fury", kishin: "lady", holy: "divine", yoma: "kishin", fairy: "fallen", divine: "holy", fallen: "divine", snake: "fairy", beast: "holy", jirae: "lady", brute: "femme", femme: "fairy", vile: "fury", night: "fallen", wilder: "vile", seraph: "deity", wargod: "deity", genma: "divine", dragon: "avatar", avatar: "deity", avian: "deity", raptor: "tyrant", entity: "deity" },
+      fury: { lady: "vile", kishin: "lady", holy: "kishin", yoma: "holy", fairy: "brute", divine: "deity", fallen: "vile", snake: "kishin", beast: "avatar", jirae: "femme", brute: "lady", femme: "lady", vile: "tyrant", tyrant: "deity", night: "lady", seraph: "vile", wargod: "deity", genma: "lady", avatar: "holy", avian: "kishin", raptor: "tyrant", entity: "lady" },
+      lady: { kishin: "fury", holy: "avatar", yoma: "night", fairy: "yoma", divine: "megami", fallen: "fury", snake: "femme", beast: "snake", jirae: "beast", brute: "fury", femme: "kishin", night: "kishin", wilder: "haunt", haunt: "vile", foul: "vile", seraph: "deity", wargod: "kishin", genma: "femme", avatar: "fury", raptor: "kishin", entity: "fury" },
+      kishin: { holy: "lady", yoma: "femme", fairy: "brute", divine: "vile", fallen: "night", snake: "femme", beast: "holy", jirae: "snake", brute: "snake", femme: "lady", night: "femme", seraph: "divine", wargod: "fury", genma: "megami", dragon: "fury", avatar: "holy", avian: "lady", raptor: "tyrant", entity: "fury" },
+      holy: { yoma: "divine", fairy: "megami", divine: "fairy", fallen: "beast", snake: "kishin", beast: "avatar", jirae: "beast", brute: "femme", femme: "lady", night: "fairy", seraph: "divine", wargod: "kishin", genma: "yoma", dragon: "snake", avatar: "megami", avian: "lady", raptor: "wilder", entity: "kishin" },
+      yoma: { fairy: "holy", divine: "snake", fallen: "jirae", snake: "night", beast: "fallen", jirae: "beast", brute: "femme", femme: "brute", vile: "jirae", tyrant: "night", night: "divine", wilder: "beast", haunt: "jirae", foul: "snake", seraph: "megami", dragon: "avatar", avatar: "divine", avian: "night", raptor: "haunt", entity: "megami" },
+      fairy: { divine: "megami", fallen: "yoma", snake: "yoma", beast: "divine", jirae: "yoma", brute: "night", femme: "haunt", vile: "night", tyrant: "night", night: "snake", wilder: "yoma", haunt: "night", foul: "haunt", seraph: "holy", dragon: "snake", avatar: "divine", avian: "night", raptor: "haunt", entity: "megami" },
+      divine: { fallen: "vile", snake: "fairy", beast: "holy", jirae: "night", brute: "yoma", femme: "beast", vile: "fallen", tyrant: "vile", night: "snake", wilder: "fallen", haunt: "jirae", foul: "fairy", seraph: "megami", wargod: "holy", genma: "megami", dragon: "megami", avatar: "megami", avian: "snake", raptor: "foul", entity: "megami" },
+      fallen: { snake: "beast", beast: "night", jirae: "brute", brute: "jirae", femme: "wilder", vile: "brute", tyrant: "fury", night: "haunt", wilder: "night", haunt: "night", foul: "vile", seraph: "lady", wargod: "lady", genma: "lady", dragon: "snake", avatar: "divine", avian: "snake", raptor: "foul", entity: "kishin" },
+      snake: { beast: "brute", jirae: "fallen", brute: "beast", femme: "kishin", vile: "kishin", tyrant: "brute", night: "fallen", wilder: "night", haunt: "brute", foul: "fallen", wargod: "kishin", genma: "femme", dragon: "lady", avatar: "lady", avian: "kishin", raptor: "foul", entity: "fury" },
+      beast: { jirae: "yoma", brute: "femme", femme: "foul", vile: "foul", tyrant: "night", night: "fairy", wilder: "jirae", haunt: "wilder", foul: "wilder", wargod: "holy", genma: "fairy", dragon: "snake", avatar: "snake", avian: "femme", raptor: "wilder", entity: "holy" },
+      jirae: { brute: "fairy", femme: "wilder", vile: "haunt", tyrant: "wilder", night: "foul", wilder: "brute", haunt: "vile", foul: "femme", wargod: "kishin", genma: "lady", dragon: "kishin", avatar: "kishin", avian: "kishin", raptor: "foul", entity: "fury" },
+      brute: { femme: "beast", vile: "haunt", tyrant: "haunt", night: "kishin", wilder: "fairy", haunt: "foul", foul: "wilder", genma: "divine", dragon: "night", avatar: "kishin", avian: "kishin", raptor: "fury", entity: "fury" },
+      femme: { vile: "brute", tyrant: "lady", night: "jirae", wilder: "fallen", haunt: "foul", foul: "wilder", genma: "night", dragon: "night", avatar: "kishin", avian: "brute", raptor: "foul", entity: "lady" },
+      vile: { tyrant: "fury", night: "lady", wilder: "foul", haunt: "foul", foul: "haunt", seraph: "divine", wargod: "kishin", genma: "yoma", dragon: "snake", avatar: "deity", raptor: "fury" },
+      tyrant: { night: "lady", wilder: "night", haunt: "foul", foul: "haunt", seraph: "fallen", genma: "yoma", raptor: "fury" },
+      night: { wilder: "beast", haunt: "yoma", foul: "brute", seraph: "fallen", genma: "holy", dragon: "femme", avatar: "holy", avian: "femme", raptor: "vile", entity: "brute" },
+      wilder: { haunt: "jirae", foul: "beast", genma: "yoma", raptor: "vile", entity: "brute" },
+      haunt: { foul: "brute", seraph: "fallen", raptor: "vile", entity: "brute" },
+      foul: { seraph: "fallen", dragon: "snake", raptor: "vile", entity: "brute" },
+      seraph: { wargod: "kishin", genma: "megami", dragon: "holy", avatar: "deity", avian: "megami", entity: "deity" },
+      wargod: { genma: "holy", dragon: "lady", avatar: "deity", avian: "kishin", entity: "fury" },
+      genma: { dragon: "holy", avatar: "kishin", avian: "megami", raptor: "lady", entity: "fury" },
+      dragon: { avatar: "kishin", avian: "fury", entity: "lady" },
+      avatar: { avian: "holy", raptor: "wilder", entity: "fury" },
+      avian: { raptor: "megami", entity: "deity" },
+      raptor: { entity: "vile" }
+    }
+  }
 };
 
 // Negotiation / demon-talk (p.72-78, p.112) — read by helpers/negotiation.mjs.
