@@ -1128,3 +1128,31 @@ button.smt-grant-rewards {
   width: 100%;
 }
 button.smt-grant-rewards.paid { opacity: 0.6; }
+
+/* Demon compendium picker — the dialog is resizable, so the list has to grow with
+   it. Without the flex chain the select keeps its `size` height and dragging the
+   window just adds empty space below it. */
+.smt-demon-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.smt-demon-picker .picker-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.smt-demon-picker select[name="demon"] {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 8rem;
+}
+
+.smt-demon-picker input[name="filter"] {
+  width: 100%;
+}

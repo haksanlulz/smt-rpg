@@ -168,6 +168,15 @@ Check: test/affinity-parse.test.mjs  (tagged  // spec: affinity-lines-parse-or-a
 
 **Magic and Ailment are separate axes and the engine does not have them yet.** p.65 stacks them with the element affinity — a demon weak to Ice *and* Magic *and* Ailments, critically hit by a Mabufu spell that also fumbles its dodge, takes **32×** (2·2·2·2·2). `calculateDamage` applies one multiplier and the schema has no Magic axis, so `createDemonActor` records those two and says so on creation rather than silently dropping them. 20 demons carry a Magic affinity, 30 an Ailment one.
 
+### SPEC created-demons-have-valid-skill-items
+```
+Given a demon created from an imported stat block
+When Foundry validates it
+Then every field written matches the schema's own declared names, enum values
+     and nested shapes, and the demon keeps all of its skills
+Check: test/demon-skills.test.mjs  (tagged  // spec: created-demons-have-valid-skill-items)
+```
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
@@ -211,6 +220,10 @@ Check: manual — last verified: NEVER
 | Date | Escape | Rung that now catches it |
 |---|---|---|
 | 2026-06-07 | **FP Halve Damage restored more HP than the hit ever dealt.** `applyDamage` stored the *computed* damage on the chat flag, but the HP write floors at 0 — so an overkill hit recorded 40 damage while dealing only 20. `resolveHalveDamage` then restored `oldDamage - newDamage` against the post-hit HP, over-restoring by exactly the overkill. At 20 HP taking a 40, the target ended back at 20: *"undoes the initial damage but doesn't apply the new damage."* It fires **only** when a hit drops the target — the only time the Fate Point is ever spent. Open 7 weeks, filed as awaiting HP numbers from a live session. | `test/fate-damage.test.mjs` — `halveDamageResult` resolves from `hpBefore` (the HP the hit found, now stored on the flag) instead of restoring a difference. 683 assertions incl. a property sweep asserting a halve never leaves HP above the pre-hit value. Mutation-proved: reinstating the old arithmetic turns **82** assertions red, all three ESCAPE cases among them. |
+
+| 2026-07-27 | **Every demon created from the compendium lost all of its skills.** `buildDemonSkills` wrote field names and enum values from memory instead of reading the schema: `magicalAttack` where `CONFIG.SMT.skillTypes` declares `magical-attack`, `target` for `targets`, `description` for `effectDescription`, a `cost.allHp` key that does not exist. `buildDemonSystem` then wrote `drops` as a bare string where the schema declares a SchemaField, and `behavior`, which only npc-data has. Foundry rejected each Item and the actor came up skill-less. Found by creating three demons and reading the console — the first thing a player would do. | `test/demon-skills.test.mjs` — builds skills for all 194 demons and checks every field against names parsed out of `skill-data.mjs` and enums read from `CONFIG.SMT`, plus nested-shape checks for every SchemaField. Reproduced the escape at **4,692 violations**; the nested-shape leg was added after the name-only check passed `drops`-as-a-string happily. |
+
+**What let the 2026-07-27 one happen at all.** Not a subtle rule — the schema was three files away and states every legal value. It was written from memory because the code *looked* like the kind of mapping that does not need checking. Every enum in `compendium.mjs` now resolves against `CONFIG` at runtime rather than being restated, so a literal cannot drift out of the schema again. The wider lesson is the one this file already carries: the node-side suites all passed while the feature was completely broken, because none of them constructs a Foundry document.
 
 **What let it survive seven weeks.** Not the maths — that was five lines and read correctly in isolation. The defect lived at the seam between `calculateDamage` (pure, 178 assertions on it) and the HP write inside `SMTActor#applyDamage` (Foundry-coupled, zero assertions, unimportable in `node`). **No rung existed that could observe a wrong HP.** It was filed as needing live numbers; it did not — extracting the write into a pure function settled it in one pass with no session at all.
 
