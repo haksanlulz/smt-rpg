@@ -161,12 +161,19 @@ export function buildDemonSystem(stats) {
     system.mp = { value: stats.mp, max: stats.mp };
   }
   if (Number.isFinite(stats.fatePoints)) system.fatePoints = { value: stats.fatePoints, max: stats.fatePoints };
-  if (Number.isFinite(stats.macca)) system.macca = stats.macca;
-  if (Number.isFinite(stats.exp)) system.exp = stats.exp;
-  if (stats.dropItems && stats.dropItems.toLowerCase() !== "none") system.drops = stats.dropItems;
-  if (stats.behavior) system.behavior = stats.behavior;
 
-  return { system, affinity };
+  // `drops` is a SchemaField, not a string: what this demon GRANTS on defeat.
+  // The printed macca/EXP are rewards, not the demon's own totals, so they belong
+  // here rather than at the top level (where they are not declared at all).
+  const drops = {};
+  if (stats.dropItems && stats.dropItems.toLowerCase() !== "none") drops.normalItems = stats.dropItems;
+  if (Number.isFinite(stats.macca)) drops.macca = stats.macca;
+  if (Number.isFinite(stats.exp)) drops.exp = stats.exp;
+  if (Object.keys(drops).length) system.drops = drops;
+
+  // `behavior` is declared on npc-data only; demons have no such field. The book
+  // prints one for every demon, so it is returned as a caveat rather than written.
+  return { system, affinity, behavior: stats.behavior || "" };
 }
 
 // Skill Items for a stat block. "Basic Strike" is the innate attack every actor
@@ -174,45 +181,67 @@ export function buildDemonSystem(stats) {
 export function buildDemonSkills(stats) {
   return (stats.skills ?? [])
     .filter(s => s.name && s.name.toLowerCase() !== "basic strike")
-    .map(s => ({
-      name: s.name,
-      type: "skill",
-      system: {
+    .map(s => {
+      const system = {
         skillType: mapSkillType(s.type),
         element: mapElement(s.element),
         cost: parseCost(s.cost),
         power: Number.isFinite(s.potency) ? s.potency : 0,
-        target: /all/i.test(s.target ?? "") ? "all" : "one",
-        description: s.effect ?? ""
-      }
-    }));
+        // Free-form on the schema and printed as "1" / "All"; passed through as written.
+        targets: String(s.target ?? "1").trim() || "1",
+        effectDescription: s.effect ?? ""
+      };
+      if (/^auto-success$/i.test(s.effect ?? "")) system.autoSuccess = true;
+      const ailment = parseAilment(s.effect);
+      if (ailment) system.ailment = ailment;
+      return { name: s.name, type: "skill", system };
+    });
 }
 
+// Every enum below is resolved against CONFIG rather than restated. The 2026-07-27
+// escape was invented values (`magicalAttack` for `magical-attack`), and a literal
+// list here would be free to drift out of the schema exactly the same way.
 function mapSkillType(t) {
-  const s = String(t ?? "").toLowerCase();
-  if (s.includes("physical")) return "physicalAttack";
-  if (s.includes("ranged")) return "rangedAttack";
-  if (s.includes("magical")) return "magicalAttack";
-  if (s.includes("passive")) return "passive";
-  if (s.includes("talk")) return "talkApproach";
-  if (s.includes("spell")) return "spell";
-  return "support";
+  const keys = Object.keys(CONFIG.SMT.skillTypes);
+  const s = String(t ?? "").toLowerCase().replace(/\s+/g, "-");
+  return keys.find(k => k === s)
+    ?? keys.find(k => s.includes(k))
+    ?? (s.includes("talk") ? keys.find(k => k.startsWith("talk")) : null)
+    ?? "support";
 }
 
 function mapElement(e) {
+  const keys = Object.keys(CONFIG.SMT.elements);
   const s = String(e ?? "").toLowerCase();
-  const known = ["phys", "fire", "ice", "elec", "force", "mind", "nerve", "ruin",
-    "dark", "light", "almighty", "recovery", "support"];
-  if (s === "healing") return "recovery";
-  return known.includes(s) ? s : "none";
+  if (s === "healing") return keys.includes("recovery") ? "recovery" : "none";
+  if (s === "unique") return "none";                 // boss-only skills with no element
+  return keys.includes(s) ? s : "none";
 }
 
 function parseCost(cost) {
   const s = String(cost ?? "").trim();
   const m = s.match(/^(\d+)\s*(HP|MP)$/i);
   if (m) return { value: Number(m[1]), resource: m[2].toLowerCase() };
-  if (/all\s*hp/i.test(s)) return { value: 0, resource: "hp", allHp: true };
+  // "All HP" (Last Resort) has no numeric cost the schema can hold; recorded as hp/0
+  // so the resource is right and the effect text carries the rest.
+  if (/all\s*hp/i.test(s)) return { value: 0, resource: "hp" };
+  if (!s) return { value: 0, resource: "none" };
   return { value: 0, resource: "mp" };
+}
+
+// Effect text like "Panic 30%" or "Restrain 20%" carries an ailment and its rate.
+// "Instant Kill 70%" is Death; "HP 1/5" and similar are not ailments.
+function parseAilment(effect) {
+  const s = String(effect ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/^(.*?)\s*(\d+)\s*%$/);
+  if (!m) return null;
+  const label = m[1].trim().toLowerCase();
+  const rate = Number(m[2]);
+  const keys = Object.keys(CONFIG.SMT.ailments);
+  const type = /instant\s*kill/.test(label) ? keys.find(k => k === "death") : keys.find(k => k === label);
+  if (!type) return null;
+  return { type, rate: Math.min(Math.max(rate, 0), 100) };
 }
 
 // Create a demon Actor from an imported stat block. GM-gated, like fusion.
@@ -227,7 +256,7 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
     return null;
   }
 
-  const { system, affinity } = buildDemonSystem(stats);
+  const { system, affinity, behavior } = buildDemonSystem(stats);
   const actor = await Actor.create({
     name: stats.name,
     type: "demon",
@@ -242,6 +271,7 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
   if (affinity.unparsed.length) caveats.push(`affinities not applied: "${affinity.unparsed[0]}"`);
   if (affinity.magic) caveats.push(`Magic affinity (${affinity.magic}) — no engine axis yet`);
   if (affinity.ailment) caveats.push(`Ailment affinity (${affinity.ailment}) — not applied`);
+  if (behavior) caveats.push(`behavior "${behavior}" — demons have no such field (npc only)`);
   if (caveats.length && notify) {
     ui.notifications.info(game.i18n.format("SMT.Compendium.Caveats",
       { name: stats.name, caveats: caveats.join("; ") }));
@@ -276,16 +306,23 @@ export async function openDemonPicker() {
     return `<option value="${esc(d.name)}">Lv ${d.level} — ${esc(d.name)} (${esc(clan)})${boss}</option>`;
   }).join("");
 
+  // The list fills whatever height the window is given, so dragging the frame
+  // actually shows more demons rather than just padding the dialog.
   const content = `
-    <section class="smt-dialog">
+    <section class="smt-demon-picker">
       <div class="form-group"><label>${game.i18n.localize("SMT.Compendium.Filter")}</label>
         <input type="text" name="filter" placeholder="${esc(game.i18n.localize("SMT.Compendium.FilterHint"))}" /></div>
-      <div class="form-group"><label>${game.i18n.localize("SMT.Compendium.Demon")}</label>
-        <select name="demon" size="12" style="width:100%">${options}</select></div>
+      <div class="form-group picker-list"><label>${game.i18n.localize("SMT.Compendium.Demon")}</label>
+        <select name="demon" size="12">${options}</select></div>
     </section>`;
 
   const result = await foundry.applications.api.DialogV2.wait({
-    window: { title: game.i18n.localize("SMT.Compendium.Title") },
+    window: { title: game.i18n.localize("SMT.Compendium.Title"), resizable: true },
+    position: { width: 520, height: 700 },
+    // Lands on the app root so the stylesheet can make the whole content chain
+    // flex — a height on the inner section alone does not resolve against a
+    // non-flex ancestor, and the list would keep its fixed `size` height.
+    classes: ["smt-demon-picker-dialog"],
     content,
     buttons: [
       {
