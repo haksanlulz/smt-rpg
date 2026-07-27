@@ -44,8 +44,11 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | `lang/en.json` | Foundry's i18n loader at init | no leaf/branch collision; every `SMT.*` key used in code exists | `pure-helpers` collision guard + `contract` C5 |
 | `system.json` | **Foundry parses it before anything else runs** | declared files exist; semver version; id matches the install dir | `test/contract.test.mjs` C6 |
 | sheet + chat buttons | **a user clicks them** | every `data-action` has a handler; every flag read has a writer | `test/contract.test.mjs` C7–C8 (proxy) |
+| **documents the system creates** | **Foundry's DataModel validates them on create** | every field written exists on that document's schema, with the right enum value and nested shape | `test/demon-skills.test.mjs` (runtime, per-type) + `contract` C12 (static, coarse) |
 | **the installed system** | **load the world and play** | boots · a sheet opens · an attack resolves end-to-end · HP persists | **manual** — §5 `system-loads-cold`, `every-chat-button-fires` |
 | manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun. |
+
+> **Twice now, every node suite has been green while a feature was completely broken** — halve-damage (2026-06-07) and demon creation (2026-07-27). Both times the code was correct as JavaScript and wrong as *Foundry*. That is not bad luck; it is the shape of this project's blind spot, and it is why §1 clause 4 forbids reporting an artifact-affecting change as working.
 
 **The bottom two rows are the ones that matter and neither is automated.** C1–C8 are static scans over source text: they catch a dead reference, never a wrong behavior. Treating a green suite as evidence the system works is exactly the failure this file exists to prevent.
 
@@ -67,6 +70,7 @@ All in `test/contract.test.mjs`. Each was mutation-proved on 2026-07-26 (see §6
 | C8 | Every `smt-rpg` flag read has a writer. Scope/key consts and interpolated `flags.${SCOPE}.${KEY}` paths are resolved before matching. | The whole multi-phase combat pipeline is flag-driven; a read with no writer is a permanently dead button. |
 | C9 | Every §5 spec is linked to a tagged test or is a dated manual rung, and every `spec:` tag matches a declared spec. | A spec with no backing check is a claim, not a constraint. |
 | C11 | User-facing strings go through `en.json`: no `ui.notifications` call takes a bare literal, and no template carries a hardcoded text node. HTML entities are resolved away as punctuation. | **§1 clause 6 is a GATE and this is what makes it one** — before this rung it was a comment. Deliberately narrow: broad "looks like English" detection over templates is the false-positive shape that got three scans wrong on 2026-07-26, and a rung that cries wolf gets deleted. |
+| C12 | Every `system.*` path the code writes is a field some data model declares. | Foundry rejects an undeclared field at create time and the document loses that data. **Coarse by construction** — it unions every data model, so it catches "not a field anywhere" (what `target` and `description` were) but not "a real field on the wrong type" (what `behavior` was). The per-type check is runtime, in `demon-skills.test.mjs`. |
 | C10 | The tracked `.gitignore` excludes `rulebook-text/` and `*.pdf`, and git tracks neither. | The repo is **public** and the rulebook is licensed. An ignore rule nobody asserts is one edited `.gitignore` away from committing the book. C10c uses git as ground truth and **skips loudly** outside a checkout rather than passing. |
 
 **Scan honesty.** Five defects, across three of these scans, reported violations on their first run that were **defects in the scan, not the code**:
@@ -79,7 +83,7 @@ All in `test/contract.test.mjs`. Each was mutation-proved on 2026-07-26 (see §6
 | C9c | dangling spec tag `tag` | the scanner matched `spec: tag` inside its own assertion label |
 | C9c | control run red on `a-tag-matching-no-declared-spec` | `mutation-probe.mjs` stores the tags it plants, and it lives under `test/` |
 
-All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a legitimate idiom manufactures false positives until someone deletes the rung — which is how a project ends up with no rung at all; and a scanner that reads its own source will find whatever it is looking for.
+All fixed and re-proved. **A third lesson, from 2026-07-27: a check on field NAMES is not a check on values or shapes.** The first version of the demon-skill rung compared key names against the schema and passed `drops`-written-as-a-string without complaint, because `drops` *is* a real field — it just is not a string. Assert the shape the schema declares, not merely that the name exists. Two more lessons worth keeping: a scan that cannot see a legitimate idiom manufactures false positives until someone deletes the rung — which is how a project ends up with no rung at all; and a scanner that reads its own source will find whatever it is looking for.
 
 **Canonical ownership**
 
@@ -103,6 +107,7 @@ All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a leg
 | template / lang / manifest touch | + `contract.test.mjs` (all) |
 | behavior-change (**rules maths**: a formula, table or threshold from the book) | + a RED-first test naming the behavior + a planted-mutation run proving it red — **§1 clause 5 gate** |
 | behavior-change (other logic: sheet wiring, chat rendering, UI glue) | + a test where one is reachable from `node`; encouraged, does not block (§1 clause 5) |
+| document-shape change (anything writing a `system.*` field, or building an Actor/Item payload) | + `contract` C12 **and** a runtime check that the builder's output matches the schema's names, enums and nested shapes. Resolve enums from `CONFIG` rather than restating them — a literal is free to drift out of the schema, which is exactly how the 2026-07-27 escape happened. |
 | artifact-affecting (anything a player clicks) | + **an explicit unverified statement naming the sheet / button / card nobody has observed** — **§1 clause 4 gate**. The change closes; the claim does not. Loading and clicking it is encouraged, not required; re-date the §5 manual rungs whenever it does happen. |
 | release (version bump / push) | + full channel map + all §5 specs + manual rungs re-dated + `system.json` version bumped |
 | rung-touch (editing `contract.test.mjs`) | + `node test/mutation-probe.mjs` — 11/11, control green |
@@ -240,7 +245,8 @@ Check: manual — last verified: NEVER
 | A chat-flag reader with no writer | C8 | Const-resolving and interpolation-normalizing, so `setFlag(SCOPE, KEY)` and `` `flags.${SCOPE}.${KEY}` `` both count as writers. |
 | A suite nobody runs | `test/run-tests.mjs` | Discovery is glob-only over `test/*.test.mjs` plus a floor assertion — no hand-maintained list to fall out of date. This project had exactly that bug: `fusion-chart.test.mjs` was a separate entry point and no command ran both. |
 | A spec in §5 with nothing behind it | C9 | Every spec needs a linked tagged test or a dated manual check; orphan `spec:` tags are flagged in the other direction too. |
-| **A rung that cannot fail** | `test/mutation-probe.mjs` | Plants one defect per scan into a scratch copy and asserts the suite goes red **for that rung specifically**, with a control run on an unmutated copy proving it goes green. Currently 15/15. An empty result from an unproved instrument is not evidence. |
+| A document field written from memory rather than read from the schema | C12 + `demon-skills.test.mjs` | The static scan unions every data model and catches names that exist nowhere; the runtime one builds all 194 demons and checks names, enums and nested shapes against the schema's own declarations. Enums are resolved from `CONFIG` at runtime in the source too, so a literal cannot drift. |
+| **A rung that cannot fail** | `test/mutation-probe.mjs` | Plants one defect per scan into a scratch copy and asserts the suite goes red **for that rung specifically**, with a control run on an unmutated copy proving it goes green. Currently 17/17. An empty result from an unproved instrument is not evidence. |
 
 ### Transcribed rulebook data — the standing verification bar
 
