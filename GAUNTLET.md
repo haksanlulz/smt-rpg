@@ -216,6 +216,18 @@ Check: test/affinity-axes.test.mjs  (tagged  // spec: affinity-ratings-stack-acr
 
 **The engine had no Magic axis until 2026-07-27**, so 20 demons fought without their Magic rating and 30 without their Ailment one. p.65 is explicit on both points: the priority order is printed verbatim, and the worked example gives a demon weak to Ice, Magic and Ailments a **32×** effect-rate bonus — 2·2·2 for the ratings, ×2 crit, ×2 dodge fumble. The exception is equally explicit: an Ailment rating *"only ha[s] an effect on the ailment effect rate and do[es] not have any influence on the damage part"*, which the suite asserts directly because folding it into damage is the obvious mistake.
 
+### SPEC fusion-produces-the-real-demon
+```
+Given a fusion whose result the chart names and the compendium knows
+When the fusion resolves
+Then the created actor has that demon's printed stats, affinities and own skills
+And inherited skills fill only the slots left under the cap of 8, with the
+     demon's own skills never displaced (p.80)
+Check: test/fusion-statblock.test.mjs  (tagged  // spec: fusion-produces-the-real-demon)
+```
+
+**Before this, fusion averaged its ingredients.** A fused Momunofu came out with fabricated stats, no favored stat, and a `9,999,999` HP sentinel — a demon that exists in the book, wearing numbers that are in it nowhere. Averaging was only ever a stand-in for not knowing which demon the fusion produced; once the roster and the compendium both existed, the result could simply *be* the printed demon. `selectInheritedSkills` already took `initialCount`/`initialNames` for exactly this and had never been passed anything but zero.
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed

@@ -4,6 +4,7 @@
 
 import { SMT } from "../config.mjs";
 import { expThresholdForLevel } from "./advancement.mjs";
+import { demonStatsFor, buildDemonSystem, buildDemonSkills } from "./compendium.mjs";
 
 const FLAG_SCOPE = "smt-rpg";
 
@@ -279,7 +280,7 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
     : crossClan ? "cross"
     : "fallback";
 
-  const system = buildFusedSystem(demonA, demonB);
+  let system = buildFusedSystem(demonA, demonB);
   system.clan = clan;
 
   // Name the actual demon. Rank shift resolves off the non-Element ingredient's level
@@ -311,15 +312,35 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
     initialNames: []
   });
 
+  // If the chart named a demon the compendium knows, the result IS that demon:
+  // its printed stats, affinities and own skills, with inheritance filling the
+  // slots left under the cap of 8 (p.80). Averaging the ingredients was only ever
+  // a stand-in for not knowing which demon the fusion produced.
+  const statBlock = rosterResult ? demonStatsFor(rosterResult.name) : null;
+  const fromBook = buildFusionResult({
+    stats: statBlock,
+    ingredientSkills: chosen.map(c => c.item ?? c),
+    allowed,
+    resultInheritance
+  });
+  if (fromBook) {
+    system = fromBook.system;
+    system.clan = clan;
+  }
+
   const actor = await Actor.create({
     name,
     type: "demon",
     system,
+    items: fromBook ? fromBook.items : [],
     flags: { [FLAG_SCOPE]: { fusedFrom: [demonA.name, demonB.name] } }
   });
   if (!actor) return null;
 
-  if (chosen.length) {
+  // Only the fallback path adds items here — buildFusionResult already placed the
+  // demon's own skills plus the inherited ones, so re-adding would duplicate them
+  // and blow past the cap of 8.
+  if (!fromBook && chosen.length) {
     const itemData = chosen.map(c => c.item.toObject());
     await actor.createEmbeddedDocuments("Item", itemData);
   }
@@ -364,6 +385,55 @@ export async function postFusionCard({ demonA, demonB, actor, clan, clanSource, 
     speaker: ChatMessage.getSpeaker({ alias: game.i18n.localize("SMT.Fusion.Title") }),
     content
   });
+}
+
+// Build the actor payload for a fusion whose result the chart named and the
+// compendium knows. Pure: no document access, no CONFIG beyond the skill cap.
+//
+// Fusion contributes inherited skills, not stats — the result IS the printed demon.
+// p.80 bounds the inheritance exactly: "it may not learn more than eight skills in
+// total, including its initial skills. Initial skills cannot be removed in favor of
+// adding more inherited skills." So the demon's own skills are placed first and
+// inheritance takes only the slots that remain.
+//
+// Returns null when the stat block is unknown, so the caller can fall back to the
+// ingredient-averaging path rather than producing a demon with no stats at all.
+export function buildFusionResult({ stats, ingredientSkills = [], allowed = 0, resultInheritance = "" }) {
+  if (!stats) return null;
+
+  const { system, affinity, behavior, anomalies } = buildDemonSystem(stats);
+  const initial = buildDemonSkills(stats);
+
+  const chosen = selectInheritedSkills(
+    (ingredientSkills ?? []).map(s => ({
+      name: s?.name,
+      inheritanceType: s?.system?.inheritanceType ?? "",
+      item: s
+    })),
+    {
+      count: allowed,
+      resultInheritance,
+      initialCount: initial.length,
+      initialNames: initial.map(s => s.name)
+    }
+  );
+
+  const inherited = chosen.map(c => {
+    const src = c.item ?? c;
+    // Foundry Items expose toObject(); plain objects are used as-is by the tests.
+    const data = typeof src?.toObject === "function" ? src.toObject() : { ...src };
+    delete data._id;
+    return data;
+  });
+
+  return {
+    system,
+    items: [...initial, ...inherited],
+    inheritedNames: inherited.map(i => i.name),
+    affinity,
+    behavior,
+    anomalies
+  };
 }
 
 // GM fusion dialog (p.79): pick two demons + a result name with a live level/clan/
