@@ -4,6 +4,7 @@
 // Deliberately property-based (whole-matrix sweeps), not a handful of memorised cells, so the
 // suite cannot pass by special-casing an oracle.
 
+// spec: fusion-chart-matches-the-book
 import { SMT } from "../module/config.mjs";
 
 if (typeof Math.clamp !== "function") {

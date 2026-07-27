@@ -1,4 +1,5 @@
 import { evaluatePercentile } from "./checks.mjs";
+import { halveDamageResult } from "./damage.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
 const _inFlight = new Set();
@@ -573,16 +574,26 @@ export async function resolveHalveDamage(message, damageData) {
     const oldDamage = _sanitizeAmount(damageData.currentDamage);
     if (oldDamage <= 0) return;
 
-    await target.update({ "system.fatePoints.value": target.system.fatePoints.value - CONFIG.SMT.fate.cost });
+    // Resolve from the HP the hit found, not the post-hit HP: an overkilled hit floored
+    // at 0, so restoring the difference over-restores by exactly the overkill (GAUNTLET.md §6).
+    // `hpBefore` is absent on cards written before 0.1.12 — those take the legacy path.
+    const { newDamage, hpAfter: newHp } = halveDamageResult({
+      hpBefore: damageData.hpBefore,
+      hpNow: target.system.hp.value,
+      hpMax: target.system.hp.max,
+      currentDamage: oldDamage,
+      divisor: CONFIG.SMT.fate.halveDivisor
+    });
 
-    const newDamage = Math.floor(oldDamage / CONFIG.SMT.fate.halveDivisor);
-    const hpRestored = oldDamage - newDamage;
-    const newHp = Math.min(target.system.hp.value + hpRestored, target.system.hp.max);
-    await target.update({ "system.hp.value": newHp });
+    // One write: FP and HP together, per the batch-update convention.
+    await target.update({
+      "system.fatePoints.value": target.system.fatePoints.value - CONFIG.SMT.fate.cost,
+      "system.hp.value": newHp
+    });
 
     if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Halve Damage", {
       target: target.name, originalDamage: damageData.originalDamage,
-      oldDamage, newDamage, hpRestored, newHp,
+      oldDamage, newDamage, hpBefore: damageData.hpBefore ?? "(legacy card)", newHp,
       fpRemaining: target.system.fatePoints.value
     });
 
