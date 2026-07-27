@@ -126,7 +126,11 @@ SMT.demonClans = {
   raptor: "SMT.Clan.Raptor",
   entity: "SMT.Clan.Entity",
   mitama: "SMT.Clan.Mitama",
-  element: "SMT.Clan.Element"
+  element: "SMT.Clan.Element",
+  corpus: "SMT.Clan.Corpus",
+  zoa: "SMT.Clan.Zoa",
+  hallel: "SMT.Clan.Hallel",
+  light: "SMT.Clan.Light"
 };
 
 SMT.skillTypes = {
