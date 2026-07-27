@@ -197,9 +197,26 @@ export function buildDemonSystem(stats) {
   if (Number.isFinite(stats.exp)) drops.exp = stats.exp;
   if (Object.keys(drops).length) system.drops = drops;
 
-  // `behavior` is declared on npc-data only; demons have no such field. The book
-  // prints one for every demon, so it is returned as a caveat rather than written.
-  return { system, affinity, behavior: stats.behavior || "", anomalies };
+  // Behavior is printed as "personality/gender/age" ("Elite/Man/Adult"), with an
+  // em-dash for a slot the book leaves blank. 171 of the 194 carry one; the 23 that
+  // do not are the bosses.
+  const behavior = parseBehavior(stats.behavior);
+  if (behavior) system.behavior = behavior;
+
+  return { system, affinity, anomalies };
+}
+
+// "Elite/Man/Adult" -> { personality, gender, age }. An em-dash means the book left
+// that slot blank, so it becomes an empty string rather than a literal dash.
+export function parseBehavior(raw) {
+  const parts = String(raw ?? "").split("/").map(p => p.trim());
+  if (!parts.some(Boolean)) return null;
+  const slot = (i) => {
+    const v = parts[i] ?? "";
+    return v === "—" || v === "-" ? "" : v;
+  };
+  const out = { personality: slot(0), gender: slot(1), age: slot(2) };
+  return Object.values(out).some(Boolean) ? out : null;
 }
 
 // Skill Items for a stat block. "Basic Strike" is the innate attack every actor
@@ -282,7 +299,7 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
     return null;
   }
 
-  const { system, affinity, behavior, anomalies } = buildDemonSystem(stats);
+  const { system, affinity, anomalies } = buildDemonSystem(stats);
   const actor = await Actor.create({
     name: stats.name,
     type: "demon",
@@ -295,7 +312,6 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
   // rather than silently dropped.
   const caveats = [];
   if (affinity.unparsed.length) caveats.push(`affinities not applied: "${affinity.unparsed[0]}"`);
-  if (behavior) caveats.push(`behavior "${behavior}" — demons have no such field (npc only)`);
   for (const a of anomalies) caveats.push(`book prints ${a} — kept as printed`);
   if (caveats.length && notify) {
     ui.notifications.info(game.i18n.format("SMT.Compendium.Caveats",

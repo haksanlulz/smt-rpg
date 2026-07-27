@@ -154,6 +154,32 @@ if (!existsSync(DATA)) {
     }
   }
   eq(shapeBad.slice(0, 6), [], `nested schema fields written with the right shape (${shapeBad.length} violations)`);
+
+  // Behavior: "Elite/Man/Adult" -> the personality/gender/age shape the schema
+  // declares. It used to be reported as an unapplied caveat on every single demon,
+  // which made the caveat channel noise instead of signal.
+  const behaviourKeys = subKeysOf(demonSrc, "behavior");
+  eq(behaviourKeys, ["personality", "gender", "age"], "demon schema declares the behavior slots");
+
+  let withBehaviour = 0;
+  const behaviourBad = [];
+  for (const d of demons) {
+    const { system } = buildDemonSystem(d);
+    if (!("behavior" in system)) {
+      if (d.behavior) behaviourBad.push(`${d.name}: book prints "${d.behavior}" but none was written`);
+      continue;
+    }
+    withBehaviour++;
+    for (const k of Object.keys(system.behavior)) {
+      if (!behaviourKeys.includes(k)) behaviourBad.push(`${d.name}: behavior."${k}" is not a schema key`);
+    }
+    for (const v of Object.values(system.behavior)) {
+      if (typeof v !== "string") behaviourBad.push(`${d.name}: behavior values must be strings`);
+      if (v === "—" || v === "-") behaviourBad.push(`${d.name}: a blank slot kept its dash`);
+    }
+  }
+  ok(withBehaviour >= 165, `demons carrying a behavior (${withBehaviour} >= 165)`);
+  eq(behaviourBad.slice(0, 5), [], `behavior parses into the declared shape (${behaviourBad.length} bad)`);
 }
 
 console.log(`\nsmt-rpg demon-skills tests: ${passed} passed, ${failed} failed`);
