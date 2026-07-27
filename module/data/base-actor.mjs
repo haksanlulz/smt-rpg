@@ -1,4 +1,4 @@
-import { makeAffinitySchema, makeAilmentAffinitySchema, STATS } from "./fields.mjs";
+import { makeAffinitySchema, makeAilmentAffinitySchema, makeCategoryAffinitySchema, STATS } from "./fields.mjs";
 import { passiveMultiplierBonuses, hasMightEffect, shootTnBonus, physicalPowerDice } from "../helpers/passives.mjs";
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 import { resolveResourceMax } from "../helpers/resources.mjs";
@@ -44,6 +44,11 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       macca: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       affinities: makeAffinitySchema(),
       ailmentAffinities: makeAilmentAffinitySchema(),
+      // Category ratings, printed on stat blocks as "Strong Magic" / "Null Ailment
+      // Attacks" (p.65). These are not elements: Magic applies to every magical
+      // attack and STACKS with the element rating, while Ailment affects only the
+      // ailment effect rate and never damage.
+      categoryAffinities: makeCategoryAffinitySchema(),
       // Single common-ailment slot (p.68); Death/Curse are separate flags so they stack alongside it (p.67).
       ailment: new StringField({ initial: "none" }),
       deathAilment: new BooleanField({ initial: false }),
