@@ -171,7 +171,13 @@ export function isExceptionDemon(name) {
 // dropped. Order-preserving over candidates for deterministic output.
 export function selectInheritedSkills(candidates, { count = Infinity, resultInheritance = "", initialCount = 0, initialNames = [] } = {}) {
   const cap = CONFIG.SMT.fusion.skillCap;
-  const trait = String(resultInheritance ?? "").trim().toLowerCase();
+  // A demon prints SEVERAL inherit traits ("Mouth Eye Lunge Weapon"), so this is a
+  // set, not one value. Comparing the whole string meant a multi-trait demon
+  // matched nothing typed at all — invisible until the traits were actually
+  // supplied, which nothing did until the compendium started writing them.
+  const traits = new Set(
+    String(resultInheritance ?? "").toLowerCase().split(/[\s,/]+/).filter(t => t && t !== "none")
+  );
   const taken = new Set(initialNames.map(n => String(n ?? "").toLowerCase()));
   const chosen = [];
   let slotsLeft = Math.max(0, cap - Math.max(0, initialCount));
@@ -185,7 +191,7 @@ export function selectInheritedSkills(candidates, { count = Infinity, resultInhe
 
     // Typed skill needs a matching result trait (p.80).
     const skillTrait = String(skill?.inheritanceType ?? "").trim().toLowerCase();
-    if (skillTrait && skillTrait !== trait) continue;
+    if (skillTrait && !traits.has(skillTrait)) continue;
 
     chosen.push(skill);
     taken.add(key);
@@ -412,7 +418,9 @@ export function buildFusionResult({ stats, ingredientSkills = [], allowed = 0, r
     })),
     {
       count: allowed,
-      resultInheritance,
+      // The result demon's own printed traits are what the gate should use; an
+      // explicit override still wins so a GM can force an unusual inheritance.
+      resultInheritance: resultInheritance || (stats.inheritTraits ?? ""),
       initialCount: initial.length,
       initialNames: initial.map(s => s.name)
     }
