@@ -29,6 +29,9 @@ export default class DemonData extends SMTBaseActorData {
         gender: new StringField({ initial: "" }),
         age: new StringField({ initial: "" })
       }),
+      // Which typed skills this demon can receive in fusion (p.80), printed as a
+      // space-separated list: "Mouth Eye Lunge Weapon".
+      inheritTraits: new StringField({ initial: "" }),
       isBoss: new BooleanField({ initial: false }),
       drops: new SchemaField({
         normalItems: new StringField({ initial: "" }),

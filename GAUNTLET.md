@@ -228,6 +228,17 @@ Check: test/fusion-statblock.test.mjs  (tagged  // spec: fusion-produces-the-rea
 
 **Before this, fusion averaged its ingredients.** A fused Momunofu came out with fabricated stats, no favored stat, and a `9,999,999` HP sentinel — a demon that exists in the book, wearing numbers that are in it nowhere. Averaging was only ever a stand-in for not knowing which demon the fusion produced; once the roster and the compendium both existed, the result could simply *be* the printed demon. `selectInheritedSkills` already took `initialCount`/`initialNames` for exactly this and had never been passed anything but zero.
 
+### SPEC typed-skills-need-a-matching-inherit-trait
+```
+Given a fusion result demon with printed Inherit Traits
+When skills are inherited from the ingredients
+Then a skill carrying an inheritance type is only inherited if the result demon
+     has that trait, and an untyped skill is never gated (p.80)
+Check: test/inherit-traits.test.mjs  (tagged  // spec: typed-skills-need-a-matching-inherit-trait)
+```
+
+**Three things had to line up and none of them did.** The importer captured each demon's Inherit Traits and nothing wrote them; a skill's Traits column — which *is* its inheritance type — was dropped on the floor; and `selectInheritedSkills` compared the whole trait string as one value, so a demon printed `"Mouth Eye Lunge Weapon"` matched no typed skill at all. That last one is a defect that could only surface once the other two were fixed, which is why it sat unnoticed: nothing had ever passed the function a real trait list.
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed

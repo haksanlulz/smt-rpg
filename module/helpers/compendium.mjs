@@ -203,6 +203,11 @@ export function buildDemonSystem(stats) {
   const behavior = parseBehavior(stats.behavior);
   if (behavior) system.behavior = behavior;
 
+  // Inherit Traits gate which typed skills this demon can receive in fusion (p.80).
+  // "None" is the book's way of printing an empty list, not a trait.
+  const traits = String(stats.inheritTraits ?? "").trim();
+  if (traits && traits.toLowerCase() !== "none") system.inheritTraits = traits;
+
   return { system, affinity, anomalies };
 }
 
@@ -232,7 +237,10 @@ export function buildDemonSkills(stats) {
         power: Number.isFinite(s.potency) ? s.potency : 0,
         // Free-form on the schema and printed as "1" / "All"; passed through as written.
         targets: String(s.target ?? "1").trim() || "1",
-        effectDescription: s.effect ?? ""
+        effectDescription: s.effect ?? "",
+        // The Traits column IS the skill's inheritance type (p.80) — the thing a
+        // result demon must have a matching trait for. It was being dropped.
+        inheritanceType: String(s.traits ?? "").trim()
       };
       if (/^auto-success$/i.test(s.effect ?? "")) system.autoSuccess = true;
       const ailment = parseAilment(s.effect);
