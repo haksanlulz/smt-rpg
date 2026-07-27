@@ -20,6 +20,15 @@ export default class DemonData extends SMTBaseActorData {
         partyLevel: new NumberField({ integer: true, min: 0, initial: 0 })
       }),
       // Inert: no boss HP/MP scaling applied to demons.
+      // The book prints a Behavior for every general demon (p.123: "the keywords
+      // that influence the demon's speech and conduct"), in the same
+      // personality/gender/age shape npc-data already declares. Without the field
+      // the compendium had real printed data with nowhere to put it.
+      behavior: new SchemaField({
+        personality: new StringField({ initial: "" }),
+        gender: new StringField({ initial: "" }),
+        age: new StringField({ initial: "" })
+      }),
       isBoss: new BooleanField({ initial: false }),
       drops: new SchemaField({
         normalItems: new StringField({ initial: "" }),

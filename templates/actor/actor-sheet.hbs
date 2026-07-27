@@ -191,6 +191,23 @@
     <div class="tab bio {{#if (eq activeTab 'bio')}}active{{/if}}" data-tab="bio">
       {{#if isDemon}}
       <div class="npc-behavior">
+        <h3>{{localize "SMT.Behavior"}}</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>{{localize "SMT.Personality"}}</label>
+            <input type="text" name="system.behavior.personality" value="{{system.behavior.personality}}" />
+          </div>
+          <div class="form-group">
+            <label>{{localize "SMT.Gender"}}</label>
+            <input type="text" name="system.behavior.gender" value="{{system.behavior.gender}}" />
+          </div>
+          <div class="form-group">
+            <label>{{localize "SMT.Age"}}</label>
+            <input type="text" name="system.behavior.age" value="{{system.behavior.age}}" />
+          </div>
+        </div>
+      </div>
+      <div class="npc-behavior">
         <h3>{{localize "SMT.EvolvePath"}}</h3>
         <div class="form-row">
           <div class="form-group">
