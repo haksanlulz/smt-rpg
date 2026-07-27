@@ -128,7 +128,15 @@ export function demonStatsAvailable() {
 
 export function demonStatsFor(name) {
   if (!(_cache instanceof Map)) return null;
-  return _cache.get(String(name ?? "").trim().toLowerCase()) ?? null;
+  const exact = _cache.get(String(name ?? "").trim().toLowerCase());
+  if (exact) return exact;
+  // Fall back to an accent-folded match, because the book spells the same demon
+  // both ways: "Cú Chulainn" in Setanta's evolve chain, "Cu Chulainn" on its own page.
+  const key = foldKey(name);
+  for (const [k, v] of _cache) {
+    if (foldKey(k) === key) return v;
+  }
+  return null;
 }
 
 export function allDemonStats() {
@@ -208,7 +216,38 @@ export function buildDemonSystem(stats) {
   const traits = String(stats.inheritTraits ?? "").trim();
   if (traits && traits.toLowerCase() !== "none") system.inheritTraits = traits;
 
+  const evolvePath = parseEvolvePath(stats.evolve, stats.name);
+  if (evolvePath) system.evolvePath = evolvePath;
+
   return { system, affinity, anomalies };
+}
+
+// Accent-insensitive key. The book is not consistent with itself: Setanta's page
+// (p.152) prints the chain as "Setanta (48) > Cú Chulainn" while that demon's own
+// header (p.204) reads "Cu Chulainn". Folding accents lets either spelling resolve.
+function foldKey(name) {
+  return String(name ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+}
+
+// "Setanta (48) > Cú Chulainn" -> what THIS demon evolves into and at what level.
+// The book prints the whole chain on every member's page, so the demon's own
+// position in it decides the answer: the next link, at the level in its own segment.
+// A demon at the end of its chain evolves into nothing and yields null — Jack Frost
+// reads "Mini-Frost (4) > Jack Frost", where Mini-Frost is where it CAME from.
+export function parseEvolvePath(evolve, ownName) {
+  const raw = String(evolve ?? "").trim();
+  if (!raw || raw === "-") return null;
+
+  const parts = raw.split(">").map(seg => {
+    const m = seg.trim().match(/^(.*?)\s*(?:\((\d+)\))?$/);
+    return { name: (m?.[1] ?? "").trim(), level: m?.[2] ? Number(m[2]) : 0 };
+  }).filter(p => p.name);
+
+  const self = foldKey(ownName);
+  const i = parts.findIndex(p => foldKey(p.name) === self);
+  if (i < 0 || i + 1 >= parts.length) return null;
+
+  return { demonName: parts[i + 1].name, level: parts[i].level, partyLevel: 0 };
 }
 
 // "Elite/Man/Adult" -> { personality, gender, age }. An em-dash means the book left

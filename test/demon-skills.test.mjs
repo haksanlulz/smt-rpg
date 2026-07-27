@@ -179,6 +179,42 @@ if (!existsSync(DATA)) {
     }
   }
   ok(withBehaviour >= 165, `demons carrying a behavior (${withBehaviour} >= 165)`);
+
+  // Evolve path: the book prints the whole chain on every member's page, so a
+  // demon's own position in it decides what IT evolves into. The last link evolves
+  // into nothing — Jack Frost reads "Mini-Frost (4) > Jack Frost", where Mini-Frost
+  // is its predecessor and has no stat block at all.
+  const evolveKeys = subKeysOf(demonSrc, "evolvePath");
+  eq(evolveKeys, ["demonName", "level", "partyLevel"], "demon schema declares the evolvePath slots");
+
+  let withEvolve = 0;
+  const evolveBad = [];
+  for (const d of demons) {
+    const { system } = buildDemonSystem(d);
+    if (!("evolvePath" in system)) continue;
+    withEvolve++;
+    const ep = system.evolvePath;
+    for (const k of Object.keys(ep)) {
+      if (!evolveKeys.includes(k)) evolveBad.push(`${d.name}: evolvePath."${k}" is not a schema key`);
+    }
+    if (!ep.demonName) evolveBad.push(`${d.name}: evolvePath with no target`);
+    if (!Number.isInteger(ep.level) || ep.level <= 0) evolveBad.push(`${d.name}: evolve level ${ep.level}`);
+    if (ep.demonName === d.name) evolveBad.push(`${d.name}: evolves into itself`);
+  }
+  ok(withEvolve >= 20, `demons with a forward evolution (${withEvolve} >= 20)`);
+  eq(evolveBad.slice(0, 5), [], `evolve paths parse into the declared shape (${evolveBad.length} bad)`);
+
+  // The book's own chains, checked by name.
+  const byName = Object.fromEntries(demons.map(d => [d.name, buildDemonSystem(d).system]));
+  eq(byName["Scáthach"]?.evolvePath, { demonName: "Skadi", level: 69, partyLevel: 0 },
+    "Scáthach evolves into Skadi at 69");
+  ok(!("evolvePath" in (byName["Skadi"] ?? {})), "Skadi is the end of its chain and evolves into nothing");
+  eq(byName["Ongkhot"]?.evolvePath?.demonName, "Hanuman", "a three-link chain resolves its first step");
+  eq(byName["Hanuman"]?.evolvePath?.demonName, "Qitian Dasheng", "and its second");
+  ok(!("evolvePath" in (byName["Jack Frost"] ?? {})),
+    "Jack Frost has no forward evolution — Mini-Frost is its predecessor");
+  eq(byName["Setanta"]?.evolvePath?.demonName, "Cú Chulainn",
+    "the target is kept as the book prints it, accent and all");
   eq(behaviourBad.slice(0, 5), [], `behavior parses into the declared shape (${behaviourBad.length} bad)`);
 }
 
