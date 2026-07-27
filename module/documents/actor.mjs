@@ -1,4 +1,4 @@
-import { calculateDamage } from "../helpers/damage.mjs";
+import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel } from "../helpers/advancement.mjs";
 
@@ -148,6 +148,7 @@ export default class SMTActor extends Actor {
       : 0;
 
     const result = calculateDamage({ rawPower, affinity, resistance, isCritical, dodgeFumble, attackerResistance });
+    let hpBefore = null;
 
     if (CONFIG.SMT.debug) console.log("smt-rpg | Damage Calculation", {
       attacker: attacker?.name, target: this.name, skillName,
@@ -184,8 +185,12 @@ export default class SMTActor extends Actor {
         await attacker.update({ "system.hp.value": attackerHp });
       }
     } else if (!result.isNull && result.finalDamage > 0) {
+      // HP at the moment the hit lands. Stashed on the flag below so the FP halve
+      // resolves from it rather than from the post-hit HP — an overkilled hit floors
+      // at 0, so the difference is otherwise unrecoverable (GAUNTLET.md §6).
+      hpBefore = this.system.hp.value;
       const dmgAmount = SMTActor.#clampHpDelta(result.finalDamage);
-      const newHp = Math.max(this.system.hp.value - dmgAmount, 0);
+      const { hpAfter: newHp } = applyDamageToHp(hpBefore, this.system.hp.max, dmgAmount);
       const update = { "system.hp.value": newHp };
       // Damage wakes Sleep etc. (p.66); folded into the same write.
       if (CONFIG.SMT.wakeOnDamageAilments.includes(this.system.ailment)) {
@@ -217,6 +222,7 @@ export default class SMTActor extends Actor {
         targetTokenUuid: getTokenUuid(this) ?? this.id,
         originalDamage: result.finalDamage,
         currentDamage: result.finalDamage,
+        hpBefore,
         resolved: false
       });
     }
