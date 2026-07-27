@@ -19,7 +19,7 @@ Authored 2026-07-26, after the escape logged in §6.
 1. **It matches the rulebook.** Formulas, terminology, and tables match the book exactly, cited by page. Guessing at a mechanic is a defect even when the code is clean.
 2. **It is automated, not left to the GM.** Rolls, damage, cost deduction, affinity application, and effect bookkeeping are performed by the system. "The GM can do that by hand" is not done.
 3. **It uses real Foundry v13/v14 APIs.** No hack workarounds; deprecated v12 patterns are defects. The AppV2 rules in the project notes are hard-won and each line was a real bug.
-4. **It survives being loaded — HARD GATE.** The system boots in Foundry, the affected sheet opens, and the affected button does the thing. The product IS the loaded system and no node-side assertion observes that, so **anything a player can click is not done until it has been loaded and clicked.** A session that cannot reach that step reports BLOCKED and leaves the checklist, however green its suites are. *(Ratified 2026-07-27 as a hard gate, with the cost accepted: work waits on a hands-on check rather than closing on tests alone. The 2026-06-07 halve-damage escape is the argument — a fix, not a feature, invisible to 315 green assertions for 7 weeks.)*
+4. **Saying what is unverified — GATE. Actually exercising it in Foundry — aspirational.** The product IS the loaded system, and no node-side assertion observes it. So a session **may never report an artifact-affecting change as working**: it closes the change *and states, specifically, which Foundry-side behavior nobody has observed* — which sheet, which button, which card. "Suites green" is never written as, or allowed to imply, "it works." Loading it and clicking it is encouraged and does not block; play is the real verification channel and bugs get reported from it as they surface. *(Ratified 2026-07-27, then **split 2026-07-27** in the same shape as clause 5. The drafted version made the hands-on check a hard gate; that puts the gate on the one participant a gate cannot compel, and would have parked finished work indefinitely. The enforceable half is the honest report. The 2026-06-07 halve-damage escape is still the argument, and its actual mechanism was the substitution — 315 green assertions **read as** evidence the system worked. Forbidding that sentence is what closes it. What replaces upfront verification is §6: every bug reported from play ships its fix **and** the rung that would have caught it, in the same session, so each report permanently closes its own class.)*
 5. **Rules maths is covered by a suite — GATE. Coverage of logic in general — aspirational.** Anything implementing a rulebook formula, table, or threshold needs an assertion before it counts as done, expressed as a test rather than as prose in a commit message. Coverage of everything else (sheet wiring, chat rendering, UI glue) is encouraged and never blocks — most of it cannot be reached from `node` at all. *(Ratified 2026-07-27. Narrowed from the drafted "all pure logic is covered", which would have gated work the rungs structurally cannot see.)*
 6. **User-facing strings go through `lang/en.json` — GATE.** A hardcoded English string is a defect that blocks done, even though nothing renders wrong today. *(Ratified 2026-07-27 as blocking. ⚠ **No rung enforces this yet** — by §3's own standard that makes it a comment, not a constraint, until a scan exists. Named here so the gap stays visible.)*
 
@@ -101,7 +101,7 @@ All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a leg
 | template / lang / manifest touch | + `contract.test.mjs` (all) |
 | behavior-change (**rules maths**: a formula, table or threshold from the book) | + a RED-first test naming the behavior + a planted-mutation run proving it red — **§1 clause 5 gate** |
 | behavior-change (other logic: sheet wiring, chat rendering, UI glue) | + a test where one is reachable from `node`; encouraged, does not block (§1 clause 5) |
-| artifact-affecting (anything a player clicks) | + **load the system in Foundry and click it** — **§1 clause 4 hard gate**. Cannot be closed by a session; report BLOCKED with the checklist and re-date the §5 manual rungs when it is run. |
+| artifact-affecting (anything a player clicks) | + **an explicit unverified statement naming the sheet / button / card nobody has observed** — **§1 clause 4 gate**. The change closes; the claim does not. Loading and clicking it is encouraged, not required; re-date the §5 manual rungs whenever it does happen. |
 | release (version bump / push) | + full channel map + all §5 specs + manual rungs re-dated + `system.json` version bumped |
 | rung-touch (editing `contract.test.mjs`) | + `node test/mutation-probe.mjs` — 11/11, control green |
 
@@ -113,7 +113,9 @@ All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a leg
 
 ## §5 Acceptance specs
 
-> **The SET is RATIFIED 2026-07-27** — all three manual specs were put individually and all three were kept. **The WORDING is still drafted**, not authored: each Given/When/Then below was written from observed behavior. Rewriting them in your own words is still worth more than the drafts are; the difference now is that the rows themselves are agreed obligations, not proposals.
+> **The SET is RATIFIED 2026-07-27** — all three manual specs were put individually and all three were kept. **The WORDING is still drafted**, not authored: each Given/When/Then below was written from observed behavior. Rewriting them in your own words is still worth more than the drafts are.
+>
+> **What the manual rows mean after the clause-4 split (2026-07-27):** they are **last-known-verified markers, not obligations**. Nothing is owed on them and no work is parked waiting for them. Their whole job is to make the honesty in clause 4 concrete — when a date here is stale or reads NEVER, that is the specific thing a session is required to name as unobserved. Let them go stale loudly; a stale date is information, not a debt.
 
 ### SPEC halve-damage-never-restores-more-than-was-dealt
 ```
@@ -175,6 +177,12 @@ Check: manual — last verified: NEVER
 ---
 
 ## §6 Escape log
+
+> **This section is load-bearing as of the 2026-07-27 clause-4 split.** Upfront hands-on verification is aspirational, so **play is the primary discovery channel** and this log is the mechanism that keeps that from being a hole. The obligation is on the session, not on the reporter:
+>
+> **A bug reported from play is not fixed until the same session has shipped (a) the fix, (b) a rung that fails on the pre-fix behavior, and (c) a row here.** A fix without a rung means the class stays open and the next instance is discovered the same expensive way. Report bugs however is convenient — a sentence is enough; reconstructing the mechanism is the session's job, not the reporter's.
+>
+> **Residual risk, stated rather than buried:** defects that only fire at a boundary can look like ordinary play and go unreported for a long time. Halve-damage was exactly this — it misbehaved *only* on an overkill hit, which reads as a normal knockout. Nothing about reporting-from-play catches that class, so the §3 static scans and the property sweeps in the suites carry more weight than they otherwise would. Prefer a property sweep over hand-picked examples whenever the input space has edges.
 
 | Date | Escape | Rung that now catches it |
 |---|---|---|
