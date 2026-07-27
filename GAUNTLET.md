@@ -233,10 +233,12 @@ Check: test/fusion-statblock.test.mjs  (tagged  // spec: fusion-produces-the-rea
 Given a Foundry world with this system installed
 When it is launched from cold
 Then the world loads, an actor sheet opens, and no error appears in the console
-Check: manual — last verified: 2026-06-07 (v0.1.11)
+Check: manual — last verified: 2026-07-27 (v0.1.12)
 ```
 
-**⚠ This date is stale and the staleness is the point.** HEAD is **8 commits past** the last version actually loaded — the cross-clan fusion chart, the localization rename, the Effects tab work, and the halve-damage fix have never been in front of Foundry. Every `node` suite being green says nothing about this row.
+**Verified 2026-07-27, and here is exactly what that covers.** The world loads clean on v0.1.12 with the compendium (`194 stat blocks loaded`), actor sheets render, the demon picker opens and creates, and a Thor + Suparna fusion produced a Chimera matching p.140 field for field — stats, favored stat, derived HP/MP, all four affinities, drops, and 7 own skills plus 1 inherited under the cap of 8. That is the importer, compendium, chart, fusion and actor path confirmed end to end in the real channel.
+
+**What it does NOT cover:** no attack has been resolved, so `every-chat-button-fires` and `damage-card-reads-true` below are still NEVER. The halve-damage fix, the Magic/Ailment axes and the combat pipeline they feed remain unobserved — they are asserted, not seen.
 
 ### SPEC every-chat-button-fires
 ```
