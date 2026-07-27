@@ -67,7 +67,17 @@ All in `test/contract.test.mjs`. Each was mutation-proved on 2026-07-26 (see §6
 | C8 | Every `smt-rpg` flag read has a writer. Scope/key consts and interpolated `flags.${SCOPE}.${KEY}` paths are resolved before matching. | The whole multi-phase combat pipeline is flag-driven; a read with no writer is a permanently dead button. |
 | C9 | Every §5 spec is linked to a tagged test or is a dated manual rung, and every `spec:` tag matches a declared spec. | A spec with no backing check is a claim, not a constraint. |
 
-**Scan honesty.** Four of these scans reported violations on their first run that were **defects in the scan, not the code**: over-expanded template subtypes; two flag-writer idioms a literal-only regex could not see (file-local consts, interpolated computed keys); and two self-reference bugs where the scanner matched spec names in its own text. All were fixed and re-proved. A scan that cannot see a legitimate idiom manufactures false positives until someone deletes the rung — which is how a project ends up with no rung at all.
+**Scan honesty.** Five defects, across three of these scans, reported violations on their first run that were **defects in the scan, not the code**:
+
+| Scan | Reported | Actually |
+|---|---|---|
+| C3b | 4 missing `templates/item/{fiend,demon,human,npc}-sheet.hbs` | the dynamic path was expanded against Actor subtypes as well as Item ones, inventing paths the branch can never request |
+| C8b | `rewardsPaid` has no writer | `rewards.mjs` writes it as `setFlag(FLAG_SCOPE, PAID_KEY, true)` — both args are file-local consts, invisible to a literal-only regex |
+| C8b | `initiativeTieBreak` has no writer | `documents/combat.mjs` writes the computed key `` [`flags.${FLAG_SCOPE}.${TIEBREAK_KEY}`] `` — assembled at runtime |
+| C9c | dangling spec tag `tag` | the scanner matched `spec: tag` inside its own assertion label |
+| C9c | control run red on `a-tag-matching-no-declared-spec` | `mutation-probe.mjs` stores the tags it plants, and it lives under `test/` |
+
+All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a legitimate idiom manufactures false positives until someone deletes the rung — which is how a project ends up with no rung at all; and a scanner that reads its own source will find whatever it is looking for.
 
 **Canonical ownership**
 
