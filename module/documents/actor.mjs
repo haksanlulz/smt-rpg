@@ -1,6 +1,6 @@
 import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
-import { expThresholdForLevel } from "../helpers/advancement.mjs";
+import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -83,7 +83,49 @@ export default class SMTActor extends Actor {
       ui.notifications.info(game.i18n.localize("SMT.LevelUp.NotReady"));
       return null;
     }
-    return this.setLevel(this.system.level + 1);
+    const actor = await this.setLevel(this.system.level + 1);
+    if (actor) await actor.#applyStatGrowth();
+    return actor;
+  }
+
+  // The level-up stat point (p.34). Demons "apply the point randomly": roll 1d10 on
+  // the Demon Stat Growth Table and apply the result. Fiends and humans "may apply
+  // this point to any stat they prefer", so nothing is rolled for them.
+  //
+  // Faces 9 and 0 hand the point back even for a demon, so those post the same
+  // prompt rather than being applied silently.
+  async #applyStatGrowth() {
+    const isDemon = this.type === "demon";
+    let growth = { stat: null, playerChoice: true };
+    let roll = null;
+
+    if (isDemon) {
+      roll = new Roll(CONFIG.SMT.advancement.statGrowth.die);
+      await roll.evaluate();
+      growth = statGrowthFor(roll.total, this.system.favoredStat);
+    }
+
+    if (growth.stat) {
+      await this.update({ [`system.${growth.stat}`]: (this.system[growth.stat] ?? 0) + 1 });
+    }
+
+    const statLabel = growth.stat
+      ? game.i18n.localize(CONFIG.SMT.stats[growth.stat])
+      : "";
+    const content = growth.stat
+      ? game.i18n.format("SMT.LevelUp.StatRolled", { roll: roll.total, stat: statLabel })
+      : game.i18n.localize("SMT.LevelUp.StatChoice");
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="smt-chat"><strong>${this.name}</strong> — ${content}</div>`,
+      rolls: roll ? [roll] : []
+    });
+
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Stat Growth", {
+      actor: this.name, type: this.type, roll: roll?.total ?? null,
+      favoredStat: this.system.favoredStat, applied: growth.stat
+    });
   }
 
   // Roll 1d100 vs tn, post the card, return the outcome.
