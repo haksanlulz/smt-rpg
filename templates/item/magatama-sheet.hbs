@@ -48,7 +48,7 @@
       {{#each system.skillList as |entry idx|}}
       <div class="skill-entry">
         <input type="text" name="system.skillList.{{idx}}.skillName" value="{{entry.skillName}}" placeholder="Skill Name" />
-        <label>Lv</label>
+        <label>{{localize "SMT.LVShort"}}</label>
         <input type="number" name="system.skillList.{{idx}}.learnLevel" value="{{entry.learnLevel}}" min="1" />
       </div>
       {{/each}}

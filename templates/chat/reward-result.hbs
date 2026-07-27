@@ -6,7 +6,7 @@
     <span class="reward-section-label">{{localize "SMT.Rewards.Defeated"}}</span>
     <ul class="reward-foe-list">
       {{#each foes}}
-      <li>{{this.name}} <span class="foe-detail">(LV {{this.level}} — {{localize "SMT.EXP"}} {{this.exp}}{{#if this.macca}}, {{this.macca}} {{localize "SMT.MaccaShort"}}{{/if}})</span></li>
+      <li>{{this.name}} <span class="foe-detail">({{localize "SMT.LVShort"}} {{this.level}} — {{localize "SMT.EXP"}} {{this.exp}}{{#if this.macca}}, {{this.macca}} {{localize "SMT.MaccaShort"}}{{/if}})</span></li>
       {{/each}}
     </ul>
   </div>

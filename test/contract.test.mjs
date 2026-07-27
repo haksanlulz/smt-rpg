@@ -298,6 +298,44 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   }
 }
 
+// --- C11: user-facing strings go through en.json (§1 clause 6, a GATE) -----
+// Deliberately NARROW. Broad "looks like English" detection over templates is
+// exactly the false-positive-prone shape that got three scans wrong on
+// 2026-07-26, and a rung that cries wolf gets deleted. Two high-signal surfaces
+// only: notification calls, and template text nodes.
+{
+  // (a) ui.notifications.* must receive a localized string, never a literal.
+  const literalNotify = [];
+  for (const [f, src] of SRC) {
+    for (const m of src.matchAll(/ui\.notifications\.\w+\(\s*(["'`])/g)) {
+      const line = src.slice(0, m.index).split("\n").length;
+      literalNotify.push(`${rel(f)}:${line}`);
+    }
+  }
+  eq(literalNotify, [], "C11a every ui.notifications call goes through game.i18n, never a bare string");
+
+  let notifyCount = 0;
+  for (const [, src] of SRC) notifyCount += [...src.matchAll(/ui\.notifications\.\w+\(/g)].length;
+  ok(notifyCount >= 20, `C11b notification calls found (${notifyCount} >= 20) — a collapsed scan set would pass C11a vacuously`);
+
+  // (b) Template text nodes. Strip tags and handlebars, then anything left with
+  // two or more consecutive letters is text a player reads. HTML entities
+  // (&mdash; &nbsp; &rarr;) are punctuation, not translatable copy, so they are
+  // resolved away rather than reported — they made up 7 of the 8 raw hits.
+  const hardcoded = [];
+  for (const [f, raw] of HBS_SRC) {
+    let s = raw.replace(/<(script|style)[\s\S]*?<\/\1>/g, " ");
+    s = s.replace(/<[^>]*>/g, " ");
+    s = s.replace(/\{\{[\s\S]*?\}\}/g, " ");
+    s = s.replace(/&[a-zA-Z]+;|&#\d+;/g, " ");
+    for (const line of s.split("\n")) {
+      const t = line.trim();
+      if (/[A-Za-z]{2,}/.test(t)) hardcoded.push(`${rel(f)}: ${t.slice(0, 60)}`);
+    }
+  }
+  eq(hardcoded, [], "C11c no hardcoded user-facing text in templates — wrap it in {{localize}} and add the key");
+}
+
 // --- C10: licensed rulebook content never becomes committable --------------
 // The repo is public. The PDF and any text extracted from it are the same
 // licensed content. Values derived from it (stat numbers, table lookups in
