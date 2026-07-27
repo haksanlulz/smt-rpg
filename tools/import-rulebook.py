@@ -58,6 +58,8 @@ STAT_WINDOW = {False: (130.0, 270.0), True: (355.0, 560.0)}
 CLAN_TYPOS = {"diety": "deity"}
 
 ORDINAL = re.compile(r"^(\d+)(ST|ND|RD|TH)$", re.I)
+# The TYPE column has a closed vocabulary; anything else is a misread row.
+TYPE_PREFIX = re.compile(r"^(Physical|Magical|Ranged|Spell|Passive|Talk)(\s|$)", re.I)
 
 
 def title_case(name):
@@ -90,6 +92,30 @@ def clean(v):
     """A dash placeholder means 'no value', not the literal character."""
     v = (v or "").strip()
     return "" if v in (DASH, "-", "") else v
+
+
+def repair_split_cells(row):
+    """Re-join two-token values that a column boundary cut in half.
+
+    Column x drifts a few points between pages. Where a boundary lands inside a
+    value, its second word is assigned to the next column: "Physical Attack" becomes
+    type "Physical" + target "Attack 1", and "13 HP" becomes cost "13" + tn "HP".
+    Both halves are still present and in order, so they can be put back.
+
+    Ruler precedence (block -> page -> nearest page -> corpus) fixed this for all but
+    p.161, where BOTH printed blocks have a full skill table and so neither offers an
+    empty row to measure. Rather than special-case that page, repair the split
+    wherever it appears -- the joins below are unambiguous because "Physical Attack"
+    is one vocabulary item and a cost is always "<number> HP|MP"."""
+    if row["target"].startswith("Attack") and TYPE_PREFIX.match(row["type"] + " "):
+        row["type"] = f"{row['type']} Attack".strip()
+        row["target"] = row["target"][len("Attack"):].strip()
+    # The unit can land in the TN cell alongside the real TN ("MP 87%"), so take the
+    # leading unit token and leave whatever follows it in place.
+    unit = re.match(r"^(HP|MP)\b\s*(.*)$", row["tn"], re.I)
+    if row["cost"].isdigit() and unit:
+        row["cost"] = f"{row['cost']} {unit.group(1).upper()}"
+        row["tn"] = unit.group(2).strip()
 
 
 class Importer:
@@ -206,13 +232,30 @@ class Importer:
             # "Anti-Phys" (p.194) is a passive carrying only a learn level.
             if not any(v for k, v in row.items() if k != "name"):
                 continue
+            # Footnotes wrap below the table and land across the skill columns as
+            # prose -- "When evolving into Queen Mab, learn Mediarahan instead of
+            # Diarahan" (p.186-187) parsed as two skills. A real row either names a
+            # type from the book's closed vocabulary or carries a learn level
+            # (Legion's "Anti-Phys", p.194, is a passive with only the latter).
+            # The learn level must be NUMERIC: the wrapped footnote puts a word
+            # ("into") in that column, which a mere non-empty check accepted.
+            if num(row["learnLv"]) is None and not TYPE_PREFIX.match(row["type"]):
+                continue
+            repair_split_cells(row)
             for k in ("learnLv", "potency", "basePower", "total"):
                 row[k] = num(row[k])
             row["tn"] = num(row["tn"])
             skills.append({k: v for k, v in row.items() if v not in ("", None)})
         return skills
 
-    def parse(self, head, block_ws, is_boss, printed, anchors):
+    def parse(self, head, block_ws, is_boss, printed, fallback_anchors):
+        # Prefer this block's OWN all-dash row as the ruler. Column x drifts by a few
+        # points between pages, and a corpus-wide median put "Attack" (of "Physical
+        # Attack") into the target column on 85 of 194 demons and stripped the HP/MP
+        # unit off 372 costs. The global ruler is only a fallback for blocks whose
+        # skill table has no fully-empty row to measure.
+        anchors = self.build_ruler([self.skill_body(block_ws)] if self.skill_body(block_ws) else []) \
+            or fallback_anchors
         lo_x, hi_x = STAT_WINDOW[is_boss]
         raw_clan = head["clan"].lower()
         clan = CLAN_TYPOS.get(raw_clan, raw_clan)
@@ -273,21 +316,50 @@ class Importer:
         return [(h, ws, p) for p in range(lo, hi + 1)
                 for h, ws in self.blocks(p + PRINTED_OFFSET)]
 
+    def page_rulers(self, blocks):
+        """One ruler per printed page, from every all-dash row on that page.
+
+        Column x drifts a few points between pages but is identical for the two
+        blocks printed on the same page, so a page-level ruler covers a block whose
+        own skill table is full and therefore has no empty row to measure."""
+        by_page = {}
+        for _h, ws, printed in blocks:
+            body = self.skill_body(ws)
+            if body:
+                by_page.setdefault(printed, []).append(body)
+        return {p: self.build_ruler(bodies) for p, bodies in by_page.items()}
+
     def run(self):
         gen = self.collect(*GENERAL_PAGES)
         boss = self.collect(*BOSS_PAGES)
-        rulers = {
+        # Ruler precedence: this block -> this page -> the whole layout. Each step out
+        # is less precise, so the narrowest one that can be measured always wins.
+        corpus = {
             False: self.build_ruler([b for b in (self.skill_body(ws) for _, ws, _ in gen) if b]),
             True: self.build_ruler([b for b in (self.skill_body(ws) for _, ws, _ in boss) if b]),
         }
-        return ([self.parse(h, ws, False, p, rulers[False]) for h, ws, p in gen]
-                + [self.parse(h, ws, True, p, rulers[True]) for h, ws, p in boss])
+        pages = {False: self.page_rulers(gen), True: self.page_rulers(boss)}
+        def ruler_for(is_boss, printed):
+            by_page = pages[is_boss]
+            if by_page.get(printed):
+                return by_page[printed]
+            # Nearest page that could be measured. Some pages (p.161) print two full
+            # skill tables and so contain no empty row at all; a neighbouring page in
+            # the same chapter shares the layout far more closely than a corpus median.
+            near = sorted((abs(q - printed), q) for q, r in by_page.items() if r)
+            if near:
+                return by_page[near[0][1]]
+            return corpus[is_boss]
+
+        return ([self.parse(h, ws, False, p, ruler_for(False, p)) for h, ws, p in gen]
+                + [self.parse(h, ws, True, p, ruler_for(True, p)) for h, ws, p in boss])
 
 
 def verify(demons):
     """Structural checks. A wrong number here produces a working wrong answer, so
     the import refuses rather than writing something plausible but unverified."""
     errs = []
+    warns = []          # faithful-but-odd values the book itself prints
     gen = [d for d in demons if not d.get("boss")]
     boss = [d for d in demons if d.get("boss")]
 
@@ -316,6 +388,21 @@ def verify(demons):
             n = s.get("name", "")
             if re.fullmatch(r"\d+", n) or "Order #" in n or "(Order" in n:
                 errs.append(f"{where}: page furniture imported as a skill: {n!r}")
+            # A column boundary landing mid-value splits "Physical Attack" and
+            # "13 HP" across two cells. Both halves survive, so the damage is silent:
+            # the type reads "Physical" and the cost loses its resource. Neither is
+            # a value the book ever prints, so both are checkable.
+            t = s.get("type", "")
+            if t and not TYPE_PREFIX.match(t):
+                errs.append(f"{where}: skill {n!r} has type {t!r}, not a printed type")
+            c = s.get("cost", "")
+            if c in ("HP", "MP"):
+                # The book itself prints a bare unit with no quantity for Recarmdra
+                # (p.163, p.207, p.209) -- and its Ch.4 entry leaves the MP column
+                # blank too. Faithful, so it is reported rather than refused.
+                warns.append(f"{where}: skill {n!r} cost is a bare {c!r} (as printed)")
+            elif c and not re.fullmatch(r"(\d+ (HP|MP)|All HP)", c):
+                errs.append(f"{where}: skill {n!r} has cost {c!r}, expected '<n> HP|MP'")
         if not d.get("bookLevel") and not 1 <= d["level"] <= 99:
             errs.append(f"{where}: level {d['level']} out of range")
 
@@ -336,7 +423,7 @@ def verify(demons):
         for k, v in want.items():
             if got.get(k) != v:
                 errs.append(f"anchor {name}.{k}: expected {v}, got {got.get(k)}")
-    return errs
+    return errs, warns
 
 
 def main():
@@ -352,12 +439,15 @@ def main():
         sys.exit(f"no such file: {args.pdf}")
 
     demons = Importer(args.pdf).run()
-    errs = verify(demons)
+    errs, warns = verify(demons)
 
     print(f"parsed {len(demons)} demons "
           f"({sum(1 for d in demons if not d.get('boss'))} general, "
           f"{sum(1 for d in demons if d.get('boss'))} boss), "
           f"{sum(len(d['skills']) for d in demons)} skill rows")
+
+    for w in warns:
+        print(f"  note (as printed in the book): {w}")
 
     if errs:
         print(f"\nverification FAILED ({len(errs)} problems):")
