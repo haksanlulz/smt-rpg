@@ -298,6 +298,39 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   }
 }
 
+// --- C10: licensed rulebook content never becomes committable --------------
+// The repo is public. The PDF and any text extracted from it are the same
+// licensed content. Values derived from it (stat numbers, table lookups in
+// config.mjs) are fine; prose and stat blocks are not. An ignore rule nobody
+// asserts is one `git add -f` or one edited .gitignore away from a leak.
+{
+  const gitignore = existsSync(join(ROOT, ".gitignore"))
+    ? readFileSync(join(ROOT, ".gitignore"), "utf8")
+    : "";
+  const rules = gitignore.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+
+  // Tracked .gitignore, not .git/info/exclude: a fresh clone inherits only the former.
+  ok(rules.some(r => /^rulebook-text\/?$/.test(r)),
+    "C10a tracked .gitignore excludes rulebook-text/ (a fresh clone inherits this; .git/info/exclude does not)");
+  ok(rules.some(r => /^\*\.pdf$/.test(r)),
+    "C10b tracked .gitignore excludes *.pdf");
+
+  // Ground truth, when a repo is reachable. Skips LOUDLY rather than passing —
+  // an assertion that silently no-ops outside a checkout is not a guard.
+  let tracked = null;
+  try {
+    tracked = execFileSync("git", ["ls-files", "--", "rulebook-text", "*.pdf"], {
+      cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch { /* no git, or not a checkout */ }
+
+  if (tracked === null) {
+    console.log("  C10c SKIPPED: no git checkout reachable — tracked-file check did not run");
+  } else {
+    eq(tracked ? tracked.split("\n") : [], [], "C10c no rulebook PDF or extracted text is tracked by git");
+  }
+}
+
 console.log(`\nsmt-rpg contract tests: ${passed} passed, ${failed} failed`);
 if (failed) {
   console.log("\nFailures:");

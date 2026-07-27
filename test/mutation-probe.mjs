@@ -21,7 +21,7 @@ const SCRATCH = join(tmpdir(), "smt-rpg-mutation-probe");
 // Only what the contract suite reads. Copying the whole tree would drag the rulebook PDF.
 // `styles` is required even though no scan reads its contents: C6b asserts every
 // file system.json declares exists, and omitting it made the control run red.
-const COPY = ["module", "templates", "lang", "styles", "test", "system.json", "smt-rpg.mjs", "GAUNTLET.md"];
+const COPY = ["module", "templates", "lang", "styles", "test", "system.json", "smt-rpg.mjs", "GAUNTLET.md", ".gitignore"];
 
 function copyInto(dest) {
   rmSync(dest, { recursive: true, force: true });
@@ -90,6 +90,14 @@ const MUTATIONS = [
     rung: "C9c dangling tag", expect: "C9c",
     apply: (d) => edit(d, "test/fate-damage.test.mjs", s =>
       s + "\n// spec: a-tag-matching-no-declared-spec\n")
+  },
+  {
+    rung: "C10a rulebook ignore dropped", expect: "C10a",
+    apply: (d) => edit(d, ".gitignore", s => s.replace(/^rulebook-text\/?$/m, ""))
+  },
+  {
+    rung: "C10b pdf ignore dropped", expect: "C10b",
+    apply: (d) => edit(d, ".gitignore", s => s.replace(/^\*\.pdf$/m, ""))
   }
 ];
 
