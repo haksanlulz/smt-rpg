@@ -350,6 +350,8 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   // Tracked .gitignore, not .git/info/exclude: a fresh clone inherits only the former.
   ok(rules.some(r => /^rulebook-text\/?$/.test(r)),
     "C10a tracked .gitignore excludes rulebook-text/ (a fresh clone inherits this; .git/info/exclude does not)");
+  ok(rules.some(r => /^data-local\/?$/.test(r)),
+    "C10d tracked .gitignore excludes data-local/ (imported stat blocks are the book's content)");
   ok(rules.some(r => /^\*\.pdf$/.test(r)),
     "C10b tracked .gitignore excludes *.pdf");
 
@@ -357,7 +359,7 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   // an assertion that silently no-ops outside a checkout is not a guard.
   let tracked = null;
   try {
-    tracked = execFileSync("git", ["ls-files", "--", "rulebook-text", "*.pdf"], {
+    tracked = execFileSync("git", ["ls-files", "--", "rulebook-text", "data-local", "*.pdf"], {
       cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"]
     }).trim();
   } catch { /* no git, or not a checkout */ }

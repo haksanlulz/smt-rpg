@@ -3,3 +3,4 @@
 # table lookups in module/config.mjs) are fine - prose and stat blocks are not.
 *.pdf
 rulebook-text/
+data-local/
