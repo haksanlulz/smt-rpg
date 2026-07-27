@@ -117,6 +117,15 @@ def repair_split_cells(row):
         row["cost"] = f"{row['cost']} {unit.group(1).upper()}"
         row["tn"] = unit.group(2).strip()
 
+    # A demon with a Boost passive has its affected skills printed as "115 (77)":
+    # the boosted total first, the unboosted in parentheses (Berith's Fire Boost,
+    # p.161; Quetzalcoatl's Ice Boost, p.163). The parenthetical is wide enough to
+    # spill into the element cell, so pull it back before it is read as an element.
+    paren = re.match(r"^\((\d+)\)\s*(.*)$", row["element"])
+    if paren and row["total"].isdigit():
+        row["total"] = f"{row['total']} ({paren.group(1)})"
+        row["element"] = paren.group(2).strip()
+
 
 class Importer:
     def __init__(self, path):
@@ -242,8 +251,15 @@ class Importer:
             if num(row["learnLv"]) is None and not TYPE_PREFIX.match(row["type"]):
                 continue
             repair_split_cells(row)
-            for k in ("learnLv", "potency", "basePower", "total"):
-                row[k] = num(row[k])
+            # "115 (77)" -> total 115 (as printed, Boost applied) plus the unboosted
+            # 77, which is the value that equals potency + base power.
+            boosted = re.fullmatch(r"(\d+)\s*\((\d+)\)", row["total"])
+            if boosted:
+                row["total"] = boosted.group(1)
+                row["totalUnboosted"] = boosted.group(2)
+            for k in ("learnLv", "potency", "basePower", "total", "totalUnboosted"):
+                if k in row:
+                    row[k] = num(row[k])
             row["tn"] = num(row["tn"])
             skills.append({k: v for k, v in row.items() if v not in ("", None)})
         return skills

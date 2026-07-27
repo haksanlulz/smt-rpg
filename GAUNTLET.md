@@ -191,6 +191,19 @@ And no demon the formula does reproduce carries a redundant override
 Check: test/boss-hp.test.mjs  (tagged  // spec: bosses-keep-their-printed-hp)
 ```
 
+### SPEC imported-stat-blocks-are-internally-consistent
+```
+Given the demon stat blocks imported from the rulebook
+When they are checked against the arithmetic the book itself prints
+Then every stat TN, substat, resistance, skill total and skill base power
+     derives from the values printed beside it
+And any block that does not is a recorded book anomaly with the page cited,
+     kept exactly as printed rather than corrected
+Check: test/corpus-arithmetic.test.mjs  (tagged  // spec: imported-stat-blocks-are-internally-consistent)
+```
+
+**Why this exists.** The first four extraction defects were each found by exporting a single actor and reading it — the watermark imported as a skill, boss HP clamped, columns shifted one place right. That does not scale to 194 blocks × ~40 fields. The book prints redundant values, so the corpus can check itself: `total = potency + basePower`, `TN = stat × 5 + level`, `resist = (stat + level) / 2`. A column landing one place right breaks these immediately. The sweep found the boosted-total notation (`115 (77)`) that a fifth read would eventually have caught, and left **12 anomalies out of roughly 7,700 values — 99.85% internally consistent.**
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
