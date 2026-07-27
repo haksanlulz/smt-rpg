@@ -38,7 +38,7 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | Artifact | Real channel | Pass condition | Rung |
 |---|---|---|---|
 | pure rules helpers | a suite importing them directly | every assertion green | `test/pure-helpers.test.mjs`, `test/fusion-chart.test.mjs`, `test/fate-damage.test.mjs`, `test/demon-roster.test.mjs` |
-| rulebook data tables (fusion chart, demon roster) | the rules that read them | every value cross-checked against another table the book prints, plus anchors read off the rendered page | `fusion-chart.test.mjs`, `demon-roster.test.mjs` |
+| rulebook data tables (fusion chart, demon roster, stat blocks) | the rules that read them | every value cross-checked against another table the book prints, plus anchors read off the rendered page | `fusion-chart.test.mjs`, `demon-roster.test.mjs`, `boss-hp.test.mjs`, `demon-skills.test.mjs` |
 | shipped `.mjs` modules | **Foundry evaluates them at world load** | every module parses; every relative import resolves to a real export | `test/contract.test.mjs` C1–C2 |
 | `.hbs` templates | **Foundry's template loader renders them** | every referenced path exists; every `{{> partial}}` resolves | `test/contract.test.mjs` C3–C4 |
 | `lang/en.json` | Foundry's i18n loader at init | no leaf/branch collision; every `SMT.*` key used in code exists | `pure-helpers` collision guard + `contract` C5 |
@@ -182,6 +182,15 @@ Then every field written matches the schema's own declared names, enum values
 Check: test/demon-skills.test.mjs  (tagged  // spec: created-demons-have-valid-skill-items)
 ```
 
+### SPEC bosses-keep-their-printed-hp
+```
+Given a demon whose printed HP or MP the level/stat formula does not reproduce
+When it is created from its stat block
+Then its maximum is the printed number, not the derived one
+And no demon the formula does reproduce carries a redundant override
+Check: test/boss-hp.test.mjs  (tagged  // spec: bosses-keep-their-printed-hp)
+```
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
@@ -228,7 +237,12 @@ Check: manual — last verified: NEVER
 
 | 2026-07-27 | **Every demon created from the compendium lost all of its skills.** `buildDemonSkills` wrote field names and enum values from memory instead of reading the schema: `magicalAttack` where `CONFIG.SMT.skillTypes` declares `magical-attack`, `target` for `targets`, `description` for `effectDescription`, a `cost.allHp` key that does not exist. `buildDemonSystem` then wrote `drops` as a bare string where the schema declares a SchemaField, and `behavior`, which only npc-data has. Foundry rejected each Item and the actor came up skill-less. Found by creating three demons and reading the console — the first thing a player would do. | `test/demon-skills.test.mjs` — builds skills for all 194 demons and checks every field against names parsed out of `skill-data.mjs` and enums read from `CONFIG.SMT`, plus nested-shape checks for every SchemaField. Reproduced the escape at **4,692 violations**; the nested-shape leg was added after the name-only check passed `drops`-as-a-string happily. |
 
-**What let the 2026-07-27 one happen at all.** Not a subtle rule — the schema was three files away and states every legal value. It was written from memory because the code *looked* like the kind of mapping that does not need checking. Every enum in `compendium.mjs` now resolves against `CONFIG` at runtime rather than being restated, so a literal cannot drift out of the schema again. The wider lesson is the one this file already carries: the node-side suites all passed while the feature was completely broken, because none of them constructs a Foundry document.
+| 2026-07-27 | **The PDF's purchase watermark was imported as a skill onto 109 demons.** The skill parser took every row below the table header, and page furniture — the printed page number, and the per-buyer watermark carrying a real name and order number — sits below the table in the name column alone. 163 junk rows across 56% of the corpus, and the buyer's identity ended up inside every created Actor and would have travelled in any exported or shared content. Found by reading an exported actor JSON. | `tools/import-rulebook.py` drops rows where nothing but the name is populated (a real skill always fills at least one other cell — Legion's `Anti-Phys`, p.194, is a passive carrying only a learn level), and its verification now **refuses to write** if a page-number or `Order #` name survives. 1575 → 1412 rows, all 163 junk, zero real skills lost. |
+| 2026-07-27 | **Boss HP was silently halved or worse.** `hp.max` is derived, so writing a boss's printed HP into `hp.value` clamped it to `(vitality + level) × multiplier`. 21 of 23 bosses print more than the formula yields — Specter got 72 instead of 148, Baal Avatar 630 instead of 13,000. Found by reading an exported actor JSON, not by any assertion. | `helpers/resources.mjs` adds an explicit max override that `prepareDerivedData` consults; `boss-hp.test.mjs` (39 assertions) checks every demon's resolved max against the printed number. The override is driven by comparing derived to printed rather than by the `boss` flag, which is what surfaced **Scáthach** (p.129): a general demon printing 498 HP where the formula gives 486. Her MP and Lakshmi on the same page derive exactly, so it is a slip in the book — carried as printed and reported as a caveat, per §1 clause 1. |
+
+**The 2026-07-27 cluster has one shape: everything was checked except the thing that consumes it.** The skill parser was checked against the table and not against what sits below it; the boss HP was checked as a stored value and not against the derived ceiling that overwrites it; the schema fields were checked against memory and not against the schema. All four were found by looking at real output — a rendered page, an exported actor — never by an assertion. **Read the artifact, not just the code that made it.**
+
+**What let the schema one happen at all.** Not a subtle rule — the schema was three files away and states every legal value. It was written from memory because the code *looked* like the kind of mapping that does not need checking. Every enum in `compendium.mjs` now resolves against `CONFIG` at runtime rather than being restated, so a literal cannot drift out of the schema again. The wider lesson is the one this file already carries: the node-side suites all passed while the feature was completely broken, because none of them constructs a Foundry document.
 
 **What let it survive seven weeks.** Not the maths — that was five lines and read correctly in isolation. The defect lived at the seam between `calculateDamage` (pure, 178 assertions on it) and the HP write inside `SMTActor#applyDamage` (Foundry-coupled, zero assertions, unimportable in `node`). **No rung existed that could observe a wrong HP.** It was filed as needing live numbers; it did not — extracting the write into a pure function settled it in one pass with no session at all.
 

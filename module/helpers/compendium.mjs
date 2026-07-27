@@ -137,10 +137,9 @@ export function allDemonStats() {
 
 // Build the actor `system` payload for a stat block. Pure apart from CONFIG reads.
 //
-// HP/MP are deliberately NOT written for general demons: the derived formula
-// ((vitality + level) * multiplier) reproduces the book's printed value for all 171
-// of them, verified against the import. Bosses print higher HP/MP (p.123 -- the Boss
-// trait roughly doubles them), which no formula derives, so theirs is stored.
+// The derived formula ((stat + level) * multiplier) reproduces the book's printed
+// HP and MP for 170 of the 171 general demons. Where it does not -- every boss, and
+// Scáthach -- the printed value is carried as an explicit max override.
 export function buildDemonSystem(stats) {
   const affinity = parseAffinityLine(stats.affinities);
   const system = {
@@ -155,11 +154,32 @@ export function buildDemonSystem(stats) {
   };
 
   if (stats.favoredStat) system.favoredStat = stats.favoredStat;
-  if (stats.boss) {
-    system.isBoss = true;
-    system.hp = { value: stats.hp, max: stats.hp };
-    system.mp = { value: stats.mp, max: stats.mp };
+  if (stats.boss) system.isBoss = true;
+
+  // Carry the printed maximum whenever the formula does not reproduce it. `max` is
+  // derived, so a bare `hp.value` above the derived ceiling is silently clamped down
+  // — which halved Specter and cost Baal Avatar 12,370 HP.
+  //
+  // Driven by the numbers rather than by `boss`, because it is not purely a boss
+  // thing: Scáthach (p.129, LV 64 / Vi 17) prints 498 HP where the formula gives 486.
+  // Her MP derives exactly and Lakshmi on the same page derives exactly, so that is
+  // an arithmetic slip in the book, not a bad read. §1 clause 1 says match the book
+  // and flag what looks wrong, so it is carried and reported, not corrected.
+  const hpM = CONFIG.SMT.hpMultipliers[stats.boss ? "npc" : "demon"] ?? CONFIG.SMT.hpMultipliers.demon;
+  const mpM = CONFIG.SMT.mpMultipliers[stats.boss ? "npc" : "demon"] ?? CONFIG.SMT.mpMultipliers.demon;
+  const derivedHp = (stats.stats.vitality + stats.level) * hpM;
+  const derivedMp = (stats.stats.magic + stats.level) * mpM;
+  const anomalies = [];
+  if (Number.isFinite(stats.hp) && stats.hp !== derivedHp) {
+    system.hpMaxOverride = stats.hp;
+    if (!stats.boss) anomalies.push(`HP ${stats.hp} (formula gives ${derivedHp})`);
   }
+  if (Number.isFinite(stats.mp) && stats.mp !== derivedMp) {
+    system.mpMaxOverride = stats.mp;
+    if (!stats.boss) anomalies.push(`MP ${stats.mp} (formula gives ${derivedMp})`);
+  }
+  if (Number.isFinite(stats.hp)) system.hp = { value: stats.hp };
+  if (Number.isFinite(stats.mp)) system.mp = { value: stats.mp };
   if (Number.isFinite(stats.fatePoints)) system.fatePoints = { value: stats.fatePoints, max: stats.fatePoints };
 
   // `drops` is a SchemaField, not a string: what this demon GRANTS on defeat.
@@ -173,7 +193,7 @@ export function buildDemonSystem(stats) {
 
   // `behavior` is declared on npc-data only; demons have no such field. The book
   // prints one for every demon, so it is returned as a caveat rather than written.
-  return { system, affinity, behavior: stats.behavior || "" };
+  return { system, affinity, behavior: stats.behavior || "", anomalies };
 }
 
 // Skill Items for a stat block. "Basic Strike" is the innate attack every actor
@@ -256,7 +276,7 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
     return null;
   }
 
-  const { system, affinity, behavior } = buildDemonSystem(stats);
+  const { system, affinity, behavior, anomalies } = buildDemonSystem(stats);
   const actor = await Actor.create({
     name: stats.name,
     type: "demon",
@@ -272,6 +292,7 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
   if (affinity.magic) caveats.push(`Magic affinity (${affinity.magic}) — no engine axis yet`);
   if (affinity.ailment) caveats.push(`Ailment affinity (${affinity.ailment}) — not applied`);
   if (behavior) caveats.push(`behavior "${behavior}" — demons have no such field (npc only)`);
+  for (const a of anomalies) caveats.push(`book prints ${a} — kept as printed`);
   if (caveats.length && notify) {
     ui.notifications.info(game.i18n.format("SMT.Compendium.Caveats",
       { name: stats.name, caveats: caveats.join("; ") }));
@@ -318,7 +339,7 @@ export async function openDemonPicker() {
 
   const result = await foundry.applications.api.DialogV2.wait({
     window: { title: game.i18n.localize("SMT.Compendium.Title"), resizable: true },
-    position: { width: 520, height: 700 },
+    position: { width: 480, height: 560 },
     // Lands on the app root so the stylesheet can make the whole content chain
     // flex — a height on the inner section alone does not resolve against a
     // non-flex ancestor, and the list would keep its fixed `size` height.

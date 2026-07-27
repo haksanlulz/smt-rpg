@@ -1,6 +1,7 @@
 import { makeAffinitySchema, makeAilmentAffinitySchema, STATS } from "./fields.mjs";
 import { passiveMultiplierBonuses, hasMightEffect, shootTnBonus, physicalPowerDice } from "../helpers/passives.mjs";
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
+import { resolveResourceMax } from "../helpers/resources.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
 
@@ -31,6 +32,10 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       mp: new SchemaField({
         value: new NumberField({ required: true, integer: true, min: 0, initial: 5 })
       }),
+      // Fixed maxima for stat blocks the formula cannot reproduce -- boss HP/MP is
+      // hand-authored in the book (p.123-125). 0 means "derive normally".
+      hpMaxOverride: new NumberField({ integer: true, min: 0, initial: 0 }),
+      mpMaxOverride: new NumberField({ integer: true, min: 0, initial: 0 }),
 
       fatePoints: new SchemaField({
         value: new NumberField({ required: true, integer: true, min: 0, initial: 5 })
@@ -140,8 +145,14 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
 
     // HP/MP = (vitality|magic + level) x (multiplier + passive bonus) (p.36, p.109)
     const { hpBonus, mpBonus } = this._getPassiveMultiplierBonuses();
-    this.hp.max = (this.vitalityTotal + lvl) * (this.hpMultiplier + hpBonus);
-    this.mp.max = (this.magicTotal + lvl) * (this.mpMultiplier + mpBonus);
+    this.hp.max = resolveResourceMax({
+      stat: this.vitalityTotal, level: lvl,
+      multiplier: this.hpMultiplier + hpBonus, override: this.hpMaxOverride
+    });
+    this.mp.max = resolveResourceMax({
+      stat: this.magicTotal, level: lvl,
+      multiplier: this.mpMultiplier + mpBonus, override: this.mpMaxOverride
+    });
 
     // Resistances: (vitality|magic + level) / 2 (p.36)
     this.physicalResistance = Math.floor((this.vitalityTotal + lvl) / 2);

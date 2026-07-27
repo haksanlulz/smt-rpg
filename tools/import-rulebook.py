@@ -198,6 +198,14 @@ class Importer:
             row = {c: clean(" ".join(cells[c])) for c in SKILL_COLS}
             if not row["name"]:
                 continue
+            # Page furniture sits below the skill table and lands in the name column
+            # alone: the printed page number, and the PDF's per-purchaser watermark.
+            # Both were being imported as skills and written onto 109 demons, putting
+            # the buyer's name and order number inside every created Actor.
+            # A real skill always populates at least one other cell -- Legion's
+            # "Anti-Phys" (p.194) is a passive carrying only a learn level.
+            if not any(v for k, v in row.items() if k != "name"):
+                continue
             for k in ("learnLv", "potency", "basePower", "total"):
                 row[k] = num(row[k])
             row["tn"] = num(row["tn"])
@@ -301,6 +309,13 @@ def verify(demons):
             errs.append(f"{where}: no affinities")
         if not d["skills"]:
             errs.append(f"{where}: no skills")
+        # Page furniture must never survive into the data. The watermark carries the
+        # buyer's real name and order number, so this is a privacy check, not a
+        # tidiness one: refuse the import rather than write it.
+        for s in d["skills"]:
+            n = s.get("name", "")
+            if re.fullmatch(r"\d+", n) or "Order #" in n or "(Order" in n:
+                errs.append(f"{where}: page furniture imported as a skill: {n!r}")
         if not d.get("bookLevel") and not 1 <= d["level"] <= 99:
             errs.append(f"{where}: level {d['level']} out of range")
 
