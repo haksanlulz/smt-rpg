@@ -150,7 +150,13 @@ export function buildDemonSystem(stats) {
     vitality: stats.stats.vitality,
     agility: stats.stats.agility,
     luck: stats.stats.luck,
-    affinities: { ...affinity.elements }
+    affinities: { ...affinity.elements },
+    // Magic and Ailment are category ratings, not elements (p.65). Magic stacks with
+    // the element rating on magical attacks; Ailment only moves the effect rate.
+    categoryAffinities: {
+      magic: affinity.magic ?? "normal",
+      ailment: affinity.ailment ?? "normal"
+    }
   };
 
   if (stats.favoredStat) system.favoredStat = stats.favoredStat;
@@ -289,8 +295,6 @@ export async function createDemonActor(name, { folder = null, notify = true } = 
   // rather than silently dropped.
   const caveats = [];
   if (affinity.unparsed.length) caveats.push(`affinities not applied: "${affinity.unparsed[0]}"`);
-  if (affinity.magic) caveats.push(`Magic affinity (${affinity.magic}) — no engine axis yet`);
-  if (affinity.ailment) caveats.push(`Ailment affinity (${affinity.ailment}) — not applied`);
   if (behavior) caveats.push(`behavior "${behavior}" — demons have no such field (npc only)`);
   for (const a of anomalies) caveats.push(`book prints ${a} — kept as printed`);
   if (caveats.length && notify) {

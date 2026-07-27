@@ -147,7 +147,14 @@ export default class SMTActor extends Actor {
       ? (isPhysical ? attacker.system.physicalResistance : attacker.system.magicalResistance)
       : 0;
 
-    const result = calculateDamage({ rawPower, affinity, resistance, isCritical, dodgeFumble, attackerResistance });
+    // The Magic rating applies to magical attacks and stacks with the element one
+    // (p.65). Ailment is passed for completeness but never touches damage.
+    const magicAffinity = this.system.categoryAffinities?.magic ?? "normal";
+    const ailmentAffinity = this.system.categoryAffinities?.ailment ?? "normal";
+    const result = calculateDamage({
+      rawPower, affinity, resistance, isCritical, dodgeFumble, attackerResistance,
+      magicAffinity, ailmentAffinity, isPhysicalAttack: isPhysical
+    });
     let hpBefore = null;
 
     if (CONFIG.SMT.debug) console.log("smt-rpg | Damage Calculation", {

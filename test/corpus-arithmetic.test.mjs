@@ -77,7 +77,7 @@ const KNOWN_FIELDS = new Map([
 
 // One block is anomalous throughout rather than in a single field.
 const KNOWN_BLOCKS = new Map([
-  ["Specter (3rd Time)", "prints LVL 440 (p.218). Every derived value on the block — all five stat TNs, Physical Power, Magical Power, Save TN and both resistances — is consistent with level 40, so 440 is a typo with a missing decimal. Kept as printed; the evidence is recorded rather than the correction applied."]
+  ["Specter (3rd Time)", "prints LVL 440 (p.218) while every derived value on the block — all five stat TNs, Physical Power, Magical Power, Save TN and both resistances — is consistent with level 40. RULED 2026-07-27: kept as printed. It is a boss-only entry and GM fiat, and a boss is allowed to sit off the curve. Not a defect to fix."]
 ]);
 
 const report = { statTN: [], substat: [], resist: [], skillTotal: [], basePower: [], anomalies: [], blockAnomalies: [] };

@@ -16,7 +16,7 @@ Authored 2026-07-26, after the escape logged in §6.
 
 **A feature is DONE when:**
 
-1. **It matches the rulebook.** Formulas, terminology, and tables match the book exactly, cited by page. Guessing at a mechanic is a defect even when the code is clean.
+1. **It matches the rulebook.** Formulas, terminology, and tables match the book exactly, cited by page. Guessing at a mechanic is a defect even when the code is clean. *(Clarified 2026-07-27: **a boss stat block is allowed to sit off the curve.** Boss entries are GM fiat — p.123 already derives their stats from their HP and MP rather than from a formula — so a boss value that no formula reproduces is data, not a defect. Specter (3rd Time)'s printed LVL 440 stands. The corpus sweep still checks bosses and names the exceptions, because an unexplained one is worth seeing.)*
 2. **It is automated, not left to the GM.** Rolls, damage, cost deduction, affinity application, and effect bookkeeping are performed by the system. "The GM can do that by hand" is not done.
 3. **It uses real Foundry v13/v14 APIs.** No hack workarounds; deprecated v12 patterns are defects. The AppV2 rules in the project notes are hard-won and each line was a real bug.
 4. **Saying what is unverified — GATE. Actually exercising it in Foundry — aspirational.** The product IS the loaded system, and no node-side assertion observes it. So a session **may never report an artifact-affecting change as working**: it closes the change *and states, specifically, which Foundry-side behavior nobody has observed* — which sheet, which button, which card. "Suites green" is never written as, or allowed to imply, "it works." Loading it and clicking it is encouraged and does not block; play is the real verification channel and bugs get reported from it as they surface. *(Ratified 2026-07-27, then **split 2026-07-27** in the same shape as clause 5. The drafted version made the hands-on check a hard gate; that puts the gate on the one participant a gate cannot compel, and would have parked finished work indefinitely. The enforceable half is the honest report. The 2026-06-07 halve-damage escape is still the argument, and its actual mechanism was the substitution — 315 green assertions **read as** evidence the system worked. Forbidding that sentence is what closes it. What replaces upfront verification is §6: every bug reported from play ships its fix **and** the rung that would have caught it, in the same session, so each report permanently closes its own class.)*
@@ -203,6 +203,18 @@ Check: test/corpus-arithmetic.test.mjs  (tagged  // spec: imported-stat-blocks-a
 ```
 
 **Why this exists.** The first four extraction defects were each found by exporting a single actor and reading it — the watermark imported as a skill, boss HP clamped, columns shifted one place right. That does not scale to 194 blocks × ~40 fields. The book prints redundant values, so the corpus can check itself: `total = potency + basePower`, `TN = stat × 5 + level`, `resist = (stat + level) / 2`. A column landing one place right breaks these immediately. The sweep found the boosted-total notation (`115 (77)`) that a fifth read would eventually have caught, and left **12 anomalies out of roughly 7,700 values — 99.85% internally consistent.**
+
+### SPEC affinity-ratings-stack-across-axes
+```
+Given a demon with a rating against an element AND against Magic as a category
+When it is hit by a magical attack of that element
+Then both ratings apply - two Weak ratings quadruple the damage, and the
+     highest-priority absolute (Repel > Drain > Null) wins outright
+And an Ailment rating changes only the ailment effect rate, never the damage
+Check: test/affinity-axes.test.mjs  (tagged  // spec: affinity-ratings-stack-across-axes)
+```
+
+**The engine had no Magic axis until 2026-07-27**, so 20 demons fought without their Magic rating and 30 without their Ailment one. p.65 is explicit on both points: the priority order is printed verbatim, and the worked example gives a demon weak to Ice, Magic and Ailments a **32×** effect-rate bonus — 2·2·2 for the ratings, ×2 crit, ×2 dodge fumble. The exception is equally explicit: an Ailment rating *"only ha[s] an effect on the ailment effect rate and do[es] not have any influence on the damage part"*, which the suite asserts directly because folding it into damage is the obvious mistake.
 
 ### SPEC system-loads-cold
 ```

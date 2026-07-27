@@ -13,8 +13,48 @@ function _applyResistance(afterAffinity, resistance, skipResistance) {
   return Math.max(0, value);
 }
 
+// Affinity ratings that end the calculation outright, highest priority first (p.65):
+// "Repel > Drain > Null > Strong > Weak (with Repel having the highest priority)."
+const ABSOLUTE_PRIORITY = ["repel", "drain", "null"];
+
+// Combine every affinity rating that applies to one attack.
+//
+// A target can hold a rating against the attack's ELEMENT and, for magical attacks,
+// against MAGIC as a category. Weak and Strong MULTIPLY across axes -- p.65's worked
+// example gives a demon weak to Ice, Magic and Ailments a 32x effect-rate bonus,
+// which is 2*2*2 for the three ratings times 2 for the crit and 2 for the fumble.
+// The absolutes do not multiply; the highest-priority one wins and short-circuits.
+export function affinityOutcome(ratings) {
+  let multiplier = 1;
+  let absolute = null;
+
+  for (const raw of ratings ?? []) {
+    const r = typeof raw === "string" ? raw.toLowerCase() : "";
+    if (ABSOLUTE_PRIORITY.includes(r)) {
+      if (absolute === null || ABSOLUTE_PRIORITY.indexOf(r) < ABSOLUTE_PRIORITY.indexOf(absolute)) {
+        absolute = r;
+      }
+    } else if (r === "weak") multiplier *= 2;
+    else if (r === "strong") multiplier /= 2;
+  }
+
+  return { absolute, multiplier };
+}
+
 // drain/repel deal no direct HP loss but carry the post-resistance magnitude (p.65) for the actor layer.
-export function calculateDamage({ rawPower, affinity, resistance, isCritical, dodgeFumble = false, attackerResistance = 0 }) {
+//
+// `magicAffinity` is the target's rating against Magic as a category and applies to
+// magical attacks only. `ailmentAffinity` is deliberately NOT read here: p.65 states
+// that an Ailment rating "only ha[s] an effect on the ailment effect rate and do[es]
+// not have any influence on the damage part". It is accepted and ignored so a caller
+// passing the full affinity set cannot silently have it applied to damage.
+export function calculateDamage({
+  rawPower, affinity, resistance, isCritical, dodgeFumble = false, attackerResistance = 0,
+  magicAffinity = "normal", isPhysicalAttack = false, ailmentAffinity = "normal"
+}) {
+  void ailmentAffinity;
+  const outcome = affinityOutcome([affinity, isPhysicalAttack ? "normal" : magicAffinity]);
+
   const result = {
     rawPower,
     affinity,
@@ -29,31 +69,26 @@ export function calculateDamage({ rawPower, affinity, resistance, isCritical, do
     dodgeFumble
   };
 
-  if (affinity === "null") {
+  if (outcome.absolute === "null") {
     result.isNull = true;
     return result;
   }
 
-  let afterAffinity;
-  if (affinity === "weak") {
-    afterAffinity = rawPower * 2;
-  } else if (affinity === "strong") {
-    afterAffinity = Math.floor(rawPower / 2);
-  } else {
-    afterAffinity = rawPower;
-  }
+  // Floor once, after the whole multiplier: halving twice is a quarter, not two
+  // separate roundings.
+  let afterAffinity = Math.floor(rawPower * outcome.multiplier);
 
   // Dodge fumble: double damage, skip resistance (p.65).
   if (dodgeFumble) afterAffinity *= 2;
   const skipResistance = isCritical || dodgeFumble;
 
-  if (affinity === "drain") {
+  if (outcome.absolute === "drain") {
     result.isDrain = true;
     result.afterAffinity = afterAffinity;
     result.drainedAmount = _applyResistance(afterAffinity, resistance, skipResistance);
     return result;
   }
-  if (affinity === "repel") {
+  if (outcome.absolute === "repel") {
     result.isRepel = true;
     result.afterAffinity = afterAffinity;
     // Attacker's resistance applies on reflect (p.65).

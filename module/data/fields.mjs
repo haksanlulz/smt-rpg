@@ -13,6 +13,15 @@ export function makeAffinitySchema(choices = AFFINITY_CHOICES) {
   );
 }
 
+// Magic and Ailment as attack CATEGORIES (p.65), not elements.
+export const AFFINITY_CATEGORIES = ["magic", "ailment"];
+
+export function makeCategoryAffinitySchema(choices = AFFINITY_CHOICES) {
+  return new SchemaField(
+    Object.fromEntries(AFFINITY_CATEGORIES.map(c => [c, new StringField({ initial: "normal", choices })]))
+  );
+}
+
 export function makeAilmentAffinitySchema() {
   return new SchemaField(
     Object.fromEntries(AILMENT_ELEMENTS.map(el => [el, new StringField({ initial: "normal", choices: AILMENT_AFFINITY_CHOICES })]))

@@ -1,5 +1,5 @@
 import { evaluatePercentile } from "./checks.mjs";
-import { halveDamageResult } from "./damage.mjs";
+import { halveDamageResult, affinityOutcome } from "./damage.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
 const _inFlight = new Set();
@@ -255,6 +255,7 @@ export async function resolveAttack(message, index, skipDodge = false) {
         ailmentType,
         baseRate: ailmentRate,
         element,
+        isPhysical,
         isCritical,
         dodgeFumble,
         targetTokenUuid: row.targetTokenUuid
@@ -317,7 +318,7 @@ async function _postDodgeResult(attacker, target, skillName, outcome) {
 // Ailment Resolution
 
 // Ailment infliction roll (p.67). Death/Curse set their own flags; others contend for the single system.ailment slot.
-export async function resolveAilment({ target, attacker, ailmentType, baseRate, element, isCritical, dodgeFumble, targetTokenUuid }) {
+export async function resolveAilment({ target, attacker, ailmentType, baseRate, element, isPhysical = false, isCritical, dodgeFumble, targetTokenUuid }) {
   ailmentType = _sanitizeAilmentType(ailmentType);
   element = _sanitizeElement(element);
   if (ailmentType === "none") return;
@@ -328,11 +329,19 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
     ? (target.system.ailmentAffinities?.[element] ?? "normal")
     : (target.system.affinities?.[element] ?? "normal");
 
-  if (affinity === "null" || affinity === "drain" || affinity === "repel") return;
+  // Category ratings stack with the element one (p.65): the worked example gives a
+  // demon weak to Ice, Magic and Ailments a 32x effect-rate bonus, which is 2*2*2
+  // for the ratings times 2 for the crit and 2 for the dodge fumble. Unlike damage,
+  // the Ailment rating DOES apply here -- that is the whole of its effect.
+  const cat = target.system.categoryAffinities ?? {};
+  const outcome = affinityOutcome([
+    affinity,
+    isPhysical ? "normal" : (cat.magic ?? "normal"),
+    cat.ailment ?? "normal"
+  ]);
+  if (outcome.absolute) return;
 
-  let rate = baseRate;
-  if (affinity === "weak") rate *= 2;
-  if (affinity === "strong") rate *= 0.5;
+  let rate = baseRate * outcome.multiplier;
   if (isCritical) rate *= 2;
   if (dodgeFumble) rate *= 2;
 
