@@ -83,6 +83,18 @@ Hooks.once("init", () => {
     }
   });
 
+  // GM keybind opens the demon compendium picker. Same dynamic-import pattern.
+  game.keybindings.register("smt-rpg", "openDemonPicker", {
+    name: "SMT.Keybind.OpenDemonPicker",
+    hint: "SMT.Keybind.OpenDemonPickerHint",
+    editable: [{ key: "KeyD", modifiers: ["Control", "Shift"] }],
+    restricted: true, // GM only
+    onDown: () => {
+      import("./module/helpers/compendium.mjs").then(m => m.openDemonPicker());
+      return true;
+    }
+  });
+
   CONFIG.Actor.dataModels.fiend = FiendData;
   CONFIG.Actor.dataModels.demon = DemonData;
   CONFIG.Actor.dataModels.human = HumanData;
@@ -180,6 +192,13 @@ function _registerStatusEffects() {
 
   CONFIG.statusEffects = list;
 }
+
+// Preload the imported demon stat blocks once the world is up. Absent by design on a
+// fresh clone (the data comes from the user's own rulebook PDF via
+// tools/import-rulebook.py), so this logs and moves on rather than failing.
+Hooks.once("ready", () => {
+  import("./module/helpers/compendium.mjs").then(m => m.loadDemonStats());
+});
 
 // Chat message button handlers
 Hooks.on("renderChatMessageHTML", (message, html) => {

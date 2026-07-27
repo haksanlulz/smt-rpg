@@ -156,6 +156,18 @@ And a Cursed fusion reverses that direction
 Check: test/rank-shift.test.mjs  (tagged  // spec: rank-shift-fusion-names-a-demon)
 ```
 
+### SPEC affinity-lines-parse-or-are-flagged
+```
+Given a demon's affinity line as the book prints it ("Repel Light, Null Dark, Strong All")
+When a demon is created from its stat block
+Then each element gets the affinity the book states, in either the normal
+     keyword-first order or the reversed trailing form the Zoa bosses use
+And a line that cannot be resolved mechanically is reported, never guessed at
+Check: test/affinity-parse.test.mjs  (tagged  // spec: affinity-lines-parse-or-are-flagged)
+```
+
+**Magic and Ailment are separate axes and the engine does not have them yet.** p.65 stacks them with the element affinity — a demon weak to Ice *and* Magic *and* Ailments, critically hit by a Mabufu spell that also fumbles its dodge, takes **32×** (2·2·2·2·2). `calculateDamage` applies one multiplier and the schema has no Magic axis, so `createDemonActor` records those two and says so on creation rather than silently dropping them. 20 demons carry a Magic affinity, 30 an Ailment one.
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed

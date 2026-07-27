@@ -1,0 +1,316 @@
+// Demon compendium: load imported stat blocks and build Actors from them.
+//
+// The data file is NOT shipped. It is produced from a rulebook PDF the user owns by
+// `tools/import-rulebook.py`, which writes data-local/demon-stats.json (gitignored).
+// Everything here degrades to "unavailable" when that file is absent, so a fresh
+// clone works -- it just cannot create demons until the user runs the importer.
+
+const DATA_PATH = "systems/smt-rpg/data-local/demon-stats.json";
+
+// Affinity keywords and the elements they can apply to. `almighty`, `recovery`,
+// `support` and `none` exist in the schema but are never named on a stat block.
+export const ATTACK_ELEMENTS = ["phys", "fire", "ice", "elec", "force", "mind", "nerve", "ruin", "dark", "light"];
+const KEYWORDS = { repel: "repel", null: "null", strong: "strong", weak: "weak", drain: "drain" };
+// Book typos, normalised but reported so they never look like clean data.
+const TYPOS = { wak: "weak", ailement: "ailment" };
+// Wording that cannot be resolved mechanically (two Noah boss forms).
+const UNPARSEABLE = /except|chosen|valid|vs\.?\s*almighty/i;
+
+let _cache;          // parsed payload, or null once a load has failed
+let _loading;        // in-flight promise, so concurrent callers share one fetch
+
+// Parse a stat-block affinity line (p.126-235). Returns element affinities plus the
+// separate Magic and Ailment axes, the normalised typos, and anything it refused to
+// guess at. A keyword applies to every element after it until the next keyword; the
+// four Zoa bosses instead put the keyword last ("... / Force Weak"), handled below.
+//
+// Magic and Ailment are NOT element sets -- p.65 stacks them with the element
+// affinity (2x Ice * 2x Magic * 2x Ailment * 2x crit * 2x fumble = 32x). The damage
+// engine has no Magic axis yet, so they are returned separately rather than folded in.
+export function parseAffinityLine(line) {
+  const out = { elements: {}, magic: null, ailment: null, typos: [], unparsed: [] };
+  const raw = String(line ?? "").trim();
+  if (!raw) return out;
+
+  if (UNPARSEABLE.test(raw)) {
+    out.unparsed.push(raw);
+    return out;
+  }
+
+  // Reversed trailing form, used by the four Zoa bosses:
+  //   "Repel Elec; Null Light, Dark, Ailment Attacks / Force Weak"
+  // The final "/" segment is element-then-keyword and binds ONLY to that segment.
+  // The slash is the boundary, so it has to be read before separators are flattened
+  // -- without it the preceding "Null" claims Force first and the trailing keyword,
+  // which never overwrites, is lost.
+  let head = raw;
+  let trailing = null;
+  const rev = head.match(/\/\s*([A-Za-z][A-Za-z\s]*?)\s+(repel|null|strong|weak|drain|wak)\s*$/i);
+  if (rev) {
+    head = head.slice(0, rev.index);
+    const kw = rev[2].toLowerCase();
+    if (TYPOS[kw]) out.typos.push(rev[2]);
+    trailing = { value: KEYWORDS[TYPOS[kw] ?? kw], targets: rev[1].trim().toLowerCase().split(/\s+/) };
+  }
+
+  const tokens = head
+    .replace(/[,;/]/g, " ")
+    .replace(/\band\b/gi, " ")
+    .replace(/\./g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const assign = (target, value) => {
+    // First keyword wins: "Repel Light, ... Strong All" leaves Light on repel.
+    if (target === "magic") { out.magic ??= value; return; }
+    if (target === "ailment") { out.ailment ??= value; return; }
+    if (target === "all") {
+      for (const el of ATTACK_ELEMENTS) out.elements[el] ??= value;
+      return;
+    }
+    if (ATTACK_ELEMENTS.includes(target)) out.elements[target] ??= value;
+  };
+
+  let current = null;
+  for (let tok of tokens) {
+    const lower = tok.toLowerCase();
+    if (TYPOS[lower]) {
+      out.typos.push(tok);
+      tok = TYPOS[lower];
+    }
+    const key = tok.toLowerCase();
+
+    if (KEYWORDS[key]) { current = KEYWORDS[key]; continue; }
+    if (key === "attacks") continue;              // "Ailment Attacks"
+    const target = key === "all" ? "all" : key;
+    const known = target === "all" || target === "magic" || target === "ailment"
+      || ATTACK_ELEMENTS.includes(target);
+    if (!known) continue;
+
+    if (current) assign(target, current);
+  }
+
+  // Applied last, but `assign` is first-wins, so the trailing segment's own elements
+  // were never touched by the head -- they only appear after the slash.
+  if (trailing) for (const t of trailing.targets) assign(t, trailing.value);
+  return out;
+}
+
+// Load the imported stat blocks. Returns null (never throws) when the file is absent,
+// which is the normal state of a fresh clone.
+export async function loadDemonStats() {
+  if (_cache !== undefined) return _cache;
+  if (_loading) return _loading;
+
+  _loading = (async () => {
+    try {
+      const res = await fetch(DATA_PATH);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      const demons = Array.isArray(payload?.demons) ? payload.demons : null;
+      if (!demons?.length) throw new Error("no demons in payload");
+      _cache = new Map(demons.map(d => [d.name.toLowerCase(), d]));
+      console.log(`smt-rpg | demon compendium: ${demons.length} stat blocks loaded`);
+    } catch (err) {
+      _cache = null;
+      console.log(`smt-rpg | demon compendium unavailable (${err.message}). `
+        + "Run tools/import-rulebook.py against your own rulebook PDF to enable demon creation.");
+    }
+    return _cache;
+  })();
+
+  return _loading;
+}
+
+export function demonStatsAvailable() {
+  return _cache instanceof Map && _cache.size > 0;
+}
+
+export function demonStatsFor(name) {
+  if (!(_cache instanceof Map)) return null;
+  return _cache.get(String(name ?? "").trim().toLowerCase()) ?? null;
+}
+
+export function allDemonStats() {
+  return _cache instanceof Map ? [..._cache.values()] : [];
+}
+
+// Build the actor `system` payload for a stat block. Pure apart from CONFIG reads.
+//
+// HP/MP are deliberately NOT written for general demons: the derived formula
+// ((vitality + level) * multiplier) reproduces the book's printed value for all 171
+// of them, verified against the import. Bosses print higher HP/MP (p.123 -- the Boss
+// trait roughly doubles them), which no formula derives, so theirs is stored.
+export function buildDemonSystem(stats) {
+  const affinity = parseAffinityLine(stats.affinities);
+  const system = {
+    level: stats.level,
+    clan: stats.clan,
+    strength: stats.stats.strength,
+    magic: stats.stats.magic,
+    vitality: stats.stats.vitality,
+    agility: stats.stats.agility,
+    luck: stats.stats.luck,
+    affinities: { ...affinity.elements }
+  };
+
+  if (stats.favoredStat) system.favoredStat = stats.favoredStat;
+  if (stats.boss) {
+    system.isBoss = true;
+    system.hp = { value: stats.hp, max: stats.hp };
+    system.mp = { value: stats.mp, max: stats.mp };
+  }
+  if (Number.isFinite(stats.fatePoints)) system.fatePoints = { value: stats.fatePoints, max: stats.fatePoints };
+  if (Number.isFinite(stats.macca)) system.macca = stats.macca;
+  if (Number.isFinite(stats.exp)) system.exp = stats.exp;
+  if (stats.dropItems && stats.dropItems.toLowerCase() !== "none") system.drops = stats.dropItems;
+  if (stats.behavior) system.behavior = stats.behavior;
+
+  return { system, affinity };
+}
+
+// Skill Items for a stat block. "Basic Strike" is the innate attack every actor
+// already has, so it is not created as an Item.
+export function buildDemonSkills(stats) {
+  return (stats.skills ?? [])
+    .filter(s => s.name && s.name.toLowerCase() !== "basic strike")
+    .map(s => ({
+      name: s.name,
+      type: "skill",
+      system: {
+        skillType: mapSkillType(s.type),
+        element: mapElement(s.element),
+        cost: parseCost(s.cost),
+        power: Number.isFinite(s.potency) ? s.potency : 0,
+        target: /all/i.test(s.target ?? "") ? "all" : "one",
+        description: s.effect ?? ""
+      }
+    }));
+}
+
+function mapSkillType(t) {
+  const s = String(t ?? "").toLowerCase();
+  if (s.includes("physical")) return "physicalAttack";
+  if (s.includes("ranged")) return "rangedAttack";
+  if (s.includes("magical")) return "magicalAttack";
+  if (s.includes("passive")) return "passive";
+  if (s.includes("talk")) return "talkApproach";
+  if (s.includes("spell")) return "spell";
+  return "support";
+}
+
+function mapElement(e) {
+  const s = String(e ?? "").toLowerCase();
+  const known = ["phys", "fire", "ice", "elec", "force", "mind", "nerve", "ruin",
+    "dark", "light", "almighty", "recovery", "support"];
+  if (s === "healing") return "recovery";
+  return known.includes(s) ? s : "none";
+}
+
+function parseCost(cost) {
+  const s = String(cost ?? "").trim();
+  const m = s.match(/^(\d+)\s*(HP|MP)$/i);
+  if (m) return { value: Number(m[1]), resource: m[2].toLowerCase() };
+  if (/all\s*hp/i.test(s)) return { value: 0, resource: "hp", allHp: true };
+  return { value: 0, resource: "mp" };
+}
+
+// Create a demon Actor from an imported stat block. GM-gated, like fusion.
+export async function createDemonActor(name, { folder = null, notify = true } = {}) {
+  if (!game.user.isGM) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.FusionGM"));
+    return null;
+  }
+  const stats = demonStatsFor(name);
+  if (!stats) {
+    if (notify) ui.notifications.warn(game.i18n.format("SMT.Compendium.NotFound", { name }));
+    return null;
+  }
+
+  const { system, affinity } = buildDemonSystem(stats);
+  const actor = await Actor.create({
+    name: stats.name,
+    type: "demon",
+    system,
+    items: buildDemonSkills(stats),
+    ...(folder ? { folder } : {})
+  });
+
+  // Anything the book stated that this build could not express is said out loud
+  // rather than silently dropped.
+  const caveats = [];
+  if (affinity.unparsed.length) caveats.push(`affinities not applied: "${affinity.unparsed[0]}"`);
+  if (affinity.magic) caveats.push(`Magic affinity (${affinity.magic}) — no engine axis yet`);
+  if (affinity.ailment) caveats.push(`Ailment affinity (${affinity.ailment}) — not applied`);
+  if (caveats.length && notify) {
+    ui.notifications.info(game.i18n.format("SMT.Compendium.Caveats",
+      { name: stats.name, caveats: caveats.join("; ") }));
+  }
+  if (CONFIG.SMT.debug) console.log("smt-rpg | createDemonActor", { name: stats.name, system, caveats });
+
+  return actor;
+}
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// GM picker: choose a demon from the imported compendium and create it.
+export async function openDemonPicker() {
+  if (!game.user.isGM) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.FusionGM"));
+    return null;
+  }
+  await loadDemonStats();
+  const all = allDemonStats();
+  if (!all.length) {
+    ui.notifications.warn(game.i18n.localize("SMT.Compendium.Unavailable"));
+    return null;
+  }
+
+  const sorted = [...all].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  const options = sorted.map(d => {
+    const clan = CONFIG.SMT.demonClans[d.clan]
+      ? game.i18n.localize(CONFIG.SMT.demonClans[d.clan])
+      : d.clan;
+    const boss = d.boss ? ` [${game.i18n.localize("SMT.Boss")}]` : "";
+    return `<option value="${esc(d.name)}">Lv ${d.level} — ${esc(d.name)} (${esc(clan)})${boss}</option>`;
+  }).join("");
+
+  const content = `
+    <section class="smt-dialog">
+      <div class="form-group"><label>${game.i18n.localize("SMT.Compendium.Filter")}</label>
+        <input type="text" name="filter" placeholder="${esc(game.i18n.localize("SMT.Compendium.FilterHint"))}" /></div>
+      <div class="form-group"><label>${game.i18n.localize("SMT.Compendium.Demon")}</label>
+        <select name="demon" size="12" style="width:100%">${options}</select></div>
+    </section>`;
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: game.i18n.localize("SMT.Compendium.Title") },
+    content,
+    buttons: [
+      {
+        action: "create",
+        label: game.i18n.localize("SMT.Compendium.Create"),
+        default: true,
+        callback: (event, button) => ({ name: button.form.elements.demon.value })
+      },
+      { action: "cancel", label: game.i18n.localize("SMT.Cancel") }
+    ],
+    render: (event, dialog) => {
+      const root = dialog?.element ?? event?.target;
+      const filter = root?.querySelector("[name=filter]");
+      const select = root?.querySelector("[name=demon]");
+      if (!filter || !select) return;
+      const opts = [...select.options].map(o => ({ el: o, text: o.textContent.toLowerCase() }));
+      filter.addEventListener("input", () => {
+        const q = filter.value.trim().toLowerCase();
+        for (const { el, text } of opts) el.hidden = q ? !text.includes(q) : false;
+        const first = opts.find(o => !o.el.hidden);
+        if (first) select.value = first.el.value;
+      });
+    }
+  }).catch(() => null);
+
+  if (!result || result === "cancel" || !result.name) return null;
+  return createDemonActor(result.name);
+}
