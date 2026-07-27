@@ -106,6 +106,10 @@ const MUTATIONS = [
     apply: (d) => edit(d, ".gitignore", s => s.replace(/^rulebook-text\/?$/m, ""))
   },
   {
+    rung: "C10d data-local ignore dropped", expect: "C10d",
+    apply: (d) => edit(d, ".gitignore", s => s.replace(/^data-local\/?$/m, ""))
+  },
+  {
     rung: "C10b pdf ignore dropped", expect: "C10b",
     apply: (d) => edit(d, ".gitignore", s => s.replace(/^\*\.pdf$/m, ""))
   }
