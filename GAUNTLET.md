@@ -37,7 +37,8 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 
 | Artifact | Real channel | Pass condition | Rung |
 |---|---|---|---|
-| pure rules helpers | a suite importing them directly | every assertion green | `test/pure-helpers.test.mjs`, `test/fusion-chart.test.mjs`, `test/fate-damage.test.mjs` |
+| pure rules helpers | a suite importing them directly | every assertion green | `test/pure-helpers.test.mjs`, `test/fusion-chart.test.mjs`, `test/fate-damage.test.mjs`, `test/demon-roster.test.mjs` |
+| rulebook data tables (fusion chart, demon roster) | the rules that read them | every value cross-checked against another table the book prints, plus anchors read off the rendered page | `fusion-chart.test.mjs`, `demon-roster.test.mjs` |
 | shipped `.mjs` modules | **Foundry evaluates them at world load** | every module parses; every relative import resolves to a real export | `test/contract.test.mjs` C1–C2 |
 | `.hbs` templates | **Foundry's template loader renders them** | every referenced path exists; every `{{> partial}}` resolves | `test/contract.test.mjs` C3–C4 |
 | `lang/en.json` | Foundry's i18n loader at init | no leaf/branch collision; every `SMT.*` key used in code exists | `pure-helpers` collision guard + `contract` C5 |
@@ -120,6 +121,16 @@ Then the resulting clan is the one printed in the book, in either argument order
 Check: test/fusion-chart.test.mjs  (tagged  // spec: fusion-chart-matches-the-book)
 ```
 
+### SPEC cross-clan-fusion-names-a-demon
+```
+Given two demons of different clans
+When they are fused
+Then the result is a named demon from the compendium - the lowest-level member
+     of the chart's result clan at or above the fusion level (p.80)
+And it is never an exception demon and never a boss-only demon
+Check: test/demon-roster.test.mjs  (tagged  // spec: cross-clan-fusion-names-a-demon)
+```
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
@@ -174,5 +185,14 @@ Check: manual — last verified: NEVER
 | A suite nobody runs | `test/run-tests.mjs` | Discovery is glob-only over `test/*.test.mjs` plus a floor assertion — no hand-maintained list to fall out of date. This project had exactly that bug: `fusion-chart.test.mjs` was a separate entry point and no command ran both. |
 | A spec in §5 with nothing behind it | C9 | Every spec needs a linked tagged test or a dated manual check; orphan `spec:` tags are flagged in the other direction too. |
 | **A rung that cannot fail** | `test/mutation-probe.mjs` | Plants one defect per scan into a scratch copy and asserts the suite goes red **for that rung specifically**, with a control run on an unmutated copy proving it goes green. Currently 11/11. An empty result from an unproved instrument is not evidence. |
+
+### Transcribed rulebook data — the standing verification bar
+
+Two large tables are now transcribed out of the book: the p.82 Normal Fusion Chart (339 cells) and the Ch.5 demon roster (194 entries). Neither can be checked by "does the code work" — a wrong cell produces a perfectly functional wrong answer. The bar that has been applied, and that any future table should meet:
+
+- **Two independent reads that must agree**, or a cross-check against a different table the book prints. The fusion chart used two independent transcriptions agreeing on all 339 cells. The roster instead cross-checks every clan against `clanOrder`, which the chart already established — an unknown clan is a bad read.
+- **Anchors read off the rendered page**, not off the text layer, so a systematic extraction error cannot pass. Roster anchors: Vishnu 93 Deity, Mitra 78 Deity (p.126), Forneus 20 Fallen (p.213).
+- **Structural expectations asserted**: two demons per page across p.126–211 (bar the last), 171 general + 23 boss, four Element and four Mitama demons.
+- **Book errata recorded, never silently corrected.** Baal Avatar prints clan `DIETY` (p.223) — normalised so lookups resolve, with `bookClan` preserving the printed spelling. Specter (3rd Time) prints `LVL 440` (p.218) — kept as printed and flagged, because 44 would be a guess. §1 clause 1 says match the book; it does not say quietly improve it.
 
 **Still uncaught, and named so it stays visible:** every row of §2 below the static scans. Nothing here observes Foundry actually loading, a sheet actually rendering, or a number on a chat card actually matching the sheet. Those are the §5 manual rungs and they are the honest gap.

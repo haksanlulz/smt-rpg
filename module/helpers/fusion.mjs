@@ -94,6 +94,46 @@ export function rankShiftFusion(clanA, clanB) {
 }
 
 // Whether a demon name is on the p.80 exception list (cannot be normally fused).
+// The fusion pool: general demons only. The p.213-235 boss list is not fusable
+// (p.123 -- bosses that later join the pool are already among the general demons).
+function _fusionPool(clan) {
+  const c = String(clan ?? "").trim().toLowerCase();
+  if (!c) return [];
+  return (CONFIG.SMT?.demons ?? [])
+    .filter(d => !d.boss && d.clan === c)
+    .sort((a, b) => a.level - b.level);
+}
+
+// Pick the demon a fusion actually produces (p.80): "find the level of the demon in
+// the new clan closest to that number and no less than". Exception demons cannot be
+// created, so they are stepped over -- a rank higher normally, a rank lower on a Rank
+// Down. Fail-closed: unknown/blank clan, a boss-only clan, or a bad level returns null.
+export function resultDemonFor(clan, level, { rankDown = false } = {}) {
+  const target = Number(level);
+  if (!Number.isFinite(target)) return null;
+
+  const pool = _fusionPool(clan);
+  if (!pool.length) return null;
+
+  const startIndex = pool.findIndex(d => d.level >= target);
+  let i = startIndex < 0 ? pool.length - 1 : startIndex;
+
+  // Step past exception demons in the ruled direction, without falling off either end.
+  const step = rankDown ? -1 : 1;
+  let guard = pool.length;
+  while (guard-- > 0 && isExceptionDemon(pool[i].name)) {
+    const next = i + step;
+    if (next < 0 || next >= pool.length) {
+      // No room in the ruled direction; take the nearest non-exception the other way.
+      const back = pool.filter(d => !isExceptionDemon(d.name));
+      return back.length ? (rankDown ? back[0] : back[back.length - 1]) : null;
+    }
+    i = next;
+  }
+
+  return isExceptionDemon(pool[i].name) ? null : pool[i];
+}
+
 export function isExceptionDemon(name) {
   const n = String(name ?? "").trim().toLowerCase();
   if (!n) return false;
@@ -184,7 +224,6 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
     return null;
   }
 
-  const name = String(resultName ?? "").trim() || game.i18n.localize("SMT.Fusion.DefaultName");
   // Result clan precedence (p.81-82): a GM-supplied clan always wins; else same-clan yields
   // the Element clan (elementClanFor); else the cross-clan Normal Fusion Chart auto-resolves
   // it. crossClanFusion is fail-closed, so on null we degrade to the prior GM-pick fallback
@@ -199,6 +238,15 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
 
   const system = buildFusedSystem(demonA, demonB);
   system.clan = clan;
+
+  // Name the actual demon off the roster (p.80): lowest-level member of the result
+  // clan at or above the fusion level, stepping over exception demons. A GM-supplied
+  // name still wins; if the roster can't resolve one we fall back to the generic name.
+  const rosterResult = String(resultName ?? "").trim() ? null : resultDemonFor(clan, system.level);
+  const name = String(resultName ?? "").trim()
+    || rosterResult?.name
+    || game.i18n.localize("SMT.Fusion.DefaultName");
+  if (rosterResult) system.level = rosterResult.level;
 
   // GM selection if provided, else every ingredient skill in order. Fresh card, so
   // initialCount/Names are empty.
@@ -339,9 +387,17 @@ export async function openFusionDialog() {
     const note = element
       ? `<div class="preview-line element">${game.i18n.localize("SMT.Fusion.SameClanNote")}</div>`
       : (!gmOverride && cross ? `<div class="preview-line cross">${game.i18n.localize("SMT.Fusion.CrossClanNote")}</div>` : "");
+    // Name the demon the fusion will actually produce (p.80), so the result is visible
+    // before confirming rather than only on the result card.
+    const named = resultDemonFor(chosenClan, level);
+    const namedLine = named
+      ? `<div class="preview-line result">${game.i18n.format("SMT.Fusion.ResultDemon", {
+          name: esc(named.name), level: named.level
+        })}</div>`
+      : "";
     out.innerHTML = `<div class="preview-line">${game.i18n.format("SMT.Fusion.Preview", {
       level, clan: esc(clanLabel), allowed, combined
-    })}</div>${note}`;
+    })}</div>${namedLine}${note}`;
   };
 
   const result = await foundry.applications.api.DialogV2.wait({

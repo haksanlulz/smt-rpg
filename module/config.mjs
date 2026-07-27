@@ -563,3 +563,209 @@ SMT.talk = {
   // leave/angry end the talk, break drops to the space's Break field.
   outcomes: ["deal", "gift", "leave", "angry", "break"]
 };
+
+// Demon roster (Ch.5 Demon Compendium, p.126-235). Name / clan / level only -- the
+// fusion result lookup (p.80) needs nothing else. Extracted from the book's stat-block
+// headers; every clan is checked against normalChart.clanOrder by the test suite.
+//
+//  marks the p.213-235 boss-only list, which is NOT part of the fusion pool
+// (p.123: bosses that later join the general pool are already listed among the general
+// demons). Two entries carry the book's own errata, recorded rather than corrected:
+// Baal Avatar's clan prints as "DIETY" (p.223) and Specter (3rd Time) prints LVL 440
+// (p.218). See GAUNTLET.md S1 clause 1 -- match the book, flag what looks wrong.
+SMT.demons = [
+  { name: "Vishnu", clan: "deity", level: 93 },  // p.126
+  { name: "Mitra", clan: "deity", level: 78 },  // p.126
+  { name: "Odin", clan: "deity", level: 65 },  // p.127
+  { name: "Amaterasu", clan: "deity", level: 56 },  // p.127
+  { name: "Atavaka", clan: "deity", level: 47 },  // p.128
+  { name: "Horus", clan: "deity", level: 38 },  // p.128
+  { name: "Scáthach", clan: "megami", level: 64 },  // p.129
+  { name: "Lakshmi", clan: "megami", level: 54 },  // p.129
+  { name: "Sati", clan: "megami", level: 48 },  // p.130
+  { name: "Sarasvati", clan: "megami", level: 30 },  // p.130
+  { name: "Ame-No-Uzume", clan: "megami", level: 18 },  // p.131
+  { name: "Shiva", clan: "fury", level: 95 },  // p.131
+  { name: "Beidou Xingjun", clan: "fury", level: 61 },  // p.132
+  { name: "Qitian Dasheng", clan: "fury", level: 54 },  // p.132
+  { name: "Dionysus", clan: "fury", level: 44 },  // p.133
+  { name: "Skadi", clan: "lady", level: 74 },  // p.133
+  { name: "Kali", clan: "lady", level: 67 },  // p.134
+  { name: "Parvati", clan: "lady", level: 57 },  // p.134
+  { name: "Kushinada", clan: "lady", level: 41 },  // p.135
+  { name: "Kikuri-Hime", clan: "lady", level: 24 },  // p.135
+  { name: "Thor", clan: "kishin", level: 76 },  // p.136
+  { name: "Bishamonten", clan: "kishin", level: 72 },  // p.136
+  { name: "Jikokuten", clan: "kishin", level: 52 },  // p.137
+  { name: "Take-Mikazuchi", clan: "kishin", level: 45 },  // p.137
+  { name: "Okuninushi", clan: "kishin", level: 39 },  // p.138
+  { name: "Koumokuten", clan: "kishin", level: 33 },  // p.138
+  { name: "Zouchouten", clan: "kishin", level: 27 },  // p.139
+  { name: "Take-Minakata", clan: "kishin", level: 17 },  // p.139
+  { name: "Chimera", clan: "holy", level: 55 },  // p.140
+  { name: "Baihu", clan: "holy", level: 43 },  // p.140
+  { name: "Zhuque", clan: "holy", level: 36 },  // p.141
+  { name: "Senri", clan: "holy", level: 27 },  // p.141
+  { name: "Unicorn", clan: "holy", level: 21 },  // p.142
+  { name: "Shiisaa", clan: "holy", level: 13 },  // p.142
+  { name: "Flaemis", clan: "element", level: 20 },  // p.143
+  { name: "Aquans", clan: "element", level: 15 },  // p.143
+  { name: "Aeros", clan: "element", level: 11 },  // p.144
+  { name: "Erthys", clan: "element", level: 7 },  // p.144
+  { name: "Saki Mitama", clan: "mitama", level: 35 },  // p.145
+  { name: "Kushi Mitama", clan: "mitama", level: 32 },  // p.145
+  { name: "Nigi Mitama", clan: "mitama", level: 29 },  // p.146
+  { name: "Ara Mitama", clan: "mitama", level: 25 },  // p.146
+  { name: "Efreet", clan: "yoma", level: 52 },  // p.147
+  { name: "Pulukishi", clan: "yoma", level: 48 },  // p.147
+  { name: "Jinn", clan: "yoma", level: 44 },  // p.148
+  { name: "Ongkhot", clan: "yoma", level: 37 },  // p.148
+  { name: "Karasu Tengu", clan: "yoma", level: 28 },  // p.149
+  { name: "Dís", clan: "yoma", level: 23 },  // p.149
+  { name: "Koppa Tengu", clan: "yoma", level: 19 },  // p.150
+  { name: "Isora", clan: "yoma", level: 14 },  // p.150
+  { name: "Apsaras", clan: "yoma", level: 8 },  // p.151
+  { name: "Titania", clan: "fairy", level: 57 },  // p.151
+  { name: "Oberon", clan: "fairy", level: 46 },  // p.152
+  { name: "Setanta", clan: "fairy", level: 43 },  // p.152
+  { name: "Troll", clan: "fairy", level: 38 },  // p.153
+  { name: "Kelpie", clan: "fairy", level: 26 },  // p.153
+  { name: "Jack-o'-Lantern", clan: "fairy", level: 19 },  // p.154
+  { name: "High Pixie", clan: "fairy", level: 10 },  // p.154
+  { name: "Jack Frost", clan: "fairy", level: 7 },  // p.155
+  { name: "Pixie", clan: "fairy", level: 2 },  // p.155
+  { name: "Throne", clan: "divine", level: 64 },  // p.156
+  { name: "Dominion", clan: "divine", level: 50 },  // p.156
+  { name: "Virtue", clan: "divine", level: 41 },  // p.157
+  { name: "Power", clan: "divine", level: 33 },  // p.157
+  { name: "Principality", clan: "divine", level: 28 },  // p.158
+  { name: "Archangel", clan: "divine", level: 18 },  // p.158
+  { name: "Angel", clan: "divine", level: 11 },  // p.159
+  { name: "Flauros", clan: "fallen", level: 68 },  // p.159
+  { name: "Decarabia", clan: "fallen", level: 58 },  // p.160
+  { name: "Ose", clan: "fallen", level: 45 },  // p.160
+  { name: "Berith", clan: "fallen", level: 37 },  // p.161
+  { name: "Eligor", clan: "fallen", level: 29 },  // p.161
+  { name: "Forneus", clan: "fallen", level: 20 },  // p.162
+  { name: "Yurlungur", clan: "snake", level: 66 },  // p.162
+  { name: "Quetzalcoatl", clan: "snake", level: 55 },  // p.163
+  { name: "Naga Raja", clan: "snake", level: 37 },  // p.163
+  { name: "Mizuchi", clan: "snake", level: 34 },  // p.164
+  { name: "Naga", clan: "snake", level: 28 },  // p.164
+  { name: "Nozuchi", clan: "snake", level: 14 },  // p.165
+  { name: "Cerberus", clan: "beast", level: 61 },  // p.165
+  { name: "Suparna", clan: "beast", level: 54 },  // p.166
+  { name: "Orthrus", clan: "beast", level: 34 },  // p.166
+  { name: "Badb Catha", clan: "beast", level: 23 },  // p.167
+  { name: "Nekomata", clan: "beast", level: 18 },  // p.167
+  { name: "Inugami", clan: "beast", level: 13 },  // p.168
+  { name: "Gogmagog", clan: "jirae", level: 55 },  // p.168
+  { name: "Titan", clan: "jirae", level: 49 },  // p.169
+  { name: "Sarutahiko", clan: "jirae", level: 35 },  // p.169
+  { name: "Sudama", clan: "jirae", level: 13 },  // p.170
+  { name: "Hua Po", clan: "jirae", level: 5 },  // p.170
+  { name: "Kodama", clan: "jirae", level: 3 },  // p.171
+  { name: "Ongyo-Ki", clan: "brute", level: 81 },  // p.171
+  { name: "Fuu-Ki", clan: "brute", level: 66 },  // p.172
+  { name: "Sui-Ki", clan: "brute", level: 62 },  // p.172
+  { name: "Kin-Ki", clan: "brute", level: 59 },  // p.173
+  { name: "Shiki-Ouji", clan: "brute", level: 54 },  // p.173
+  { name: "Yomotsu-Ikusa", clan: "brute", level: 44 },  // p.174
+  { name: "Oni", clan: "brute", level: 25 },  // p.174
+  { name: "Momunofu", clan: "brute", level: 20 },  // p.175
+  { name: "Shikigami", clan: "brute", level: 4 },  // p.175
+  { name: "Rangda", clan: "femme", level: 72 },  // p.176
+  { name: "Atropos", clan: "femme", level: 67 },  // p.176
+  { name: "Lachesis", clan: "femme", level: 63 },  // p.177
+  { name: "Clotho", clan: "femme", level: 58 },  // p.177
+  { name: "Dakini", clan: "femme", level: 52 },  // p.178
+  { name: "Yaksini", clan: "femme", level: 43 },  // p.178
+  { name: "Yomotsu-Shikome", clan: "femme", level: 32 },  // p.179
+  { name: "Taraka", clan: "femme", level: 20 },  // p.179
+  { name: "Datsue-Ba", clan: "femme", level: 7 },  // p.180
+  { name: "Mada", clan: "vile", level: 83 },  // p.180
+  { name: "Samael", clan: "vile", level: 73 },  // p.181
+  { name: "Taotie", clan: "vile", level: 65 },  // p.181
+  { name: "Girimekhala", clan: "vile", level: 58 },  // p.182
+  { name: "Pazuzu", clan: "vile", level: 45 },  // p.182
+  { name: "Baphomet", clan: "vile", level: 33 },  // p.183
+  { name: "Arahabaki", clan: "vile", level: 30 },  // p.183
+  { name: "Mot", clan: "tyrant", level: 91 },  // p.184
+  { name: "Aciel", clan: "tyrant", level: 77 },  // p.184
+  { name: "Surt", clan: "tyrant", level: 74 },  // p.185
+  { name: "Abaddon", clan: "tyrant", level: 69 },  // p.185
+  { name: "Loki", clan: "tyrant", level: 52 },  // p.186
+  { name: "Lilith", clan: "night", level: 80 },  // p.186
+  { name: "Nyx", clan: "night", level: 70 },  // p.187
+  { name: "Queen Mab", clan: "night", level: 56 },  // p.187
+  { name: "Loa", clan: "night", level: 53 },  // p.188
+  { name: "Kaiwan", clan: "night", level: 47 },  // p.188
+  { name: "Succubus", clan: "night", level: 37 },  // p.189
+  { name: "Incubus", clan: "night", level: 25 },  // p.189
+  { name: "Fomorian", clan: "night", level: 18 },  // p.190
+  { name: "Lilim", clan: "night", level: 8 },  // p.190
+  { name: "Hresvelgr", clan: "wilder", level: 75 },  // p.191
+  { name: "Mothman", clan: "wilder", level: 43 },  // p.191
+  { name: "Nue", clan: "wilder", level: 31 },  // p.192
+  { name: "Raiju", clan: "wilder", level: 25 },  // p.192
+  { name: "Bicorn", clan: "wilder", level: 15 },  // p.193
+  { name: "Zhen", clan: "wilder", level: 6 },  // p.193
+  { name: "Vetala", clan: "haunt", level: 63 },  // p.194
+  { name: "Legion", clan: "haunt", level: 49 },  // p.194
+  { name: "Pisaca", clan: "haunt", level: 28 },  // p.195
+  { name: "Chatterskull", clan: "haunt", level: 20 },  // p.195
+  { name: "Yaka", clan: "haunt", level: 17 },  // p.196
+  { name: "Choronzon", clan: "haunt", level: 11 },  // p.196
+  { name: "Preta", clan: "haunt", level: 4 },  // p.197
+  { name: "Shadow", clan: "foul", level: 52 },  // p.197
+  { name: "Phantom", clan: "foul", level: 42 },  // p.198
+  { name: "Black Ooze", clan: "foul", level: 28 },  // p.198
+  { name: "Blob", clan: "foul", level: 16 },  // p.199
+  { name: "Mou-Ryo", clan: "foul", level: 7 },  // p.199
+  { name: "Slime", clan: "foul", level: 6 },  // p.200
+  { name: "Will o' Wisp", clan: "foul", level: 1 },  // p.200
+  { name: "Michael", clan: "seraph", level: 90 },  // p.201
+  { name: "Gabriel", clan: "seraph", level: 87 },  // p.201
+  { name: "Raphael", clan: "seraph", level: 84 },  // p.202
+  { name: "Uriel", clan: "seraph", level: 73 },  // p.202
+  { name: "Ganesha", clan: "wargod", level: 58 },  // p.203
+  { name: "Valkyrie", clan: "wargod", level: 33 },  // p.203
+  { name: "Cu Chulainn", clan: "genma", level: 52 },  // p.204
+  { name: "Hanuman", clan: "genma", level: 46 },  // p.204
+  { name: "Kurama Tengu", clan: "genma", level: 38 },  // p.205
+  { name: "Qing Long", clan: "dragon", level: 44 },  // p.205
+  { name: "Xuanwu", clan: "dragon", level: 24 },  // p.206
+  { name: "Barong", clan: "avatar", level: 60 },  // p.206
+  { name: "Yatagarasu", clan: "avatar", level: 46 },  // p.207
+  { name: "Xiezhai", clan: "avatar", level: 26 },  // p.207
+  { name: "Makami", clan: "avatar", level: 22 },  // p.208
+  { name: "Gurulu", clan: "raptor", level: 63 },  // p.208
+  { name: "Garuda", clan: "avian", level: 63 },  // p.209
+  { name: "Albion", clan: "entity", level: 64 },  // p.209
+  { name: "Manikin 1", clan: "corpus", level: 13 },  // p.210
+  { name: "Manikin 2", clan: "corpus", level: 13 },  // p.210
+  { name: "Manikin 3", clan: "corpus", level: 13 },  // p.211
+  { name: "Forneus", clan: "fallen", level: 20, boss: true },  // p.213
+  { name: "Specter", clan: "foul", level: 9, boss: true },  // p.214
+  { name: "Specter (After Merging, Normal)", clan: "foul", level: 15, boss: true },  // p.215
+  { name: "Specter (After Merging, Powerful)", clan: "fallen", level: 20, boss: true },  // p.216
+  { name: "Specter (2nd Time)", clan: "foul", level: 40, boss: true },  // p.217
+  { name: "Specter (3rd Time)", clan: "foul", level: 440, boss: true, bookLevel: true },  // p.218
+  { name: "Mara", clan: "tyrant", level: 85, boss: true },  // p.219
+  { name: "Futomimi", clan: "corpus", level: 57, boss: true },  // p.220
+  { name: "Sakahagi", clan: "corpus", level: 69, boss: true },  // p.221
+  { name: "Black Frost", clan: "night", level: 70, boss: true },  // p.222
+  { name: "Baal Avatar", clan: "deity", level: 85, boss: true, bookClan: "DIETY" },  // p.223
+  { name: "Ose Hallel", clan: "hallel", level: 70, boss: true },  // p.224
+  { name: "Flauros Hallel", clan: "hallel", level: 70, boss: true },  // p.225
+  { name: "Urthona", clan: "zoa", level: 30, boss: true },  // p.226
+  { name: "Urizen", clan: "zoa", level: 30, boss: true },  // p.227
+  { name: "Luvah", clan: "zoa", level: 30, boss: true },  // p.228
+  { name: "Tharmas", clan: "zoa", level: 30, boss: true },  // p.229
+  { name: "Ahriman (1st Form)", clan: "tyrant", level: 80, boss: true },  // p.230
+  { name: "Ahriman (2nd Form)", clan: "tyrant", level: 99, boss: true },  // p.231
+  { name: "Noah (1st Form)", clan: "vile", level: 80, boss: true },  // p.232
+  { name: "Noah (2nd Form)", clan: "vile", level: 80, boss: true },  // p.233
+  { name: "Kagutsuchi (1st Form)", clan: "light", level: 85, boss: true },  // p.234
+  { name: "Kagutsuchi (2nd Form)", clan: "light", level: 90, boss: true },  // p.235
+];

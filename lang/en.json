@@ -479,6 +479,7 @@
   "SMT.Fusion.Preview": "Result: LV {level} {clan} — may inherit {allowed} of {combined} skills.",
   "SMT.Fusion.SameClanNote": "Same-clan fusion: born as an Element demon (p.81).",
   "SMT.Fusion.CrossClanNote": "Cross-clan fusion: clan auto-resolved from the Normal Fusion Chart (p.82).",
+  "SMT.Fusion.ResultDemon": "Result: {name} (Lv {level})",
   "SMT.Fusion.Inherited": "Inherited skills",
   "SMT.Fusion.NoInherited": "No skills inherited.",
   "SMT.Fusion.ExceptionWarning": "Exception demon — cannot be made by normal fusion; bump a rank (p.80).",

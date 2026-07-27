@@ -18,7 +18,7 @@ const ROOT = resolve(TEST_DIR, "..");
 
 // Floor: if discovery breaks or a suite is deleted, the aggregate must fail loudly
 // rather than report a cheerful green over a collapsed set. Raise when suites are added.
-const MIN_SUITES = 4;
+const MIN_SUITES = 5;
 
 const suites = readdirSync(TEST_DIR).filter(f => f.endsWith(".test.mjs")).sort();
 
