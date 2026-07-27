@@ -10,7 +10,7 @@ Authored 2026-07-26, after the escape logged in §6.
 
 ## §1 Oracle — done-definition
 
-> ⚠️ **Status: DERIVED, NOT YET CONFIRMED.** Every clause below was read back out of the existing project notes, the README, and the rules already in force — none of it was written down as the bar first. Clauses marked ⚠ are inference and are the ones most likely to be wrong. Confirm or overwrite them; until then this section is a proposal.
+> **Status: clauses 1–6 RATIFIED 2026-07-27.** Clauses 1–3 were read back out of the existing project notes and confirmed; clauses 4–6 were drafted here, put as explicit questions, and answered. Clause 5 was **not** kept as written — it was narrowed on the ruling (see below). The **non-goals paragraph is still ⚠ unconfirmed**: it was never put and remains inference.
 
 **What this is.** A Foundry VTT game system for *Shin Megami Tensei: The Roleplaying Game — Tokyo Conception*, a d100 percentile TTRPG. It is **installed and played**, not read — distributed publicly via a manifest URL and run at a live table.
 
@@ -19,11 +19,11 @@ Authored 2026-07-26, after the escape logged in §6.
 1. **It matches the rulebook.** Formulas, terminology, and tables match the book exactly, cited by page. Guessing at a mechanic is a defect even when the code is clean.
 2. **It is automated, not left to the GM.** Rolls, damage, cost deduction, affinity application, and effect bookkeeping are performed by the system. "The GM can do that by hand" is not done.
 3. **It uses real Foundry v13/v14 APIs.** No hack workarounds; deprecated v12 patterns are defects. The AppV2 rules in the project notes are hard-won and each line was a real bug.
-4. ⚠ **It survives being loaded.** The system boots in Foundry, the affected sheet opens, and the affected button does the thing — because the product IS the loaded system, and no node-side assertion observes that.
-5. ⚠ **Its pure logic is covered by a suite**, and any *rule* it implements is expressed as an assertion rather than as prose in a commit message.
-6. ⚠ **User-facing strings go through `lang/en.json`.** A hardcoded English string is a defect even though nothing renders wrong today.
+4. **It survives being loaded — HARD GATE.** The system boots in Foundry, the affected sheet opens, and the affected button does the thing. The product IS the loaded system and no node-side assertion observes that, so **anything a player can click is not done until it has been loaded and clicked.** A session that cannot reach that step reports BLOCKED and leaves the checklist, however green its suites are. *(Ratified 2026-07-27 as a hard gate, with the cost accepted: work waits on a hands-on check rather than closing on tests alone. The 2026-06-07 halve-damage escape is the argument — a fix, not a feature, invisible to 315 green assertions for 7 weeks.)*
+5. **Rules maths is covered by a suite — GATE. Coverage of logic in general — aspirational.** Anything implementing a rulebook formula, table, or threshold needs an assertion before it counts as done, expressed as a test rather than as prose in a commit message. Coverage of everything else (sheet wiring, chat rendering, UI glue) is encouraged and never blocks — most of it cannot be reached from `node` at all. *(Ratified 2026-07-27. Narrowed from the drafted "all pure logic is covered", which would have gated work the rungs structurally cannot see.)*
+6. **User-facing strings go through `lang/en.json` — GATE.** A hardcoded English string is a defect that blocks done, even though nothing renders wrong today. *(Ratified 2026-07-27 as blocking. ⚠ **No rung enforces this yet** — by §3's own standard that makes it a comment, not a constraint, until a scan exists. Named here so the gap stays visible.)*
 
-**Non-goals.** ⚠ Not a general-purpose SMT toolkit — Tokyo Conception only. No rulebook text or licensed art ships in the repo (the PDF is gitignored and stays that way). No v12 back-compat. Performance is irrelevant at table scale.
+**Non-goals.** ⚠ **Unconfirmed — never ruled on, still inference.** Not a general-purpose SMT toolkit — Tokyo Conception only. No rulebook text or licensed art ships in the repo (the PDF is gitignored and stays that way). No v12 back-compat. Performance is irrelevant at table scale.
 
 **Explicitly out of scope for automation:** whether a fight is *balanced*, whether an encounter is *fun*, and whether a house ruling is *right*. These are manual rungs (§5) and go stale loudly.
 
@@ -99,8 +99,9 @@ All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a leg
 | code-touch (pure helpers) | `node test/run-tests.mjs` (aggregate; test-first for non-trivial fixes) |
 | code-touch (Foundry-coupled: documents, sheets, entry) | + `contract.test.mjs` C1–C8 |
 | template / lang / manifest touch | + `contract.test.mjs` (all) |
-| behavior-change (rules maths, combat pipeline) | + a RED-first test naming the behavior + a planted-mutation run proving it red |
-| artifact-affecting (anything a player clicks) | + **load the system in Foundry and click it** — §5 manual rungs re-dated |
+| behavior-change (**rules maths**: a formula, table or threshold from the book) | + a RED-first test naming the behavior + a planted-mutation run proving it red — **§1 clause 5 gate** |
+| behavior-change (other logic: sheet wiring, chat rendering, UI glue) | + a test where one is reachable from `node`; encouraged, does not block (§1 clause 5) |
+| artifact-affecting (anything a player clicks) | + **load the system in Foundry and click it** — **§1 clause 4 hard gate**. Cannot be closed by a session; report BLOCKED with the checklist and re-date the §5 manual rungs when it is run. |
 | release (version bump / push) | + full channel map + all §5 specs + manual rungs re-dated + `system.json` version bumped |
 | rung-touch (editing `contract.test.mjs`) | + `node test/mutation-probe.mjs` — 11/11, control green |
 
@@ -112,7 +113,7 @@ All fixed and re-proved. Two lessons worth keeping: a scan that cannot see a leg
 
 ## §5 Acceptance specs
 
-> ⚠️ **All five are drafted from observed behavior and existing notes, not written first.** Rewriting them in your own words is worth more than the drafts are.
+> **The SET is RATIFIED 2026-07-27** — all three manual specs were put individually and all three were kept. **The WORDING is still drafted**, not authored: each Given/When/Then below was written from observed behavior. Rewriting them in your own words is still worth more than the drafts are; the difference now is that the rows themselves are agreed obligations, not proposals.
 
 ### SPEC halve-damage-never-restores-more-than-was-dealt
 ```
