@@ -379,6 +379,8 @@
   "SMT.LevelUp.Prompt": "Advance {name} from level {current} to level {next}?",
   "SMT.LevelUp.Confirm": "Level Up",
   "SMT.LevelUp.NotReady": "Not enough EXP to level up yet.",
+  "SMT.LevelUp.StatRolled": "Stat growth (rolled {roll}): +1 {stat}.",
+  "SMT.LevelUp.StatChoice": "Stat growth: apply +1 to any stat of your choice.",
   "SMT.LevelUp.StatPoint": "Gain 1 stat point to assign (Demons roll on the Stat Growth table).",
   "SMT.LevelUp.FullHeal": "HP and MP are fully restored.",
   "SMT.LevelUp.Recalc": "TNs, resistances, and base power are recalculated for the new level.",

@@ -577,6 +577,26 @@ SMT.talk = {
 // demons). Two entries carry the book's own errata, recorded rather than corrected:
 // Baal Avatar's clan prints as "DIETY" (p.223) and Specter (3rd Time) prints LVL 440
 // (p.218). See GAUNTLET.md S1 clause 1 -- match the book, flag what looks wrong.
+// Demon Stat Growth Table (p.34). A demon's level-up point is rolled, not chosen:
+// "Fiends and humans may apply this point to any stat they prefer. Demons, however,
+// apply the point randomly." Keyed by the 1d10 face, where the book's "0" is 10.
+// `null` means the book hands the point back to the player.
+SMT.advancement.statGrowth = {
+  die: "1d10",
+  table: {
+    1: "strength",
+    2: "magic",
+    3: "vitality",
+    4: "agility",
+    5: "luck",
+    6: "favored",
+    7: "favored",
+    8: "favored",
+    9: null,
+    10: null
+  }
+};
+
 SMT.demons = [
   { name: "Vishnu", clan: "deity", level: 93 },  // p.126
   { name: "Mitra", clan: "deity", level: 78 },  // p.126

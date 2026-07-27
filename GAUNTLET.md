@@ -239,6 +239,19 @@ Check: test/inherit-traits.test.mjs  (tagged  // spec: typed-skills-need-a-match
 
 **Three things had to line up and none of them did.** The importer captured each demon's Inherit Traits and nothing wrote them; a skill's Traits column — which *is* its inheritance type — was dropped on the floor; and `selectInheritedSkills` compared the whole trait string as one value, so a demon printed `"Mouth Eye Lunge Weapon"` matched no typed skill at all. That last one is a defect that could only surface once the other two were fixed, which is why it sat unnoticed: nothing had ever passed the function a real trait list.
 
+### SPEC demon-level-ups-roll-their-stat-growth
+```
+Given a demon that levels up
+When the level-up resolves
+Then the system rolls 1d10 on the Demon Stat Growth Table and applies the point
+     itself - 1-5 by stat, 6-8 to the favoured stat - because p.34 says a demon
+     applies its point randomly rather than choosing
+And 9 or 0, or a demon with no favoured stat, hands the point back to the player
+Check: test/stat-growth.test.mjs  (tagged  // spec: demon-level-ups-roll-their-stat-growth)
+```
+
+**Fiends and humans are deliberately untouched.** The same paragraph says they "may apply this point to any stat they prefer", so nothing is rolled for them — the asymmetry is the rule, not an omission.
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
