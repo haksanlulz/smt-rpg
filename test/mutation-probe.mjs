@@ -102,6 +102,11 @@ const MUTATIONS = [
       s + "\n<div><span>Hardcoded English label</span></div>\n")
   },
   {
+    rung: "C12c undeclared system path", expect: "C12c",
+    apply: (d) => edit(d, "module/helpers/combat.mjs", s =>
+      `${s}\nexport function bad(a) { return a.update({ "system.notAField": 1 }); }\n`)
+  },
+  {
     rung: "C10a rulebook ignore dropped", expect: "C10a",
     apply: (d) => edit(d, ".gitignore", s => s.replace(/^rulebook-text\/?$/m, ""))
   },

@@ -336,6 +336,37 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   eq(hardcoded, [], "C11c no hardcoded user-facing text in templates — wrap it in {{localize}} and add the key");
 }
 
+// --- C12: every system.* write path is a declared schema field -------------
+// The 2026-07-27 escape wrote `target`, `description` and `behavior` into a
+// document and Foundry rejected every one. Nothing in this suite could see it,
+// because no rung here constructs a document.
+//
+// This is a COARSE net by construction: it unions the fields of every data model,
+// so it catches "not a field anywhere in the system" (which `target` and
+// `description` were) but NOT "a real field on the wrong document type" (which
+// `behavior` was — npc-data has it, demons do not). The per-type check is a
+// runtime one and lives in test/demon-skills.test.mjs, which exercises the
+// builders directly. Two layers, neither pretending to be the other.
+{
+  const dataDir = join(ROOT, "module/data");
+  const declared = new Set();
+  for (const f of readdirSync(dataDir).filter(n => n.endsWith(".mjs"))) {
+    const src = readFileSync(join(dataDir, f), "utf8");
+    for (const m of src.matchAll(/^\s{4,10}([a-zA-Z]+):\s*(new\s+\w+Field|make\w+Schema)/gm)) {
+      declared.add(m[1]);
+    }
+  }
+  ok(declared.size >= 40, `C12a schema fields collected from module/data (${declared.size} >= 40)`);
+
+  const paths = new Set();
+  for (const [, src] of SRC) {
+    for (const m of src.matchAll(/["'`]system\.([a-zA-Z][a-zA-Z0-9_]*)/g)) paths.add(m[1]);
+  }
+  ok(paths.size >= 10, `C12b system.* write paths found (${paths.size} >= 10)`);
+  eq([...paths].filter(p => !declared.has(p)).sort(), [],
+    "C12c every system.* path written by the code is a field some data model declares");
+}
+
 // --- C10: licensed rulebook content never becomes committable --------------
 // The repo is public. The PDF and any text extracted from it are the same
 // licensed content. Values derived from it (stat numbers, table lookups in
