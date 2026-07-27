@@ -66,6 +66,7 @@ All in `test/contract.test.mjs`. Each was mutation-proved on 2026-07-26 (see §6
 | C7 | Every `data-action` in a template has a handler (AppV2 `actions:` map, chat-hook `querySelector`, or `dataset.action` comparison). | **AppV2 silently ignores an unhandled action** — the button renders and does nothing, with no error anywhere. |
 | C8 | Every `smt-rpg` flag read has a writer. Scope/key consts and interpolated `flags.${SCOPE}.${KEY}` paths are resolved before matching. | The whole multi-phase combat pipeline is flag-driven; a read with no writer is a permanently dead button. |
 | C9 | Every §5 spec is linked to a tagged test or is a dated manual rung, and every `spec:` tag matches a declared spec. | A spec with no backing check is a claim, not a constraint. |
+| C10 | The tracked `.gitignore` excludes `rulebook-text/` and `*.pdf`, and git tracks neither. | The repo is **public** and the rulebook is licensed. An ignore rule nobody asserts is one edited `.gitignore` away from committing the book. C10c uses git as ground truth and **skips loudly** outside a checkout rather than passing. |
 
 **Scan honesty.** Five defects, across three of these scans, reported violations on their first run that were **defects in the scan, not the code**:
 
@@ -203,7 +204,7 @@ Check: manual — last verified: NEVER
 | A chat-flag reader with no writer | C8 | Const-resolving and interpolation-normalizing, so `setFlag(SCOPE, KEY)` and `` `flags.${SCOPE}.${KEY}` `` both count as writers. |
 | A suite nobody runs | `test/run-tests.mjs` | Discovery is glob-only over `test/*.test.mjs` plus a floor assertion — no hand-maintained list to fall out of date. This project had exactly that bug: `fusion-chart.test.mjs` was a separate entry point and no command ran both. |
 | A spec in §5 with nothing behind it | C9 | Every spec needs a linked tagged test or a dated manual check; orphan `spec:` tags are flagged in the other direction too. |
-| **A rung that cannot fail** | `test/mutation-probe.mjs` | Plants one defect per scan into a scratch copy and asserts the suite goes red **for that rung specifically**, with a control run on an unmutated copy proving it goes green. Currently 11/11. An empty result from an unproved instrument is not evidence. |
+| **A rung that cannot fail** | `test/mutation-probe.mjs` | Plants one defect per scan into a scratch copy and asserts the suite goes red **for that rung specifically**, with a control run on an unmutated copy proving it goes green. Currently 13/13. An empty result from an unproved instrument is not evidence. |
 
 ### Transcribed rulebook data — the standing verification bar
 

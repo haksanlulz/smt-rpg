@@ -1,2 +1,5 @@
-# Rulebook PDF - do not distribute
+# Rulebook - do not distribute. The PDF and any text extracted from it are the
+# same licensed content; neither ships. Values derived from it (stat numbers,
+# table lookups in module/config.mjs) are fine - prose and stat blocks are not.
 *.pdf
+rulebook-text/
