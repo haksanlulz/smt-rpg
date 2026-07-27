@@ -146,6 +146,16 @@ And it is never an exception demon and never a boss-only demon
 Check: test/demon-roster.test.mjs  (tagged  // spec: cross-clan-fusion-names-a-demon)
 ```
 
+### SPEC rank-shift-fusion-names-a-demon
+```
+Given an Element demon fused with a non-Element demon
+When the fusion resolves
+Then the result is the demon nearest in level within the non-Element demon's own
+     clan - higher on a Rank Up, lower on a Rank Down, per the p.81 table
+And a Cursed fusion reverses that direction
+Check: test/rank-shift.test.mjs  (tagged  // spec: rank-shift-fusion-names-a-demon)
+```
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed

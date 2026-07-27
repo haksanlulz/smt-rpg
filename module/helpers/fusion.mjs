@@ -74,9 +74,8 @@ export function crossClanFusion(clanA, clanB) {
 // (p.81): the result is the non-Element clan, one rank higher or lower per the Rank
 // Up/Down Table (CONFIG.SMT.fusion.rankShift). Argument order is free — whichever side is
 // the Element clan is used. Returns null unless EXACTLY one side is an Element clan and the
-// pair is on the table; fail-closed and never throws. Case-insensitive. The Cursed reversal
-// (p.81) and the actual rank-resolved demon (level lookup within the clan, needing the demon
-// roster) are out of scope here — this returns only the direction.
+// pair is on the table; fail-closed and never throws. Case-insensitive. This returns only the
+// direction; rankShiftResult turns it into an actual demon and applies the Cursed reversal.
 export function rankShiftFusion(clanA, clanB) {
   const a = String(clanA ?? "").trim().toLowerCase();
   const b = String(clanB ?? "").trim().toLowerCase();
@@ -93,7 +92,6 @@ export function rankShiftFusion(clanA, clanB) {
   return dir === "up" || dir === "down" ? dir : null;
 }
 
-// Whether a demon name is on the p.80 exception list (cannot be normally fused).
 // The fusion pool: general demons only. The p.213-235 boss list is not fusable
 // (p.123 -- bosses that later join the pool are already among the general demons).
 function _fusionPool(clan) {
@@ -134,6 +132,33 @@ export function resultDemonFor(clan, level, { rankDown = false } = {}) {
   return isExceptionDemon(pool[i].name) ? null : pool[i];
 }
 
+// The demon a Rank Up / Rank Down fusion produces (p.81): "take the non-Element
+// demon fused and find the demon that is closest to it in level within the same
+// clan but higher" -- Rank Down is the same, one lower. `level` is the non-Element
+// ingredient's own level, NOT a computed fusion level. Cursed fusion reverses the
+// direction (p.81). Exception demons are stepped over. Fail-closed at both ends of
+// the clan: nothing above the ceiling or below the floor returns null rather than
+// silently clamping back onto the ingredient's own rank.
+export function rankShiftResult(clan, level, direction, { cursed = false } = {}) {
+  const target = Number(level);
+  if (!Number.isFinite(target)) return null;
+
+  let dir = direction === "up" || direction === "down" ? direction : null;
+  if (!dir) return null;
+  if (cursed) dir = dir === "up" ? "down" : "up";
+
+  // Element clans are an ingredient side, never a result clan (p.81).
+  if (String(clan ?? "").trim().toLowerCase() in (CONFIG.SMT?.fusion?.elementClans ?? {})) return null;
+
+  const pool = _fusionPool(clan).filter(d => !isExceptionDemon(d.name));
+  if (!pool.length) return null;
+
+  if (dir === "up") return pool.find(d => d.level > target) ?? null;
+  const below = pool.filter(d => d.level < target);
+  return below.length ? below[below.length - 1] : null;
+}
+
+// Whether a demon name is on the p.80 exception list (cannot be normally fused).
 export function isExceptionDemon(name) {
   const n = String(name ?? "").trim().toLowerCase();
   if (!n) return false;
@@ -210,7 +235,7 @@ export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } 
 // Normally fuse two demon actors into a new one (p.79-82). GM-only. Caller supplies
 // name + clan (cross-clan from the Fusion Chart; same-clan defaults to the Element
 // clan). Ingredients are left intact.
-export async function performFusion({ demonA, demonB, resultName, resultClan, resultInheritance = "", inheritSkills = null }) {
+export async function performFusion({ demonA, demonB, resultName, resultClan, resultInheritance = "", inheritSkills = null, cursed = false }) {
   if (!canFuse()) {
     ui.notifications.warn(game.i18n.localize("SMT.Warnings.FusionGM"));
     return null;
@@ -230,22 +255,43 @@ export async function performFusion({ demonA, demonB, resultName, resultClan, re
   // (the first ingredient's clan) rather than crashing.
   const gmClan = String(resultClan ?? "").trim();
   const sameClanElement = elementClanFor(demonA.system.clan, demonB.system.clan);
+  // Rank Up/Down (p.81): exactly one Element ingredient. The result clan is the
+  // NON-Element demon's clan and the result is picked relative to that demon's own
+  // level, so this needs the ingredient, not a computed fusion level. Element clans
+  // are absent from the p.82 chart entirely, so this can never collide with it.
+  const shiftDir = rankShiftFusion(demonA.system.clan, demonB.system.clan);
+  const elementClans = CONFIG.SMT?.fusion?.elementClans ?? {};
+  const nonElement = shiftDir
+    ? (demonA.system.clan in elementClans ? demonB : demonA)
+    : null;
   const crossClan = crossClanFusion(demonA.system.clan, demonB.system.clan);
-  const clan = gmClan || sameClanElement || crossClan || demonA.system.clan || "fairy";
-  // How the clan was decided, for the card note: gm pick wins, then same-clan Element, then
-  // the auto-resolved cross-clan chart, else the legacy fallback.
-  const clanSource = gmClan ? "gm" : sameClanElement ? "element" : crossClan ? "cross" : "fallback";
+
+  const clan = gmClan
+    || sameClanElement
+    || (nonElement ? nonElement.system.clan : null)
+    || crossClan
+    || demonA.system.clan
+    || "fairy";
+  // How the clan was decided, for the card note.
+  const clanSource = gmClan ? "gm"
+    : sameClanElement ? "element"
+    : shiftDir ? "rankshift"
+    : crossClan ? "cross"
+    : "fallback";
 
   const system = buildFusedSystem(demonA, demonB);
   system.clan = clan;
 
-  // Name the actual demon off the roster (p.80): lowest-level member of the result
-  // clan at or above the fusion level, stepping over exception demons. A GM-supplied
-  // name still wins; if the roster can't resolve one we fall back to the generic name.
-  const rosterResult = String(resultName ?? "").trim() ? null : resultDemonFor(clan, system.level);
-  const name = String(resultName ?? "").trim()
-    || rosterResult?.name
-    || game.i18n.localize("SMT.Fusion.DefaultName");
+  // Name the actual demon. Rank shift resolves off the non-Element ingredient's level
+  // (p.81); everything else off the computed fusion level (p.80). Both step over
+  // exception demons. A GM-supplied name still wins; on null we keep the generic name
+  // and leave the computed level alone.
+  const named = String(resultName ?? "").trim();
+  const rosterResult = named ? null
+    : (shiftDir && !gmClan && !sameClanElement)
+      ? rankShiftResult(nonElement.system.clan, nonElement.system.level, shiftDir, { cursed })
+      : resultDemonFor(clan, system.level);
+  const name = named || rosterResult?.name || game.i18n.localize("SMT.Fusion.DefaultName");
   if (rosterResult) system.level = rosterResult.level;
 
   // GM selection if provided, else every ingredient skill in order. Fresh card, so
@@ -305,6 +351,7 @@ export async function postFusionCard({ demonA, demonB, actor, clan, clanSource, 
       resultName: actor.name,
       clanLabel,
       crossClan: clanSource === "cross",
+      rankShift: clanSource === "rankshift",
       level,
       inheritedNames,
       inheritedCount: inheritedNames.length,
@@ -360,6 +407,8 @@ export async function openFusionDialog() {
         <input type="text" name="resultName" placeholder="${esc(game.i18n.localize("SMT.Fusion.DefaultName"))}" /></div>
       <div class="form-group"><label>${game.i18n.localize("SMT.Fusion.ResultClan")}</label>
         <select name="resultClan">${clanOptions}</select></div>
+      <div class="form-group"><label>${game.i18n.localize("SMT.Fusion.Cursed")}</label>
+        <input type="checkbox" name="cursed" /></div>
       <div class="fusion-preview" data-preview></div>
     </div>`;
 
@@ -374,8 +423,15 @@ export async function openFusionDialog() {
     const level = computeFusionLevel(a.system.level, b.system.level);
     const element = elementClanFor(a.system.clan, b.system.clan);
     const cross = crossClanFusion(a.system.clan, b.system.clan);
+    const cursed = !!root.querySelector("[name=cursed]")?.checked;
+    // Same precedence performFusion uses, so the preview cannot name a different
+    // demon than the one that gets created.
+    const shiftDir = rankShiftFusion(a.system.clan, b.system.clan);
+    const nonElement = shiftDir
+      ? (a.system.clan in SMT.fusion.elementClans ? b : a)
+      : null;
     const chosenClan = root.querySelector("[name=resultClan]").value
-      || element || cross || a.system.clan;
+      || element || (nonElement ? nonElement.system.clan : null) || cross || a.system.clan;
     const clanLabel = SMT.demonClans[chosenClan]
       ? game.i18n.localize(SMT.demonClans[chosenClan])
       : (SMT.fusion.elementClans[chosenClan] ? game.i18n.localize(SMT.fusion.elementClans[chosenClan]) : chosenClan);
@@ -386,10 +442,15 @@ export async function openFusionDialog() {
     const gmOverride = !!root.querySelector("[name=resultClan]").value;
     const note = element
       ? `<div class="preview-line element">${game.i18n.localize("SMT.Fusion.SameClanNote")}</div>`
-      : (!gmOverride && cross ? `<div class="preview-line cross">${game.i18n.localize("SMT.Fusion.CrossClanNote")}</div>` : "");
-    // Name the demon the fusion will actually produce (p.80), so the result is visible
-    // before confirming rather than only on the result card.
-    const named = resultDemonFor(chosenClan, level);
+      : (!gmOverride && shiftDir
+        ? `<div class="preview-line rankshift">${game.i18n.localize("SMT.Fusion.RankShiftNote")}</div>`
+        : (!gmOverride && cross ? `<div class="preview-line cross">${game.i18n.localize("SMT.Fusion.CrossClanNote")}</div>` : ""));
+    // Name the demon the fusion will actually produce, so the result is visible before
+    // confirming. Rank shift resolves off the non-Element ingredient's level (p.81),
+    // everything else off the computed fusion level (p.80).
+    const named = (shiftDir && !gmOverride && !element)
+      ? rankShiftResult(nonElement.system.clan, nonElement.system.level, shiftDir, { cursed })
+      : resultDemonFor(chosenClan, level);
     const namedLine = named
       ? `<div class="preview-line result">${game.i18n.format("SMT.Fusion.ResultDemon", {
           name: esc(named.name), level: named.level
@@ -414,7 +475,8 @@ export async function openFusionDialog() {
             demonA: form.elements.demonA.value,
             demonB: form.elements.demonB.value,
             resultName: form.elements.resultName.value,
-            resultClan: form.elements.resultClan.value
+            resultClan: form.elements.resultClan.value,
+            cursed: form.elements.cursed.checked
           };
         }
       },
@@ -423,7 +485,7 @@ export async function openFusionDialog() {
     render: (event, dialog) => {
       const root = dialog?.element ?? event?.target;
       if (!root?.querySelectorAll) return;
-      for (const sel of root.querySelectorAll("select")) sel.addEventListener("change", () => refresh(root));
+      for (const el of root.querySelectorAll("select, input[type=checkbox]")) el.addEventListener("change", () => refresh(root));
       refresh(root);
     }
   }).catch(() => null);
@@ -434,6 +496,7 @@ export async function openFusionDialog() {
     demonA: game.actors.get(result.demonA),
     demonB: game.actors.get(result.demonB),
     resultName: result.resultName,
-    resultClan: result.resultClan
+    resultClan: result.resultClan,
+    cursed: result.cursed
   });
 }
