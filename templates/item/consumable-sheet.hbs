@@ -70,7 +70,7 @@
           <label>{{localize "SMT.ItemCuresAilment"}}</label>
           <select name="system.curesAilment">
             <option value="none" {{#if (eq system.curesAilment "none")}}selected{{/if}}>{{localize "SMT.None"}}</option>
-            <option value="all" {{#if (eq system.curesAilment "all")}}selected{{/if}}>All</option>
+            <option value="all" {{#if (eq system.curesAilment "all")}}selected{{/if}}>{{localize "SMT.All"}}</option>
             {{#each @root.ailmentChoices as |label key|}}
               <option value="{{key}}" {{#if (eq key ../system.curesAilment)}}selected{{/if}}>{{localize label}}</option>
             {{/each}}

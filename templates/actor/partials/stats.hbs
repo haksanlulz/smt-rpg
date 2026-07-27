@@ -7,7 +7,7 @@
     <span class="stat-bonus" {{#if entry.bonus}}data-tooltip="{{entry.bonusTooltip}}" data-tooltip-direction="UP"{{/if}}>{{#if entry.bonus}}+{{entry.bonus}}{{else}}&mdash;{{/if}}</span>
     <span class="stat-total">=&nbsp;{{entry.total}}</span>
     <span class="stat-tn clickable" data-action="rollCheck" data-tn="{{entry.tn}}" data-label="{{localize entry.fullLabel}}">
-      TN: {{entry.tn}}%
+      {{localize "SMT.TN"}}: {{entry.tn}}%
     </span>
   </div>
   {{/each}}

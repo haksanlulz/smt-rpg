@@ -92,6 +92,16 @@ const MUTATIONS = [
       s + "\n// spec: a-tag-matching-no-declared-spec\n")
   },
   {
+    rung: "C11a literal notification", expect: "C11a",
+    apply: (d) => edit(d, "module/helpers/fusion.mjs", s =>
+      s + '\nexport function nag() { ui.notifications.warn("Not localized."); }\n')
+  },
+  {
+    rung: "C11c hardcoded template text", expect: "C11c",
+    apply: (d) => edit(d, "templates/actor/actor-sheet.hbs", s =>
+      s + "\n<div><span>Hardcoded English label</span></div>\n")
+  },
+  {
     rung: "C10a rulebook ignore dropped", expect: "C10a",
     apply: (d) => edit(d, ".gitignore", s => s.replace(/^rulebook-text\/?$/m, ""))
   },

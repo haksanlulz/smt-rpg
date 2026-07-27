@@ -24,8 +24,8 @@
       <div class="form-group">
         <label>{{localize "SMT.Resource"}}</label>
         <select name="system.cost.resource">
-          <option value="hp" {{#if (eq system.cost.resource "hp")}}selected{{/if}}>HP</option>
-          <option value="mp" {{#if (eq system.cost.resource "mp")}}selected{{/if}}>MP</option>
+          <option value="hp" {{#if (eq system.cost.resource "hp")}}selected{{/if}}>{{localize "SMT.HP"}}</option>
+          <option value="mp" {{#if (eq system.cost.resource "mp")}}selected{{/if}}>{{localize "SMT.MP"}}</option>
           <option value="none" {{#if (eq system.cost.resource "none")}}selected{{/if}}>{{localize "SMT.None"}}</option>
         </select>
       </div>
