@@ -5,6 +5,9 @@
     {{#if skillPower}}
       <span>{{localize "SMT.Roll.SkillPower"}}: +{{skillPower}}</span>
     {{/if}}
+    {{#if boostApplied}}
+      <span class="roll-boost">{{localize "SMT.Roll.Boosted"}}: {{boosted}}</span>
+    {{/if}}
     <span>{{localize "SMT.Roll.DiceRoll"}}: +{{diceTotal}}</span>
     {{#if isCritical}}
       <span class="roll-outcome critical">{{localize "SMT.Roll.Critical"}} (x2)</span>

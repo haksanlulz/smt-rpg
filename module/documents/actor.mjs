@@ -1,6 +1,7 @@
 import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
+import { incomingDamageMultiplier } from "../helpers/ailments.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -134,7 +135,8 @@ export default class SMTActor extends Actor {
     await roll.evaluate();
     const result = roll.total;
 
-    const evaluated = evaluatePercentile(result, tn, { hasMight });
+    // A Curse widens this actor's auto-fail band to 86-99 (p.57, p.67).
+    const evaluated = evaluatePercentile(result, tn, { hasMight, cursed: !!this.system.curseAilment });
     const outcome = game.i18n.localize(evaluated.outcomeKey);
     const cssClass = evaluated.cssClass;
     const isCritical = evaluated.isCritical;
@@ -152,19 +154,38 @@ export default class SMTActor extends Actor {
       sound: CONFIG.sounds.dice
     });
 
-    return { result, outcome, cssClass, isCritical, isSuccess, messageId: msg.id };
+    // p.57: "Furthermore, when you fumble, you become Cursed." The rule is stated for
+    // checks in general, not just attacks, so it belongs on the shared roll.
+    if (evaluated.isFumble && !this.system.curseAilment) {
+      await this.update({ "system.curseAilment": true });
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: this }),
+        content: `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.Curse.Inflicted", { name: this.name })}</p></div>`
+      });
+    }
+
+    return { result, outcome, cssClass, isCritical, isSuccess, isFumble: evaluated.isFumble, messageId: msg.id };
   }
 
   // Power roll: 1d10x10 + base + skill power (+ extraDice, e.g. Powerful Strikes +1d10), doubled on crit. Posts a card.
-  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false, extraDice = "") {
+  // `boost` is an elemental Boost passive's multiplier (p.110): it multiplies base
+  // power + potency BEFORE the power roll is added, which is what the book specifies
+  // and is also why it cannot simply scale the total.
+  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false, extraDice = "", boost = 1) {
     const roll = new Roll(extraDice ? `1d10x10 + ${extraDice}` : "1d10x10");
     await roll.evaluate();
-    let total = basePower + skillPower + roll.total;
+    const boosted = Math.floor((basePower + skillPower) * (Number.isFinite(boost) && boost > 0 ? boost : 1));
+    let total = boosted + roll.total;
     if (isCritical) total *= 2;
 
     const content = await foundry.applications.handlebars.renderTemplate(
       "systems/smt-rpg/templates/chat/power-roll.hbs",
-      { label, basePower, skillPower, diceTotal: roll.total, total, isCritical }
+      {
+        label, basePower, skillPower, diceTotal: roll.total, total, isCritical,
+        // Only shown when a Boost actually moved the number — otherwise the card
+        // would print the same figure twice for every attack in the game.
+        boosted, boostApplied: boosted !== basePower + skillPower
+      }
     );
 
     await ChatMessage.create({
@@ -179,7 +200,7 @@ export default class SMTActor extends Actor {
 
   // Apply an attack: affinity/resistance -> mutate HP -> post card. Handles null/drain/repel.
   // rawPower may come from a flag, so it's clamped.
-  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false }) {
+  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false, damageMultiplier = 1 }) {
     rawPower = SMTActor.#clampHpDelta(rawPower);
 
     const affinity = this.system.affinities[element] ?? "normal";
@@ -193,9 +214,13 @@ export default class SMTActor extends Actor {
     // (p.65). Ailment is passed for completeness but never touches damage.
     const magicAffinity = this.system.categoryAffinities?.magic ?? "normal";
     const ailmentAffinity = this.system.categoryAffinities?.ailment ?? "normal";
+    // Stone halves everything but Phys/Force/Almighty; Fly doubles the lot (p.66).
+    const incomingMultiplier = incomingDamageMultiplier(this.system.ailment ?? "none", element);
+
     const result = calculateDamage({
       rawPower, affinity, resistance, isCritical, dodgeFumble, attackerResistance,
-      magicAffinity, ailmentAffinity, isPhysicalAttack: isPhysical
+      magicAffinity, ailmentAffinity, isPhysicalAttack: isPhysical, incomingMultiplier,
+      finalMultiplier: damageMultiplier
     });
     let hpBefore = null;
 
@@ -239,8 +264,23 @@ export default class SMTActor extends Actor {
       // at 0, so the difference is otherwise unrecoverable (GAUNTLET.md §6).
       hpBefore = this.system.hp.value;
       const dmgAmount = SMTActor.#clampHpDelta(result.finalDamage);
-      const { hpAfter: newHp } = applyDamageToHp(hpBefore, this.system.hp.max, dmgAmount);
-      const update = { "system.hp.value": newHp };
+      let { hpAfter: newHp } = applyDamageToHp(hpBefore, this.system.hp.max, dmgAmount);
+      const update = {};
+
+      // Endure (p.110): a hit that would reduce you to 0 leaves you at 1 instead,
+      // once per combat, and never while Stoned.
+      if (newHp <= 0 && hpBefore > 0) {
+        const { endureApplies } = await import("../helpers/passives.mjs");
+        if (endureApplies(this.system.hasEndurePassive, {
+          ailment: this.system.ailment ?? "none",
+          alreadyUsed: !!this.system.endureUsed
+        })) {
+          newHp = CONFIG.SMT.endure.survivesAt;
+          update["system.endureUsed"] = true;
+          chatData.endured = game.i18n.format("SMT.Endure.Survived", { name: this.name });
+        }
+      }
+      update["system.hp.value"] = newHp;
       // Damage wakes Sleep etc. (p.66); folded into the same write.
       if (CONFIG.SMT.wakeOnDamageAilments.includes(this.system.ailment)) {
         const ailmentLabel = game.i18n.localize(CONFIG.SMT.ailments[this.system.ailment] ?? this.system.ailment);

@@ -346,9 +346,27 @@ function ok(cond, label) { eq(!!cond, true, label); }
   ok(!canLevelUp(9_999_999, SMT.advancement.maxLevel, 1), "an actor at the level cap is never ready");
 }
 
+// Setup actions (p.64). Aid's plumbing is ActiveEffect-based and so unreachable from
+// node; what IS checkable is that its constants match the printed block and that it is
+// registered as its own action rather than folded into Concentrate — the two differ in
+// source (an ally, not yourself) and in stacking (multiple aiders stack; p.64).
+{
+  eq(SMT.concentrate.bonusPct, 20, "Concentrate is +20% (p.64)");
+  eq(SMT.aid.bonusPct, 20, "Aid is +20% (p.64)");
+  eq(SMT.defend.dodgeBonus, 20, "Defend is +20% dodge (p.64)");
+  eq(SMT.aid.checkStat, "luck", "the p.64 Aid block reads 'Check: Luck'");
+  ok(SMT.stats[SMT.aid.checkStat], "and that names a real stat");
+  ok(SMT.actionEffects.aid?.statusId, "Aid is its own action effect, not a Concentrate alias");
+  ok(SMT.actionEffects.aid.statusId !== SMT.actionEffects.concentrate.statusId,
+    "Aid and Concentrate hold separate statuses so both can sit on one actor");
+  for (const key of ["concentrate", "aid", "defend"]) {
+    ok(SMT.actionEffects[key]?.label?.startsWith("SMT."), `${key} carries an i18n label`);
+  }
+}
+
 // Ailment-save eligibility (p.69, p.68 Save column).
 {
-  // Save-eligible set is exactly Charm/Restrain/Sleep/Panic.
+  // Save-eligible set is exactly the six the p.68 Save column marks Y.
   ok(isSaveEligibleAilment("charm"), "Charm is save-eligible");
   ok(isSaveEligibleAilment("restrain"), "Restrain is save-eligible");
   ok(isSaveEligibleAilment("sleep"), "Sleep is save-eligible");
@@ -356,9 +374,12 @@ function ok(cond, label) { eq(!!cond, true, label); }
   // Stone and Fly are NOT eligible (the fix).
   ok(!isSaveEligibleAilment("stone"), "Stone is not save-eligible");
   ok(!isSaveEligibleAilment("fly"), "Fly is not save-eligible (only ends at combat end)");
-  // Freeze/Shock auto-recover at turn start, so they are not save-eligible here.
-  ok(!isSaveEligibleAilment("freeze"), "Freeze is not save-eligible (auto-recovers)");
-  ok(!isSaveEligibleAilment("shock"), "Shock is not save-eligible (auto-recovers)");
+  // CORRECTED 2026-07-28. These two previously asserted "not save-eligible
+  // (auto-recovers)" — a regression test defending a defect. p.68 marks both Save = Y;
+  // their free recovery is what the turn AFTER a failed save brings, not a substitute
+  // for the save. The turn-by-turn behavior lives in ailment-rules.test.mjs.
+  ok(isSaveEligibleAilment("freeze"), "Freeze is save-eligible (p.68 Save = Y)");
+  ok(isSaveEligibleAilment("shock"), "Shock is save-eligible (p.68 Save = Y)");
   // The rest cannot be saved against.
   ok(!isSaveEligibleAilment("mute"), "Mute is not save-eligible");
   ok(!isSaveEligibleAilment("stun"), "Stun is not save-eligible");

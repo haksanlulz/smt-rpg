@@ -131,6 +131,7 @@ When they spend a Fate Point to halve that damage
 Then their HP is exactly (HP when the hit landed) - (half the damage)
 And it is never higher than it was before the hit
 Check: test/fate-damage.test.mjs  (tagged  // spec: halve-damage-never-restores-more-than-was-dealt)
+Also verified in the live channel 2026-07-28 — see below.
 ```
 
 ### SPEC fusion-chart-matches-the-book
@@ -252,13 +253,97 @@ Check: test/stat-growth.test.mjs  (tagged  // spec: demon-level-ups-roll-their-s
 
 **Fiends and humans are deliberately untouched.** The same paragraph says they "may apply this point to any stat they prefer", so nothing is rolled for them — the asymmetry is the rule, not an omission.
 
+### SPEC frozen-combatants-lose-a-turn
+```
+Given a combatant afflicted with Freeze or Shock
+When their turn starts
+Then they may attempt a save, and failing it costs them the turn
+And only at the start of the turn AFTER that failure do they recover for free (p.66, p.68)
+Check: test/ailment-rules.test.mjs  (tagged  // spec: frozen-combatants-lose-a-turn)
+```
+
+**The free recovery was firing instead of the save, not after it.** Both ailments were cleared unconditionally at the first turn start, so the save never happened, the failure branch never existed, and their entries in `cannotActAilments` were unreachable code. Freeze and Shock cost their victim nothing.
+
+### SPEC stone-shatters-instead-of-critting
+```
+Given a petrified combatant
+When a Phys element attack strikes them
+Then a d100 is rolled and on 30 or under they shatter and die outright
+And every element that is not Phys, Force or Almighty deals half damage to them
+And they never get a dodge roll (p.66, p.68)
+Check: test/ailment-rules.test.mjs  (tagged  // spec: stone-shatters-instead-of-critting)
+```
+
+**Stone had been modelled as a forced critical on Phys**, which is the rule Restrain, Freeze and Shock carry — not the one Stone carries. The shatter roll, the halving and the lost dodge were all absent.
+
+### SPEC a-curse-widens-the-auto-fail-band
+```
+Given a Cursed character
+When they make any percentile check
+Then their automatic failure range is 86-99 rather than 96-99
+And a fumble on any check is what inflicts the Curse in the first place (p.57, p.67)
+Check: test/ailment-rules.test.mjs  (tagged  // spec: a-curse-widens-the-auto-fail-band)
+```
+
+**Curse was stored, displayed, clearable — and mechanically inert.** Nothing applied it, nothing read it, and `autoFailMin` was a single constant with no cursed branch.
+
+### SPEC a-counterattack-is-offered-not-taken
+```
+Given a character holding Counter, Retaliate or Avenge
+When a Phys element attack hits them
+Then a 50% roll decides whether they are OFFERED one free basic strike back at
+     the attacker, which they may decline by ignoring it (p.96)
+And that strike deals normal, doubled or tripled DAMAGE by tier, targets only the
+    attacker, and cannot itself provoke a counterattack (p.96, p.110)
+Check: test/passive-effects.test.mjs  (tagged  // spec: a-counterattack-is-offered-not-taken)
+```
+
+**The book is unusually explicit that this is an opportunity, not an obligation** — *"counterattacking is not mandatory... Should your target have Tetrakarn up, for example, you may decline"* — which is why the automation posts a button and stops. Auto-resolving it would be a rules error, not a convenience. Two further clauses are asserted rather than assumed: Attack All never applies to it (p.96), and the free strikes a fumbled flee hands out cannot trigger it (p.70) — the `noCounter` flag carries that and also stops two Counter-holders trading blows forever.
+
+### SPEC printed-passives-have-mechanical-effect
+```
+Given a passive skill whose name appears in the p.109-110 tables
+When it sits on a character sheet
+Then it resolves to a registry entry and changes something measurable
+And a passive that is NOT implemented resolves to nothing rather than to
+    something adjacent, so the gap is visible instead of silently wrong
+Check: test/passive-effects.test.mjs  (tagged  // spec: printed-passives-have-mechanical-effect)
+```
+
+**Nine entries against roughly twenty-five printed passives.** Nineteen are wired as of 2026-07-28. **Still unwired, deliberately and named here rather than implied fixed:** Counter / Retaliate / Avenge (a reaction system), Drain Attack, Attack All, Lucky Find, Mind's Eye, Good Instincts, Item Pro, Luck Smiles, Once a Snake, and all **forty Affinity Changers** (Anti-X, Null X, X Drain, X Repel), which have no path to modify `system.affinities` at all. The spec's second clause is what keeps that honest: an unimplemented passive must resolve to `null`, never to a neighbour.
+
+### SPEC a-cure-skill-cures-instead-of-healing
+```
+Given a Remedy skill (Patra, Mutudi, Posumudi, Paraladi, Petradi, Prayer)
+When it is used on an ally carrying one of the ailments it names
+Then that ailment is cleared, and no HP is restored unless the skill also carries potency
+And Recarm and Samarecarm revive a downed ally before restoring them,
+    while Recarmdra restores every ally in full and then kills the caster (p.100, p.104)
+Check: test/recovery-skills.test.mjs  (tagged  // spec: a-cure-skill-cures-instead-of-healing)
+```
+
+**`SkillData` had no cure, revive or full-heal field of any kind.** `skillType: "recovery"` meant one thing — roll power, add HP — so ten printed skills did the wrong thing rather than nothing. The machinery existed one file away on `ConsumableData`: a Dis-Poison *item* could cure what the Posumudi *spell* could not.
+
+### SPEC rerolling-into-success-rolls-the-ailment
+```
+Given a skill whose only effect is an ailment, whose check failed
+When a Fate Point rerolls or boosts that check into a success
+Then the ailment is rolled against every target, at the doubled rate if the new
+     result was a critical (p.59, p.67)
+Check: test/ailment-rules.test.mjs  (tagged  // spec: rerolling-into-success-rolls-the-ailment)
+```
+
+**Reported from play.** The Fate Point cascade was gated on `hasPowerRoll` — correct for the power roll it was written around, and fatal for every skill whose entire effect is the ailment. Rerolling one into a success did nothing at all.
+
 ### SPEC system-loads-cold
 ```
 Given a Foundry world with this system installed
 When it is launched from cold
 Then the world loads, an actor sheet opens, and no error appears in the console
-Check: manual — last verified: 2026-07-27 (v0.1.12)
+Check: manual — last verified: 2026-07-28 (v0.1.12)
 ```
+
+**Re-verified 2026-07-28.** Cold load clean: 194 stat blocks, every template compiled, no errors. That load carried **six schema fields added across 07-27 and 07-28** — `behavior`, `inheritTraits`, `evolvePath`, `categoryAffinities`, `hpMaxOverride`/`mpMaxOverride` — and existing actors migrated without complaint.
 
 **Verified 2026-07-27, and here is exactly what that covers.** The world loads clean on v0.1.12 with the compendium (`194 stat blocks loaded`), actor sheets render, the demon picker opens and creates, and a Thor + Suparna fusion produced a Chimera matching p.140 field for field — stats, favored stat, derived HP/MP, all four affinities, drops, and 7 own skills plus 1 inherited under the cap of 8. That is the importer, compendium, chart, fusion and actor path confirmed end to end in the real channel.
 
@@ -269,8 +354,10 @@ Check: manual — last verified: 2026-07-27 (v0.1.12)
 Given an attack resolved against a target
 When Dodge, then Apply Damage, then Halve Damage are clicked
 Then each button performs its action and does not silently do nothing
-Check: manual — last verified: NEVER
+Check: manual — last verified: 2026-07-28 (partial — see below)
 ```
+
+**Partially verified 2026-07-28, and the partial matters.** Observed firing in a live session: **Dodge** (including a fumble against a critical), **Apply Damage**, **Halve Damage** (spent seven times consecutively on one card), **Fate Reroll**, and **Save** on an ailment. **Still unobserved: Pay Out Rewards**, which is the one that has a standing report against it, and **Boost TN**. Treat this row as green for the combat pipeline and NEVER for the reward tracker.
 
 **Two different checks live here, and the second is the real one.** C7–C8 assert the *proxy* — every action has a handler, every flag read has a writer. The channel this spec names is a person clicking a button in a live game. **A green suite does not make this row pass.**
 
@@ -302,6 +389,28 @@ Check: manual — last verified: NEVER
 
 | 2026-07-27 | **The PDF's purchase watermark was imported as a skill onto 109 demons.** The skill parser took every row below the table header, and page furniture — the printed page number, and the per-buyer watermark carrying a real name and order number — sits below the table in the name column alone. 163 junk rows across 56% of the corpus, and the buyer's identity ended up inside every created Actor and would have travelled in any exported or shared content. Found by reading an exported actor JSON. | `tools/import-rulebook.py` drops rows where nothing but the name is populated (a real skill always fills at least one other cell — Legion's `Anti-Phys`, p.194, is a passive carrying only a learn level), and its verification now **refuses to write** if a page-number or `Order #` name survives. 1575 → 1412 rows, all 163 junk, zero real skills lost. |
 | 2026-07-27 | **Boss HP was silently halved or worse.** `hp.max` is derived, so writing a boss's printed HP into `hp.value` clamped it to `(vitality + level) × multiplier`. 21 of 23 bosses print more than the formula yields — Specter got 72 instead of 148, Baal Avatar 630 instead of 13,000. Found by reading an exported actor JSON, not by any assertion. | `helpers/resources.mjs` adds an explicit max override that `prepareDerivedData` consults; `boss-hp.test.mjs` (39 assertions) checks every demon's resolved max against the printed number. The override is driven by comparing derived to printed rather than by the `boss` flag, which is what surfaced **Scáthach** (p.129): a general demon printing 498 HP where the formula gives 486. Her MP and Lakshmi on the same page derive exactly, so it is a slip in the book — carried as printed and reported as a caveat, per §1 clause 1. |
+
+| 2026-07-28 | **Freeze and Shock cost their victim nothing.** `processAilmentTurnStart` cleared both unconditionally at the start of the victim's turn and returned, so the p.68 save never ran, the failure it exists to have never happened, and the `cannotActAilments` entries for freeze and shock were unreachable code. Two of the eleven common ailments were decorative. Nothing reported it — an ailment that ends immediately looks like an ailment that was saved against. | `test/ailment-rules.test.mjs` — `turnStartPlan` is pure and returns `save` on the first turn start, `autoRecover` only once `ailmentSaveFailed` is set. The suite asserts the forfeit branch is reachable, which is the assertion the old behavior could not pass. 124 assertions; 17 were red before the fix. |
+| 2026-07-28 | **Stone was given the wrong rule entirely.** It sat in `critOnPhysAilments`, so a Phys hit on a petrified target became an automatic critical. p.66 gives Stone a **30% chance to shatter and die** instead — a different outcome, on a different distribution. Its other two clauses were absent as well: damage from every element but Phys, Force and Almighty is halved, and a Stoned target cannot dodge at all. | `ailment-rules.test.mjs` asserts `critOnPhysAilments` holds exactly three ailments and that Stone is not one; `shatterPctFor` and `incomingDamageMultiplier` are pure and swept across all eleven elements; `canDodge` covers the whole p.68 Dodge column. The shatter roll and the dodge denial are wired in `resolveAttack`. |
+| 2026-07-28 | **Curse was inert.** `curseAilment` had a schema field, a sheet indicator and a clear button, and no mechanical effect anywhere: `autoFailMin` was one constant with no cursed branch, the p.67 per-action mishap did not exist, and — the part that made it invisible — *nothing ever set the flag*. p.57 says a fumble on any check inflicts it, so in seven weeks of play no character could have become Cursed by the route the book actually uses. | `evaluatePercentile` now takes `cursed` and swaps in `check.curseAutoFailMin` (86); `ailment-rules.test.mjs` pins both bands and asserts the fumble and critical ends of the ladder are unmoved. `rollPercentile` applies the Curse on a fumble; `rollCurseMishap` rides the same four call sites as the poison drain. |
+
+| 2026-07-28 | **The Aid action (p.64) did not exist**, while its twin Concentrate did — same +20%, same named-action gating, same loss-on-ailment clause, printed on the same page. Aid differs in two ways the implementation now carries: it comes from an ally rather than yourself, and *"Aiding from multiple sources stacks"*, so each aider leaves its own effect instead of one accumulating stack. ⚑ **Wiring it exposed that the bonus was consumed at four separate call sites** — basic strike, Shoot, skill use, firearm skill — each with its own copy of the same four lines. A fifth setup action would have been wired into three of them. All four now go through `consumeSetupBonuses`. | `test/pure-helpers.test.mjs` pins the printed constants and asserts Aid is its own action effect with its own status id rather than a Concentrate alias. **The ActiveEffect plumbing itself is unreachable from node and is not claimed as verified.** ⚑ **C8 caught its own blind spot here:** it reported the new `aid` flag as unwritten, and it was right that no *recognised* writer existed — a flag written only at document-create time with COMPUTED keys (`flags: { [SCOPE]: { [KEY]: … } }`) matched none of its three idioms. Concentrate escaped notice only because it also has an update path with a dotted string. The scan now resolves the computed form; the probe re-proved C8b still goes red. |
+
+| 2026-07-28 | **The forty Affinity Changer skills could not change an affinity.** Anti-X, Null X, X Drain and X Repel — ten elements × four ratings, every one reading "Gain `<rating>` against `<element>` attacks" — had no registry entry and no path to `system.affinities`. A demon printed with `Anti-Fire` took full Fire damage. Now generated from `SMT.elements` (forty hand-written literals is forty chances to typo an element key) and applied in `prepareDerivedData` **by p.65's priority ladder rather than last-writer-wins**, so `Anti-Fire` cannot downgrade a demon that already Repels Fire. | `test/passive-effects.test.mjs` — 321 assertions; every printed name resolves to the right element and rating, and every entry is checked against `CONFIG` rather than a literal. `damage.mjs`'s absolute short-circuit now derives from the same `SMT.affinityPriority` instead of restating the order. ⚑ **The first mutation run exposed a fail-open in the suite itself**: the per-element loop iterated the config value under test, so emptying that config made **120 assertions silently not run** rather than fail — 5 red, not 125. The loop is now driven by a literal list. A shrunk config must turn assertions red, never make them disappear. |
+
+| 2026-07-28 | **Counter, Retaliate and Avenge had no implementation at all** — three printed passives whose whole content is a reaction the system could not express, because nothing in the damage pipeline ever looked back at the defender's own skills. Now wired as an OFFER: a 50% roll on any Phys hit posts a button, and the defender may ignore it, because p.96 says in as many words that counterattacking is not mandatory. ⚑ Building it surfaced a second thing worth keeping: `#onStrike` was the only basic strike in the codebase and it lived as a private static on a sheet, so the reaction would have had to copy it. It is now `performBasicStrike` in `combat.mjs` and both callers share it. | `test/passive-effects.test.mjs` — `counterEffect` (highest tier wins; they are one power-up chain, not three stacking passives) and `counterTriggers` (Phys only, never on a dodge, never on a suppressed hit) are pure. `calculateDamage` gained `finalMultiplier`, asserted to land **after** resistance — p.110 says "damage dealt is doubled", which is a different number from doubling the power, and tripling a fully-resisted hit still yields 0. |
+
+| 2026-07-28 | **The passive registry held nine entries against roughly twenty-five printed passives.** Everything outside those nine resolved to `"none"`: the skill sat on the sheet, named itself correctly off the corpus, and did nothing at all. Ten more are wired now — **Powerful Spells** (which had no magical counterpart because `powerDie` was hardcoded physical), **Expert Dodge**, the four elemental **Boosts**, **Life Aid / Mana Aid / Victory Cry**, and **Endure**. ⚑ The Boosts are the pointed one: the importer already *knew* about them — the book's `115 (77)` boosted-total notation that the corpus sweep decoded on 07-27 is exactly this multiplier — so the data carried the effect while the engine had no way to apply it. | `test/passive-effects.test.mjs` — every printed name is asserted to resolve, and every unimplemented one is asserted to resolve to **`null` rather than to a neighbour**, which is the clause that keeps the remaining gap visible. Mutation-proved: restoring the nine-entry registry turns **26** assertions red. Boosts do not compound on duplicates; combat-end recovery takes the max of each pool rather than summing. |
+
+| 2026-07-28 | **Ten printed recovery skills did the wrong thing rather than nothing.** `SkillData` declared no cure, revive or full-heal field, so `skillType: "recovery"` resolved to exactly one behavior — roll power, add HP. **Patra, Me Patra, Mutudi, Posumudi, Paraladi and Petradi healed instead of curing; Recarm and Samarecarm healed a corpse and left it dead; Recarmdra never killed its caster; Prayer cleared nothing.** The symptom is the reason it survived: a heal card posting after Patra reads exactly like Patra working. **The machinery already existed one file away** — `ConsumableData` has `curesAilment`, `revive` and `reviveFull`, so a Dis-Poison *item* could cure what the Posumudi *spell* could not. Also missing: `Fog Breath`, `War Cry` and `Debilitate` had no `buffEffect` key, and p.96 names Fog Breath as *the* worked example of a differently-named skill sharing the 4-stack debuff cap — the mechanism (`stacksOnSharedAxes`) was implemented, the example it was written for was not. | `test/recovery-skills.test.mjs` — `recoveryPlan` and `curedAilments` are pure; the cure spec is a SET (Patra is three ailments, which the consumable path's single-key field could never express) and unknown keys are dropped rather than written through. Mutation-proved: restoring "recovery always heals by power" turns **10** assertions red, one per printed skill. `Fog Breath`/`War Cry`/`Debilitate` now share axes with `Sukunda`/`Tarunda`, so the cap the book describes is enforced rather than described. |
+
+| 2026-07-28 | **p.58's Fumble Effect Chart had one row unimplemented: a fumbled SAVE.** The chart reads *"The ailment remains, and your HP and MP are halved."* The ailment did remain — that falls out of the save failing — but nothing was ever halved, so fumbling a save cost exactly the same as missing one. Surfaced from a live log: Shiva rolled 100 on a Freeze save against a save TN of 275, a roll that can only be a fumble, and paid nothing for it. | `test/ailment-rules.test.mjs` — `fumbledSaveResources` is pure and swept over odd, zero, negative and missing pools; `attemptAilmentSave` folds the halving into the same write as the save-failed marker. **The other four rows of that chart are still unimplemented** and are recorded below rather than fixed. |
+
+| 2026-07-28 | **A Fate Point spent on an ailment-only skill did nothing.** Reported from play: *"rerolling into success doesn't proc ailments roll chance like it should."* Apsaras cast Lullaby (Sleep 70%, no power), rolled 85 against a TN of 38, spent a Fate Point and rerolled a **1** — a critical, which should have doubled the rate to 95%. Nothing happened. `_cascadeCheckChange` gated the whole fail→success branch on `hasPowerRoll`; an ailment-only skill never has one, so the branch carrying its entire effect was unreachable from the Fate Point path. `SMTItem#use` had always had that second branch — only the reroll and boost paths were missing it, and they are the two nobody had exercised. | `test/ailment-rules.test.mjs` — the decision is now pure `cascadePlan` in `checks.mjs`, returning `powerRoll` / `ailmentOnly` / `cancel` / `none`. Mutation-proved: restoring the `hasPowerRoll ? "powerRoll" : "none"` guard turns the ESCAPE assertion red and nothing else, so the rung names this defect and not a neighbourhood. |
+
+**A guard written for one branch silently deleted another.** The `hasPowerRoll` test was correct about the power roll and was never asked whether anything else depended on it. The same shape is worth watching for wherever a capability flag gates a block that has grown past the capability it was named for. Note also which path was broken: the *un-rerolled* cast worked, so this only ever surfaced when a Fate Point was spent on a specific class of skill — a two-condition defect that no amount of ordinary play was likely to isolate, and that was reported in one sentence.
+
+**The rest of the 2026-07-28 cluster has a different shape from the 2026-07-27 one, and a worse one: three rules were read once, encoded approximately, and never re-read.** None of them was found by output, a console or a report — all three came from reading Ch.3 straight through against the code. Stone was given a neighbouring ailment's rule; Freeze and Shock were given a simplification that removed their only cost; Curse was given a flag and no mechanism. **A defect that makes a rule do nothing produces no symptom to report.** That is the class the escape log cannot cover by construction, and re-reading the chapter is the only channel that reaches it. Two rungs in `pure-helpers.test.mjs` were actively *defending* the Freeze/Shock defect — they have been corrected in place with the page cite rather than deleted.
 
 **The 2026-07-27 cluster has one shape: everything was checked except the thing that consumes it.** The skill parser was checked against the table and not against what sits below it; the boss HP was checked as a stored value and not against the derived ceiling that overwrites it; the schema fields were checked against memory and not against the schema. All four were found by looking at real output — a rendered page, an exported actor — never by an assertion. **Read the artifact, not just the code that made it.**
 
