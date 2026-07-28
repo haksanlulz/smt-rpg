@@ -102,6 +102,13 @@ const MUTATIONS = [
       s + "\n<div><span>Hardcoded English label</span></div>\n")
   },
   {
+    // The 2026-07-28 play report in one line: a class applied by the system with no
+    // rule anywhere. Planted on a template so the probe exercises the .hbs collector.
+    rung: "C13c unstyled smt- class", expect: "C13c",
+    apply: (d) => edit(d, "templates/actor/actor-sheet.hbs", s =>
+      s + '\n<div class="smt-a-class-with-no-rule"></div>\n')
+  },
+  {
     rung: "C12c undeclared system path", expect: "C12c",
     apply: (d) => edit(d, "module/helpers/combat.mjs", s =>
       `${s}\nexport function bad(a) { return a.update({ "system.notAField": 1 }); }\n`)

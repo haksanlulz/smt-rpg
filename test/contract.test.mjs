@@ -268,6 +268,52 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   eq([...reads].filter(k => !writes.has(k)).sort(), [], "C8b every smt-rpg flag read has a writer somewhere");
 }
 
+// --- C13: every smt- class this system applies has a style rule ------------
+// Reported from play 2026-07-28: the Pay Out Rewards button was "cramped and goes off
+// screen". `.smt-grant-rewards` had ZERO rules anywhere in the stylesheet — it was
+// appended into Foundry's icon-only .combat-controls bar and inherited whatever that
+// gave it. No maths assertion can see a class that styles nothing.
+//
+// **Narrow by design, like C11.** Only the project's own `smt-` namespace is checked:
+// every other class on these elements belongs to Foundry or Font Awesome, and demanding
+// a local rule for those would cry wolf until someone deleted the rung (§3).
+// A class used purely as a JS selector hook counts as justified.
+{
+  const used = new Set();
+  const addFrom = (text) => {
+    for (const m of text.matchAll(/class=["']([^"']*)["']/g)) {
+      for (const token of m[1].split(/\s+/)) {
+        if (token.startsWith("smt-") && !token.includes("{")) used.add(token);
+      }
+    }
+    for (const m of text.matchAll(/classList\.add\(([^)]*)\)/g)) {
+      for (const raw of m[1].split(",")) {
+        const token = raw.trim().replace(/^["'`]|["'`]$/g, "");
+        if (token.startsWith("smt-")) used.add(token);
+      }
+    }
+  };
+  for (const [, src] of HBS_SRC) addFrom(src);
+  for (const [, src] of SRC) addFrom(src);
+
+  const css = ALL.filter(f => f.endsWith(".css")).map(f => readFileSync(f, "utf8")).join("\n");
+  const styled = new Set(
+    [...css.matchAll(/\.(smt-[A-Za-z0-9_-]+)/g)].map(m => m[1])
+  );
+  // A class only ever queried from code is a behavioural hook, not a style.
+  const hooks = new Set();
+  for (const [, src] of SRC) {
+    for (const m of src.matchAll(/querySelector(?:All)?\(\s*["'`]([^"'`]*)["'`]/g)) {
+      for (const m2 of m[1].matchAll(/\.(smt-[A-Za-z0-9_-]+)/g)) hooks.add(m2[1]);
+    }
+  }
+
+  ok(used.size >= 5, `C13a smt- classes applied (${used.size} >= 5)`);
+  ok(styled.size >= 5, `C13b smt- style rules found (${styled.size} >= 5)`);
+  eq([...used].filter(c => !styled.has(c) && !hooks.has(c)).sort(), [],
+    "C13c every smt- class the system applies has a style rule or is a JS hook");
+}
+
 // --- C9: GAUNTLET.md §5 specs are linked to a test or dated as manual ------
 // A spec with no backing check is a claim, not a constraint (GAUNTLET.md §5).
 {

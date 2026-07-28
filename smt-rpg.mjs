@@ -396,6 +396,16 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
     ?? root.querySelector(".combat-tracker-controls")
     ?? root;
 
+  // Its OWN row, as a sibling AFTER the controls bar — never inside it. Foundry
+  // sizes .combat-controls for icon-only buttons, so a labelled button appended
+  // there cramps the bar and overflows the sidebar (reported from play 2026-07-28).
+  // When the controls lookup fell through to root there is no sibling to insert
+  // after, so the row is appended to root instead.
+  const row = document.createElement("div");
+  row.classList.add("smt-rewards-row");
+  if (controls !== root && controls.parentNode) controls.after(row);
+  else root.appendChild(row);
+
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.action = "smt-grant-rewards";
@@ -414,7 +424,7 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
     await grantCombatRewards(combat, { notifyEmpty: true });
   });
 
-  controls.appendChild(button);
+  row.appendChild(button);
 });
 
 async function _bindAttackButtons(message, html) {

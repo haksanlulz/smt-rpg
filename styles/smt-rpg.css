@@ -477,6 +477,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 6px;
 }
@@ -489,9 +490,15 @@
   font-weight: bold;
 }
 
+/* Wraps because this row grew from two buttons to three (Aid, 2026-07-28) and a
+   nowrap flex row inside a fixed-width sheet column simply overflows it. The
+   sibling .effects-list below has always wrapped; this one never did. */
 .effect-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+  min-width: 0;
 }
 
 .effect-action-btn {
@@ -510,9 +517,71 @@
   width: auto;
 }
 
+.effect-action-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .effect-action-btn:hover {
   color: var(--smt-fate);
   border-color: var(--smt-fate);
+}
+
+/* Pay Out Rewards (p.46, p.48) gets its OWN full-width row beneath the tracker
+   controls. It used to be appended straight into .combat-controls, which Foundry
+   sizes for icon-only buttons — a labelled button there cramps the bar and pushes
+   off the sidebar. Reported from play 2026-07-28; see GAUNTLET.md §6. */
+.smt-rewards-row {
+  display: flex;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Both of these were applied and never styled — found by C13, 2026-07-28. The list
+   is the one that showed: a bare <ul> takes the browser's ~40px indent inside a
+   chat card and pushes its own text off the edge. */
+.smt-chat {
+  overflow-wrap: anywhere;
+}
+
+.smt-levelup-effects {
+  list-style-position: inside;
+  padding-left: 0;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.smt-grant-rewards {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--smt-bg);
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  color: var(--smt-text-dim);
+  cursor: pointer;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smt-grant-rewards:hover:not(:disabled) {
+  color: var(--smt-fate);
+  border-color: var(--smt-fate);
+}
+
+.smt-grant-rewards.paid,
+.smt-grant-rewards:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .effects-list {
