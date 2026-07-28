@@ -1,5 +1,9 @@
 import { makeAffinitySchema, makeAilmentAffinitySchema, makeCategoryAffinitySchema, STATS } from "./fields.mjs";
-import { passiveMultiplierBonuses, hasMightEffect, shootTnBonus, physicalPowerDice } from "../helpers/passives.mjs";
+import {
+  passiveMultiplierBonuses, hasMightEffect, shootTnBonus, powerDiceFor,
+  dodgeTnBonus, elementBoosts, hasEndureEffect, combatEndRecovery, counterEffect,
+  affinityOverrides, betterAffinity
+} from "../helpers/passives.mjs";
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 import { resolveResourceMax } from "../helpers/resources.mjs";
 
@@ -53,6 +57,12 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       ailment: new StringField({ initial: "none" }),
       deathAilment: new BooleanField({ initial: false }),
       curseAilment: new BooleanField({ initial: false }),
+      // Set when a save against the current ailment has already been failed. Only
+      // Freeze and Shock read it: p.68 gives them one failure, then a free recovery
+      // at the following turn start. Reset whenever the ailment slot changes.
+      ailmentSaveFailed: new BooleanField({ initial: false }),
+      // Endure is once per combat (p.110); cleared when combat ends.
+      endureUsed: new BooleanField({ initial: false }),
 
       // Buff/debuff accumulators (p.96); stored so effects have a key to target, re-zeroed each prepare.
       buffs: new SchemaField({
@@ -64,6 +74,11 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       }),
       // Setup-action accumulators (p.64): Concentrate's pending +%, Defend's dodge bonus.
       concentrate: new SchemaField({
+        amount: new NumberField({ integer: true, initial: 0 })
+      }),
+      // Aid's pending +% (p.64). Separate from Concentrate because the two are
+      // different actions with different sources and stack independently.
+      aid: new SchemaField({
         amount: new NumberField({ integer: true, initial: 0 })
       }),
       defend: new SchemaField({
@@ -115,10 +130,44 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     return shootTnBonus(passives, CONFIG.SMT.passiveEffects);
   }
 
+  // Amplify, Shoot-TN, dodge, power-die, Boost, Endure and combat-end passives all
+  // come only from passive-type skills (p.109).
+  get _passiveSkills() {
+    return this._skillItems.filter(s => s.system?.skillType === "passive");
+  }
+
   // Extra physical power-roll dice (e.g. Powerful Strikes +1d10) as a roll fragment ("" if none).
   get physicalPowerBonusDice() {
-    const passives = this._skillItems.filter(s => s.system?.skillType === "passive");
-    return physicalPowerDice(passives, CONFIG.SMT.passiveEffects).join(" + ");
+    return powerDiceFor(this._passiveSkills, CONFIG.SMT.passiveEffects, "physical").join(" + ");
+  }
+
+  // The same, for spells and magical attacks (Powerful Spells, p.110).
+  get magicalPowerBonusDice() {
+    return powerDiceFor(this._passiveSkills, CONFIG.SMT.passiveEffects, "magical").join(" + ");
+  }
+
+  // { fire: 1.5, ... } for whichever elements a Boost passive covers (p.110).
+  get elementPowerBoosts() {
+    return elementBoosts(this._passiveSkills, CONFIG.SMT.passiveEffects);
+  }
+
+  // Multiplier applied to base power + potency BEFORE the power roll (p.110).
+  boostFor(element) {
+    return this.elementPowerBoosts[element] ?? 1;
+  }
+
+  // Best counterattack passive held, or null (Counter/Retaliate/Avenge, p.110).
+  get counterPassive() {
+    return counterEffect(this._passiveSkills, CONFIG.SMT.passiveEffects);
+  }
+
+  get hasEndurePassive() {
+    return hasEndureEffect(this._passiveSkills, CONFIG.SMT.passiveEffects);
+  }
+
+  // { hpPct, mpPct } restored when combat ends (Life Aid / Mana Aid / Victory Cry, p.110).
+  get combatEndRecoveryPct() {
+    return combatEndRecovery(this._passiveSkills, CONFIG.SMT.passiveEffects);
   }
 
   // Zero the buff/setup accumulators before effects apply (p.96, p.64).
@@ -130,6 +179,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.buffs.accuracy = 0;
     this.buffs.dodge = 0;
     this.concentrate.amount = 0;
+    this.aid.amount = 0;
     this.defend.amount = 0;
   }
 
@@ -168,9 +218,20 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this.baseMagicalPower = this.magicTotal + lvl;
 
     // Dodge TN = agility + 10; Negotiation TN = (luck x 2) + 20 (p.35). Both are NOT level-based.
-    this.dodgeTN = this.agilityTotal + CONFIG.SMT.dodgeBonus;
+    // Expert Dodge (+5%, p.110) rides here with the flat base bonus.
+    this.dodgeTN = this.agilityTotal + CONFIG.SMT.dodgeBonus
+      + dodgeTnBonus(this._passiveSkills, CONFIG.SMT.passiveEffects);
     this.negotiationTN = (this.luckTotal * CONFIG.SMT.negotiation.multiplier) + CONFIG.SMT.negotiation.bonus;
     this.saveTN = this.vitalityTN;
+
+    // Affinity Changer skills (p.109). Applied after any magatama override, and by
+    // p.65's priority rather than last-writer-wins, so Anti-Fire cannot downgrade a
+    // demon that already Repels Fire.
+    for (const [element, rating] of Object.entries(affinityOverrides(this._passiveSkills, CONFIG.SMT.passiveEffects))) {
+      if (element in this.affinities) {
+        this.affinities[element] = betterAffinity(this.affinities[element], rating);
+      }
+    }
 
     this._applyBuffModifiers();
 

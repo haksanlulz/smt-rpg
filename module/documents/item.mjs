@@ -103,9 +103,11 @@ export default class SMTItem extends Item {
       await actor.update({ [`system.${resource}.value`]: current - cost.value });
     }
 
-    // Poison drains HP per non-reactive action (p.66).
-    const { applyPoisonDrain } = await import("../helpers/effects.mjs");
+    // Poison drains HP per non-reactive action (p.66); a Curse rolls its mishap on
+    // any action at all (p.67).
+    const { applyPoisonDrain, rollCurseMishap } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
+    await rollCurseMishap(actor);
 
     // Firearm skills resolve through the ranged-weapon power path (p.63), spending ammo per shot.
     if (this.isRangedSkill) {
@@ -149,7 +151,7 @@ export default class SMTItem extends Item {
 
       if (this.hasPowerRoll) {
         const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, false, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : "");
+        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, false, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
         await this._postPendingAttacks(actor, powerResult);
       }
 
@@ -184,11 +186,11 @@ export default class SMTItem extends Item {
     let label = `${this.name} (${game.i18n.localize(`SMT.Stat.${stat.charAt(0).toUpperCase() + stat.slice(1)}`)})`;
 
     // Concentrate: spend any bonus held for this action, +% to hit TN (p.64).
-    const { consumeConcentrate } = await import("../helpers/effects.mjs");
-    const concentrate = await consumeConcentrate(actor, this.name);
-    if (concentrate) {
-      tn += concentrate;
-      label += ` +${concentrate}%`;
+    const { consumeSetupBonuses } = await import("../helpers/effects.mjs");
+    const setup = await consumeSetupBonuses(actor, this.name);
+    if (setup.total) {
+      tn += setup.total;
+      label += ` +${setup.total}%`;
     }
 
     // Stun caps hit TN (p.66); capped here so the roll and buildCheckData agree.
@@ -223,7 +225,7 @@ export default class SMTItem extends Item {
 
     if (checkResult.isSuccess && this.hasPowerRoll) {
       const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-      const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : "");
+      const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
       await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
     }
 
@@ -264,25 +266,69 @@ export default class SMTItem extends Item {
     );
     await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
 
-    const powerResult = await actor.rollPower(
-      actor.system.baseMagicalPower, this.system.power,
-      `${this.name} — ${game.i18n.localize("SMT.Power")}`
-    );
-    const heal = Math.max(0, Math.floor(powerResult.total));
+    const { recoveryPlan, curesCurrent } = await import("../helpers/recovery.mjs");
+    const plan = recoveryPlan(this.system);
+
+    // The power roll happens once for the whole group, and only when the skill
+    // actually heals by power — Patra rolls nothing (p.100).
+    let heal = 0;
+    if (plan.heals === "power") {
+      const powerResult = await actor.rollPower(
+        actor.system.baseMagicalPower, this.system.power,
+        `${this.name} — ${game.i18n.localize("SMT.Power")}`
+      );
+      heal = Math.max(0, Math.floor(powerResult.total));
+    }
 
     const lines = [];
     for (const token of targets) {
       const t = token.actor;
       if (!t) continue;
+      const update = {};
       const before = t.system.hp.value;
-      const newHp = Math.min(before + heal, t.system.hp.max);
-      await t.update({ "system.hp.value": newHp });
-      lines.push(game.i18n.format("SMT.Heal.Line", { name: t.name, amount: newHp - before }));
-      if (CONFIG.SMT.debug) console.log("smt-rpg | Heal", {
-        healer: actor.name, target: t.name, rolled: heal,
-        restored: newHp - before, newHp, hpMax: t.system.hp.max
+
+      // Revival first: a dead target has to come back before anything restores it (p.100).
+      if (plan.revives && (before <= 0 || t.system.deathAilment)) {
+        update["system.deathAilment"] = false;
+        update["system.hp.value"] = plan.reviveFull ? t.system.hp.max : 1;
+        lines.push(game.i18n.format("SMT.Heal.Revived", {
+          name: t.name, hp: update["system.hp.value"]
+        }));
+      } else if (plan.revives) {
+        continue; // Recarm on a living ally does nothing.
+      }
+
+      const hpNow = update["system.hp.value"] ?? before;
+      if (plan.heals === "full") {
+        update["system.hp.value"] = t.system.hp.max;
+      } else if (plan.heals === "power" && heal > 0) {
+        update["system.hp.value"] = Math.min(hpNow + heal, t.system.hp.max);
+      }
+      const restored = (update["system.hp.value"] ?? before) - before;
+      if (restored > 0 && !plan.revives) {
+        lines.push(game.i18n.format("SMT.Heal.Line", { name: t.name, amount: restored }));
+      }
+
+      // Cures are named ailments, not "whatever is there" — Patra cannot lift Poison.
+      if (curesCurrent(this.system.curesAilment, t.system.ailment)) {
+        const label = game.i18n.localize(CONFIG.SMT.ailments[t.system.ailment] ?? t.system.ailment);
+        update["system.ailment"] = "none";
+        update["system.ailmentSaveFailed"] = false;
+        lines.push(game.i18n.format("SMT.Heal.Cured", { name: t.name, ailment: label }));
+      }
+
+      if (CONFIG.SMT.debug) console.log("smt-rpg | Recovery", {
+        healer: actor.name, target: t.name, plan, rolled: heal, update
       });
+      if (Object.keys(update).length) await t.update(update);
     }
+
+    // Recarmdra (p.100): the caster pays for it afterwards.
+    if (plan.selfKO) {
+      await actor.update({ "system.hp.value": 0, "system.deathAilment": true });
+      lines.push(game.i18n.format("SMT.Heal.SelfKO", { name: actor.name }));
+    }
+
     if (lines.length) {
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
@@ -310,7 +356,7 @@ export default class SMTItem extends Item {
   // plus the skill's own potency; hit check vs the gun's Agility TN. One round spent per shot.
   async _rangedAttack(actor) {
     const { postAttacksToTargets, buildCheckData, resolveTargets, applyStunHitCap } = await import("../helpers/combat.mjs");
-    const { consumeConcentrate } = await import("../helpers/effects.mjs");
+    const { consumeSetupBonuses } = await import("../helpers/effects.mjs");
     const weapon = actor.items.find(i => i.type === "gear" && i.system.gearType === "weapon-ranged" && i.system.equipped);
     const rw = actor.system.rangedWeapon;
     if (!weapon || !rw) return;
@@ -329,12 +375,12 @@ export default class SMTItem extends Item {
       let tn = this.system.customTN ? this.system.tn : rw.tn;
       let label = shots > 1 ? `${this.name} ${i + 1}/${shots} (${statLabel})` : `${this.name} (${statLabel})`;
 
-      // Concentrate applies once to the whole action (p.64); fold it onto the first shot only.
+      // Concentrate and Aid apply once to the whole action (p.64); fold onto shot one only.
       if (i === 0) {
-        const concentrate = await consumeConcentrate(actor, this.name);
-        if (concentrate) {
-          tn += concentrate;
-          label += ` +${concentrate}%`;
+        const setup = await consumeSetupBonuses(actor, this.name);
+        if (setup.total) {
+          tn += setup.total;
+          label += ` +${setup.total}%`;
         }
       }
       tn = applyStunHitCap(actor, tn);
@@ -515,9 +561,11 @@ export default class SMTItem extends Item {
       await this.update({ "system.quantity": sys.quantity - 1 });
     }
 
-    // Using an item is a non-reactive action: poison drains HP (p.66).
-    const { applyPoisonDrain } = await import("../helpers/effects.mjs");
+    // Using an item is a non-reactive action: poison drains HP (p.66), a Curse rolls
+    // its mishap (p.67).
+    const { applyPoisonDrain, rollCurseMishap } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
+    await rollCurseMishap(actor);
 
     const results = [];
 

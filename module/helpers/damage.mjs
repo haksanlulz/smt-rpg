@@ -15,7 +15,11 @@ function _applyResistance(afterAffinity, resistance, skipResistance) {
 
 // Affinity ratings that end the calculation outright, highest priority first (p.65):
 // "Repel > Drain > Null > Strong > Weak (with Repel having the highest priority)."
-const ABSOLUTE_PRIORITY = ["repel", "drain", "null"];
+//
+// Derived from CONFIG.SMT.affinityPriority rather than restated, so this ordering and
+// the one the Affinity Changer passives resolve with cannot drift apart.
+const ABSOLUTES = new Set(["repel", "drain", "null"]);
+const absolutePriority = () => CONFIG.SMT.affinityPriority.filter(r => ABSOLUTES.has(r));
 
 // Combine every affinity rating that applies to one attack.
 //
@@ -27,11 +31,12 @@ const ABSOLUTE_PRIORITY = ["repel", "drain", "null"];
 export function affinityOutcome(ratings) {
   let multiplier = 1;
   let absolute = null;
+  const order = absolutePriority();
 
   for (const raw of ratings ?? []) {
     const r = typeof raw === "string" ? raw.toLowerCase() : "";
-    if (ABSOLUTE_PRIORITY.includes(r)) {
-      if (absolute === null || ABSOLUTE_PRIORITY.indexOf(r) < ABSOLUTE_PRIORITY.indexOf(absolute)) {
+    if (order.includes(r)) {
+      if (absolute === null || order.indexOf(r) < order.indexOf(absolute)) {
         absolute = r;
       }
     } else if (r === "weak") multiplier *= 2;
@@ -48,12 +53,19 @@ export function affinityOutcome(ratings) {
 // that an Ailment rating "only ha[s] an effect on the ailment effect rate and do[es]
 // not have any influence on the damage part". It is accepted and ignored so a caller
 // passing the full affinity set cannot silently have it applied to damage.
+// `incomingMultiplier` is the scaling the TARGET's own ailment puts on damage it
+// receives — Stone's halving of non-Phys/Force/Almighty and Fly's flat doubling
+// (p.66), both from helpers/ailments.mjs. It rides with the affinity multiplier so
+// the whole product is floored once, per p.53's "do the multiplication first".
 export function calculateDamage({
   rawPower, affinity, resistance, isCritical, dodgeFumble = false, attackerResistance = 0,
-  magicAffinity = "normal", isPhysicalAttack = false, ailmentAffinity = "normal"
+  magicAffinity = "normal", isPhysicalAttack = false, ailmentAffinity = "normal",
+  incomingMultiplier = 1, finalMultiplier = 1
 }) {
   void ailmentAffinity;
   const outcome = affinityOutcome([affinity, isPhysicalAttack ? "normal" : magicAffinity]);
+  const scale = Number.isFinite(incomingMultiplier) && incomingMultiplier >= 0 ? incomingMultiplier : 1;
+  outcome.multiplier *= scale;
 
   const result = {
     rawPower,
@@ -98,7 +110,13 @@ export function calculateDamage({
 
   result.afterAffinity = afterAffinity;
   result.resistanceApplied = skipResistance ? 0 : resistance;
-  result.finalDamage = _applyResistance(afterAffinity, resistance, skipResistance);
+
+  // `finalMultiplier` is Retaliate/Avenge (p.110), which say "Damage dealt is
+  // doubled/tripled" — the damage, not the power. It is therefore the LAST step,
+  // after resistance has already come off, unlike the crit multiplier (p.59), which
+  // the book applies to total power before affinity.
+  const counterScale = Number.isFinite(finalMultiplier) && finalMultiplier >= 0 ? finalMultiplier : 1;
+  result.finalDamage = Math.floor(_applyResistance(afterAffinity, resistance, skipResistance) * counterScale);
 
   return result;
 }

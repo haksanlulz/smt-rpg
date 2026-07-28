@@ -190,10 +190,80 @@ SMT.passiveEffects = {
   manaGain: { label: "SMT.PassiveEffect.ManaGain", legacyNames: ["Mana Gain"], kind: "amplify", resource: "mp", value: 2 },
   manaSurge: { label: "SMT.PassiveEffect.ManaSurge", legacyNames: ["Mana Surge"], kind: "amplify", resource: "mp", value: 3 },
   might: { label: "SMT.PassiveEffect.Might", legacyNames: ["Might"], kind: "might" },
-  // shootTn: flat + to the ranged-weapon (Shoot) TN. powerDie: extra die added to physical power rolls.
+  // shootTn: flat + to the ranged-weapon (Shoot) TN. dodgeTn: flat + to the dodge TN.
+  // powerDie: extra die on the power roll, for the `scope` of attack named.
+  // elementBoost: multiplies base power + potency for one element, BEFORE the power roll.
+  // combatEndRecovery: percentage of max HP/MP restored when combat ends.
+  // endure: a lethal hit leaves 1 HP instead, once per combat.
   sureShot: { label: "SMT.PassiveEffect.SureShot", legacyNames: ["Sure Shot"], kind: "shootTn", value: 10 },
-  powerfulStrikes: { label: "SMT.PassiveEffect.PowerfulStrikes", legacyNames: ["Powerful Strikes"], kind: "powerDie", value: "1d10" }
+  expertDodge: { label: "SMT.PassiveEffect.ExpertDodge", legacyNames: ["Expert Dodge"], kind: "dodgeTn", value: 5 },
+  powerfulStrikes: { label: "SMT.PassiveEffect.PowerfulStrikes", legacyNames: ["Powerful Strikes"], kind: "powerDie", scope: "physical", value: "1d10" },
+  powerfulSpells: { label: "SMT.PassiveEffect.PowerfulSpells", legacyNames: ["Powerful Spells"], kind: "powerDie", scope: "magical", value: "1d10" },
+  fireBoost: { label: "SMT.PassiveEffect.FireBoost", legacyNames: ["Fire Boost"], kind: "elementBoost", element: "fire", value: 1.5 },
+  iceBoost: { label: "SMT.PassiveEffect.IceBoost", legacyNames: ["Ice Boost"], kind: "elementBoost", element: "ice", value: 1.5 },
+  elecBoost: { label: "SMT.PassiveEffect.ElecBoost", legacyNames: ["Elec Boost"], kind: "elementBoost", element: "elec", value: 1.5 },
+  forceBoost: { label: "SMT.PassiveEffect.ForceBoost", legacyNames: ["Force Boost"], kind: "elementBoost", element: "force", value: 1.5 },
+  lifeAid: { label: "SMT.PassiveEffect.LifeAid", legacyNames: ["Life Aid"], kind: "combatEndRecovery", hpPct: 20 },
+  manaAid: { label: "SMT.PassiveEffect.ManaAid", legacyNames: ["Mana Aid"], kind: "combatEndRecovery", mpPct: 20 },
+  victoryCry: { label: "SMT.PassiveEffect.VictoryCry", legacyNames: ["Victory Cry"], kind: "combatEndRecovery", hpPct: 100, mpPct: 100 },
+  endure: { label: "SMT.PassiveEffect.Endure", legacyNames: ["Endure"], kind: "endure" },
+  // counter: on taking a Phys attack, a chance at one free basic strike back.
+  // `value` multiplies the DAMAGE DEALT, not the power (p.110).
+  counter: { label: "SMT.PassiveEffect.Counter", legacyNames: ["Counter"], kind: "counter", value: 1 },
+  retaliate: { label: "SMT.PassiveEffect.Retaliate", legacyNames: ["Retaliate"], kind: "counter", value: 2 },
+  avenge: { label: "SMT.PassiveEffect.Avenge", legacyNames: ["Avenge"], kind: "counter", value: 3 }
 };
+
+// Affinity Changers (p.109): ten elements x four ratings = forty skills, every one
+// of which reads "Gain <rating> against <element> attacks."
+//
+// Generated rather than hand-written. Forty near-identical literals is forty chances
+// to typo an element key, and the element list is already CONFIG-owned; the p.109
+// tables cover every element except Almighty, which has no affinity changer at all.
+//
+// Naming is asymmetric in the book and reproduced as printed: Anti-X and Null X are
+// prefixed, X Drain and X Repel are suffixed.
+// Derived from SMT.elements rather than restated: the damage elements, minus the
+// three non-damage entries and minus Almighty, which the p.109 tables omit.
+SMT.affinityChangeElements = Object.keys(SMT.elements)
+  .filter(e => !["almighty", "recovery", "support", "none"].includes(e));
+const AFFINITY_CHANGE_FORMS = {
+  strong: { key: e => `anti${e[0].toUpperCase()}${e.slice(1)}`, name: n => `Anti-${n}` },
+  null: { key: e => `null${e[0].toUpperCase()}${e.slice(1)}`, name: n => `Null ${n}` },
+  drain: { key: e => `${e}Drain`, name: n => `${n} Drain` },
+  repel: { key: e => `${e}Repel`, name: n => `${n} Repel` }
+};
+
+for (const element of SMT.affinityChangeElements) {
+  const display = element[0].toUpperCase() + element.slice(1);
+  for (const [rating, form] of Object.entries(AFFINITY_CHANGE_FORMS)) {
+    const key = form.key(element);
+    const printed = form.name(display);
+    SMT.passiveEffects[key] = {
+      label: `SMT.PassiveEffect.${key[0].toUpperCase()}${key.slice(1)}`,
+      legacyNames: [printed],
+      kind: "affinityChange",
+      element,
+      rating
+    };
+  }
+}
+
+// p.65's ladder, highest priority first: "Repel > Drain > Null > Strong > Weak".
+// `normal` sits below all of them so any granted rating beats an unmodified one.
+// SSoT for both the affinity-changer resolver and damage.mjs's absolute short-circuit.
+SMT.affinityPriority = ["repel", "drain", "null", "strong", "weak", "normal"];
+
+// Counter / Retaliate / Avenge (p.96, p.110). Fires only on the Phys element, and
+// only ever grants a BASIC STRIKE — p.96: "you may only make a basic strike. Even if
+// you have the Attack All skill, it may not be applied to this counterattack."
+// It is an opportunity, not an obligation, which is why the automation offers a
+// button instead of resolving it: p.96 says you may decline.
+SMT.counter = { chancePct: 50, element: "phys" };
+
+// Endure (p.110): "No effect when Stoned." Stated here so the guard is a book cite,
+// not a condition buried in the damage path.
+SMT.endure = { survivesAt: 1, blockedByAilments: ["stone"] };
 
 // Skill-sheet passive-effect dropdown (key -> label), derived from the registry.
 SMT.passiveEffectChoices = Object.fromEntries(
@@ -204,6 +274,7 @@ SMT.passiveEffectChoices = Object.fromEntries(
 SMT.check = {
   fumble: 100,        // d100 == 100 is always a fumble
   autoFailMin: 96,    // d100 >= 96 auto-fails
+  curseAutoFailMin: 86, // Curse widens that band to 86-99 (p.57, p.67)
   critDivisor: 10,    // crit if roll <= floor(TN / 10)
   mightCritDivisor: 5 // with Might, crit if roll <= floor(TN / 5)
 };
@@ -270,8 +341,21 @@ SMT.buffs = {
   sukukaja: { axes: ["accuracy", "dodge"], sign: 1, group: "kaja", label: "SMT.Buff.Sukukaja", statusId: "smtBuffAgility", icon: "icons/magic/movement/trail-streak-zigzag-yellow.webp" },
   tarunda: { axes: ["physicalPower", "magicalPower"], sign: -1, group: "nda", label: "SMT.Buff.Tarunda", statusId: "smtDebuffPower", icon: "icons/svg/downgrade.svg" },
   rakunda: { axes: ["resist"], sign: -1, group: "nda", label: "SMT.Buff.Rakunda", statusId: "smtDebuffResist", icon: "icons/svg/downgrade.svg" },
-  sukunda: { axes: ["accuracy", "dodge"], sign: -1, group: "nda", label: "SMT.Buff.Sukunda", statusId: "smtDebuffAgility", icon: "icons/magic/movement/trail-streak-impact-blue.webp" }
+  sukunda: { axes: ["accuracy", "dodge"], sign: -1, group: "nda", label: "SMT.Buff.Sukunda", statusId: "smtDebuffAgility", icon: "icons/magic/movement/trail-streak-impact-blue.webp" },
+  // p.96 names Fog Breath as THE example of a differently-named skill sharing the
+  // 4-stack cap ("if you are hit with Fog Breath twice, then Sukunda... can only be
+  // applied to you twice more"). Sharing the axes is what makes stacksOnSharedAxes
+  // enforce that; the mechanism existed here before the example did.
+  fogBreath: { axes: ["accuracy", "dodge"], sign: -1, group: "nda", label: "SMT.Buff.FogBreath", statusId: "smtDebuffAgility", icon: "icons/magic/movement/trail-streak-impact-blue.webp" },
+  warCry: { axes: ["physicalPower", "magicalPower"], sign: -1, group: "nda", label: "SMT.Buff.WarCry", statusId: "smtDebuffPower", icon: "icons/svg/downgrade.svg" },
+  // p.105: physical power, magical power, hit rate, and both resistances. Dodge is
+  // deliberately absent — the book lists hit rate only.
+  debilitate: { axes: ["physicalPower", "magicalPower", "accuracy", "resist"], sign: -1, group: "nda", label: "SMT.Buff.Debilitate", statusId: "smtDebuffPower", icon: "icons/svg/downgrade.svg" }
 };
+
+// Sentinel for a Remedy skill that clears every common ailment (Prayer, p.104).
+// Read by helpers/recovery.mjs; never restate the literal.
+SMT.skillCureAll = "all";
 
 // Dispels: which group each strips (p.96).
 SMT.buffDispels = {
@@ -289,6 +373,9 @@ SMT.buffEffectChoices = {
   tarunda: "SMT.Buff.Tarunda",
   rakunda: "SMT.Buff.Rakunda",
   sukunda: "SMT.Buff.Sukunda",
+  fogBreath: "SMT.Buff.FogBreath",
+  warCry: "SMT.Buff.WarCry",
+  debilitate: "SMT.Buff.Debilitate",
   provoke: "SMT.Buff.Provoke",
   dekaja: "SMT.Buff.Dekaja",
   dekunda: "SMT.Buff.Dekunda"
@@ -297,15 +384,39 @@ SMT.buffEffectChoices = {
 // Combat setup actions (p.64) — ActiveEffects feeding system.concentrate/defend.amount.
 SMT.actionEffects = {
   concentrate: { statusId: "smtConcentrate", label: "SMT.Action.Concentrate", icon: "icons/magic/perception/eye-ringed-glow-angry-red.webp" },
+  aid: { statusId: "smtAid", label: "SMT.Action.Aid", icon: "icons/magic/life/heart-shadow-red.webp" },
   defend: { statusId: "smtDefend", label: "SMT.Action.Defend", icon: "icons/magic/defensive/shield-barrier-flaming-diamond-blue.webp" }
 };
 
 SMT.concentrate = { bonusPct: 20 }; // +20% to the named action's hit check (p.64)
+// Aid (p.64): one ally, +20% to the TN of their next NAMED action. Unlike Concentrate
+// it comes from someone else and "Aiding from multiple sources stacks", so there is no
+// same-action reset — every aider adds. The p.64 block lists "Check: Luck", so the
+// aider rolls; a failed check aids nobody. [inferred — the block states the check but
+// never says what a failure does.]
+SMT.aid = { bonusPct: 20, checkStat: "luck" };
 SMT.defend = { dodgeBonus: 20 };    // +20% dodge until the start of next turn (p.64)
 
 // Ailment combat effects
 // Defender's common ailment makes an incoming Phys attack auto-crit (p.66).
-SMT.critOnPhysAilments = ["restrain", "freeze", "shock", "stone"];
+// Stone is deliberately NOT here: p.66 gives it a shatter roll, not a critical.
+SMT.critOnPhysAilments = ["restrain", "freeze", "shock"];
+
+// p.68 Dodge column reads N for these five. Stone is the one that can still act,
+// which is why it is absent from cannotActAilments below.
+SMT.cannotDodgeAilments = ["stone", "restrain", "freeze", "sleep", "shock"];
+
+// Stone (p.66): halves damage from every element EXCEPT these three, and a Phys
+// hit carries shatterPct% to kill outright.
+SMT.stone = {
+  shatterPct: 30,
+  shatterElements: ["phys"],
+  halveExceptElements: ["phys", "force", "almighty"]
+};
+
+// Fly (p.66): "All damage received is doubled." The clause that also flattens every
+// stat but Agility to 1 is NOT modelled — see GAUNTLET.md §6.
+SMT.fly = { damageMultiplier: 2 };
 
 // Poison: drain 1d10 HP per non-reactive action (p.66).
 SMT.poison = { die: "1d10" };
@@ -320,17 +431,28 @@ SMT.muteBlockedSkillTypes = ["spell", "magical-attack"];
 // Common-slot ailments that forfeit the whole turn (p.66, p.68). Stone still acts; Charm/Panic aren't flat skips.
 SMT.cannotActAilments = ["freeze", "sleep", "shock", "restrain"];
 
-// Auto-recover at the start of the afflicted combatant's next turn, even on a failed save (p.66).
+// Auto-recover at the start of the afflicted combatant's NEXT turn — i.e. only once a
+// save has already been failed (p.66, p.68 "Can only fail to save once"). Read together
+// with ailmentSave.eligible by helpers/ailments.mjs turnStartPlan; recovering on the
+// first turn start instead makes both of these cosmetic.
 SMT.autoRecoverAtTurnStart = ["freeze", "shock"];
+
+// p.58 Fumble Effect Chart, Save row: "The ailment remains, and your HP and MP are halved."
+SMT.fumbleEffects = { saveResourceDivisor: 2 };
+
+// Curse (p.57, p.67): widens the auto-fail band (check.curseAutoFailMin) and carries a
+// per-action chance of a GM-narrated mishap. Cleared only at a Fountain of Life.
+SMT.curse = { mishapPct: 30 };
 
 // Sleep regens HP and MP by (Vitality + level) each of the sleeper's turns (p.66).
 SMT.sleep = { regenStat: "vitality" };
 
-// Start-of-turn ailment save (p.69). eligible = the p.68 Save column: Charm/Restrain/Sleep/Panic.
-// Stone and Fly are not eligible; Freeze/Shock auto-recover (autoRecoverAtTurnStart) so they're
-// omitted. stat selects the save check's stat (Vitality), reusing the derived saveTN.
+// Start-of-turn ailment save (p.69). eligible = the p.68 Save column, which reads Y for
+// exactly six. Freeze and Shock belong here too: they get a save like the rest, and their
+// free recovery is what happens the turn AFTER that save is failed, not instead of it.
+// Stone and Fly read N. stat selects the save check's stat (Vitality), reusing saveTN.
 SMT.ailmentSave = {
-  eligible: ["charm", "restrain", "sleep", "panic"],
+  eligible: ["charm", "restrain", "freeze", "sleep", "panic", "shock"],
   stat: "vitality"
 };
 

@@ -1,0 +1,11 @@
+<div class="smt-roll counter-offer">
+  <h3>{{effectLabel}}</h3>
+  <p>{{localize "SMT.Counter.Offered"}}</p>
+  <p class="counter-parties">{{defenderName}} &rarr; {{attackerName}}</p>
+  {{#unless resolved}}
+    <div class="card-buttons">
+      <button type="button" data-action="counterAttack">{{localize "SMT.Counter.Strike"}}</button>
+    </div>
+    <p class="counter-note">{{localize "SMT.Counter.Optional"}}</p>
+  {{/unless}}
+</div>

@@ -160,7 +160,8 @@ Hooks.once("init", () => {
     "systems/smt-rpg/templates/chat/item-use.hbs",
     "systems/smt-rpg/templates/chat/fusion-result.hbs",
     "systems/smt-rpg/templates/chat/negotiation.hbs",
-    "systems/smt-rpg/templates/chat/reward-result.hbs"
+    "systems/smt-rpg/templates/chat/reward-result.hbs",
+    "systems/smt-rpg/templates/chat/counter-offer.hbs"
   ]);
 
   console.log("smt-rpg | System initialized");
@@ -206,6 +207,7 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
   _bindFateCheckButtons(message, html);
   _bindFateDamageButtons(message, html);
   _bindNegotiationButtons(message, html);
+  _bindCounterButton(message, html);
 });
 
 // Elect one responsible client so a hook that fires everywhere writes once: active GM if
@@ -360,13 +362,15 @@ Hooks.on("deleteCombat", async (combat) => {
     await grantCombatRewards(combat);
   }
 
-  const { clearDefend, dropConcentrateOnAilment } = await import("./module/helpers/effects.mjs");
+  const { clearDefend, dropConcentrateOnAilment, applyCombatEndRecovery } = await import("./module/helpers/effects.mjs");
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor) continue;
     await clearDefend(actor);
     // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);
+    // Life Aid / Mana Aid / Victory Cry (p.110), and the once-per-combat trackers.
+    await applyCombatEndRecovery(actor);
   }
 });
 
@@ -514,6 +518,26 @@ async function _bindFateDamageButtons(message, html) {
   });
 
   container.append(halveBtn);
+}
+
+// Bind the Counter/Retaliate/Avenge offer button (p.96). Only the defender's owner or
+// a GM may take it up, and the offer is declined simply by never clicking.
+async function _bindCounterButton(message, html) {
+  const counterData = message.getFlag("smt-rpg", "counterData");
+  if (!counterData || counterData.resolved) return;
+  const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
+  const defender = getActorFromTokenUuid(counterData.defenderTokenUuid);
+  if (!defender) return;
+  if (!(game.user.isGM || defender.canUserModify(game.user, "update"))) return;
+
+  const btn = html.querySelector('[data-action="counterAttack"]');
+  if (!btn) return;
+  btn.addEventListener("click", async (event) => {
+    event.preventDefault();
+    btn.disabled = true;
+    const { resolveCounterAttack } = await import("./module/helpers/combat.mjs");
+    await resolveCounterAttack(message, message.getFlag("smt-rpg", "counterData"));
+  });
 }
 
 // Bind the negotiation card's demand and outcome buttons (p.73-76). Demands stay live across

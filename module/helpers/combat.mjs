@@ -1,5 +1,6 @@
-import { evaluatePercentile } from "./checks.mjs";
+import { evaluatePercentile, cascadePlan } from "./checks.mjs";
 import { halveDamageResult, affinityOutcome } from "./damage.mjs";
+import { canDodge, shatterPctFor } from "./ailments.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
 const _inFlight = new Set();
@@ -123,7 +124,10 @@ async function _renderPendingCard(attackData) {
 
 // Post ONE pending-attack card covering every target (one power roll applied to all, p.96).
 // Each target is a row with its own Dodge/Apply buttons; single-target is just a 1-row card.
-export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0 }) {
+// `damageMultiplier` is Retaliate/Avenge's ×2/×3 on the damage dealt (p.110), and
+// `noCounter` marks a hit that must not itself provoke a counterattack — the free
+// strikes from a fumbled flee (p.70) and a counterattack itself.
+export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false }) {
   const valid = (targets ?? []).filter(t => t.actor);
   if (!valid.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
@@ -133,7 +137,7 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   const attackData = {
     attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
     rawPower, element, isPhysical, isCritical, skillName,
-    ailmentType, ailmentRate,
+    ailmentType, ailmentRate, damageMultiplier, noCounter,
     checkMessageId: checkMessageId ?? null,
     targets: valid.map(t => ({
       targetTokenUuid: t.document.uuid,
@@ -151,6 +155,141 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   });
   await message.setFlag("smt-rpg", "attackData", attackData);
   return valid.length;
+}
+
+// A basic strike (p.63), shared by the sheet button and the Counter reaction so the
+// two cannot drift apart.
+//
+// A counterattack is NOT an action — p.96 calls it "one free opportunity" — so a
+// reaction pays none of the per-action costs (poison drain, Curse mishap) and spends
+// no Concentrate bonus. It also cannot itself provoke a counterattack, or two demons
+// with Counter would trade blows forever.
+export async function performBasicStrike(actor, {
+  targets, damageMultiplier = 1, isReaction = false, label: labelOverride = null
+} = {}) {
+  const { applyPoisonDrain, consumeSetupBonuses, rollCurseMishap } = await import("./effects.mjs");
+  const skillName = labelOverride ?? game.i18n.localize("SMT.BasicAttack");
+  const hasMight = actor.system.hasMightPassive;
+  let label = `${skillName} (${game.i18n.localize("SMT.Stat.Strength")})`;
+  let tn = actor.system.strengthTN;
+
+  if (!isReaction) {
+    await applyPoisonDrain(actor);
+    await rollCurseMishap(actor);
+    const setup = await consumeSetupBonuses(actor, game.i18n.localize("SMT.BasicAttack"));
+    if (setup.total) {
+      tn += setup.total;
+      label += ` +${setup.total}%`;
+    }
+  }
+  tn = applyStunHitCap(actor, tn);
+
+  const checkResult = await actor.rollPercentile(tn, label, { hasMight });
+
+  if (actor.system.fatePoints.value > 0) {
+    const msg = game.messages.get(checkResult.messageId);
+    if (msg) {
+      await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+        actor, checkResult, tn,
+        hasPowerRoll: true, basePower: actor.system.basePhysicalPower,
+        skillPower: 0, element: "phys", isPhysical: true, skillName,
+        targetTokenUuids: targets?.map(t => t.document?.uuid).filter(Boolean) ?? null,
+        hasMight
+      }));
+    }
+  }
+
+  if (!checkResult.isSuccess) return checkResult;
+
+  const powerResult = await actor.rollPower(
+    actor.system.basePhysicalPower, 0,
+    `${skillName} — ${game.i18n.localize("SMT.Power")}`,
+    checkResult.isCritical,
+    actor.system.physicalPowerBonusDice
+  );
+  await postAttacksToTargets({
+    attacker: actor,
+    targets: targets ?? resolveTargets(actor, "1"),
+    rawPower: powerResult.total,
+    element: "phys",
+    isPhysical: true,
+    isCritical: powerResult.isCritical,
+    skillName,
+    checkMessageId: checkResult.messageId,
+    damageMultiplier,
+    noCounter: isReaction
+  });
+  return checkResult;
+}
+
+// Counter / Retaliate / Avenge (p.96, p.110). Rolls the chance and, on a hit, posts
+// an OFFER rather than resolving it — the book is explicit that counterattacking is
+// not mandatory ("Should your target have Tetrakarn up, for example, you may decline").
+async function _offerCounter({ defender, attacker, element, dodged, suppressed }) {
+  const { counterEffect, counterTriggers } = await import("./passives.mjs");
+  if (!attacker || !defender) return false;
+  if (!counterTriggers({ element, dodged, suppressed })) return false;
+
+  const effect = counterEffect(
+    defender.items.filter(i => i.type === "skill" && i.system?.skillType === "passive"),
+    CONFIG.SMT.passiveEffects
+  );
+  if (!effect) return false;
+
+  const roll = new Roll("1d100");
+  await roll.evaluate();
+  const fires = roll.total <= CONFIG.SMT.counter.chancePct;
+
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Counter Chance", {
+    defender: defender.name, attacker: attacker.name, effect,
+    pct: CONFIG.SMT.counter.chancePct, roll: roll.total, fires
+  });
+  if (!fires) return false;
+
+  const counterData = {
+    defenderTokenUuid: getTokenUuid(defender) ?? defender.id,
+    attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
+    effectId: effect.id,
+    damageMultiplier: effect.multiplier,
+    resolved: false
+  };
+  const label = game.i18n.localize(CONFIG.SMT.passiveEffects[effect.id]?.label ?? effect.id);
+  const content = await foundry.applications.handlebars.renderTemplate(
+    "systems/smt-rpg/templates/chat/counter-offer.hbs",
+    { defenderName: defender.name, attackerName: attacker.name, effectLabel: label, resolved: false }
+  );
+  const message = await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: defender }),
+    content, rolls: [roll]
+  });
+  await message.setFlag("smt-rpg", "counterData", counterData);
+  return true;
+}
+
+// Take up a counterattack offer: one basic strike back at the original attacker.
+export async function resolveCounterAttack(message, counterData) {
+  const live = message.getFlag("smt-rpg", "counterData");
+  if (!live || live.resolved) return;
+
+  const defender = getActorFromTokenUuid(live.defenderTokenUuid);
+  const attacker = getActorFromTokenUuid(live.attackerTokenUuid);
+  if (!defender || !attacker) return;
+
+  const token = fromUuidSync(live.attackerTokenUuid)?.object;
+  const targets = token ? [token] : [];
+  if (!targets.length) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoTargets"));
+    return;
+  }
+
+  await message.setFlag("smt-rpg", "counterData", { ...live, resolved: true });
+  const label = game.i18n.localize(CONFIG.SMT.passiveEffects[live.effectId]?.label ?? live.effectId);
+  await performBasicStrike(defender, {
+    targets,
+    damageMultiplier: _sanitizeAmount(live.damageMultiplier) || 1,
+    isReaction: true,
+    label
+  });
 }
 
 // Mark one target row resolved with a brief outcome string, then re-render the card in place.
@@ -188,7 +327,13 @@ export async function resolveAttack(message, index, skipDodge = false) {
     let dodgeFumble = false;
     let dodgeOutcome = null;
 
-    if (!skipDodge) {
+    // p.68's Dodge column reads N for Stone, Restrain, Freeze, Sleep and Shock —
+    // those targets never get the roll, so the button must not offer them one.
+    const dodgeDenied = !canDodge(target.system.ailment ?? "none");
+
+    if (!skipDodge && dodgeDenied) {
+      await _postDodgeResult(attacker, target, live.skillName, "cannot");
+    } else if (!skipDodge) {
       const dodgeResult = await target.rollPercentile(
         target.system.dodgeTN,
         `${target.name} — ${game.i18n.localize("SMT.DodgeLabel")}`
@@ -233,6 +378,10 @@ export async function resolveAttack(message, index, skipDodge = false) {
       });
     }
 
+    // p.66 Stone: "when struck with a Phys element attack, you have a 30% chance to
+    // shatter and die." Read before the hit resolves so nothing can clear the slot first.
+    const shatterPct = shatterPctFor(target.system.ailment ?? "none", element);
+
     const dmgResult = await target.applyDamage({
       rawPower,
       element,
@@ -240,8 +389,14 @@ export async function resolveAttack(message, index, skipDodge = false) {
       isCritical,
       attacker,
       skillName: live.skillName,
-      dodgeFumble
+      dodgeFumble,
+      damageMultiplier: _sanitizeAmount(live.damageMultiplier) || 1
     });
+
+    if (shatterPct > 0 && await _resolveStoneShatter(target, shatterPct)) {
+      await _markTargetResolved(message, index, game.i18n.localize("SMT.Stone.Shattered"));
+      return;
+    }
 
     if (CONFIG.SMT.debug) console.log("smt-rpg | Ailment Pre-Check", {
       dmgResult: { isNull: dmgResult?.isNull, isDrain: dmgResult?.isDrain, isRepel: dmgResult?.isRepel },
@@ -262,6 +417,13 @@ export async function resolveAttack(message, index, skipDodge = false) {
       });
     }
 
+    // Counter / Retaliate / Avenge (p.96). A dodged attack never reaches here, which
+    // is correct — the passives read "when hit".
+    await _offerCounter({
+      defender: target, attacker, element,
+      dodged: false, suppressed: !!live.noCounter
+    });
+
     await _markTargetResolved(message, index, _damageOutcomeLabel(dmgResult, isCritical));
   } finally {
     _inFlight.delete(lockKey);
@@ -275,6 +437,29 @@ function _damageOutcomeLabel(dmgResult, isCritical) {
   if (dmgResult.isDrain) return `Drain +${dmgResult.drainedAmount ?? 0}`;
   if (dmgResult.isRepel) return `Repel ${dmgResult.reflectedDamage ?? 0}`;
   return `−${dmgResult.finalDamage ?? 0}${isCritical ? " ★" : ""}`;
+}
+
+// p.66 Stone's shatter roll. Separate from damage on purpose: it kills outright and
+// is not reduced by resistance, affinity or a Fate Point.
+async function _resolveStoneShatter(target, pct) {
+  const roll = new Roll("1d100");
+  await roll.evaluate();
+  const shattered = roll.total <= pct;
+
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Stone Shatter", {
+    target: target.name, pct, roll: roll.total, shattered
+  });
+
+  const key = shattered ? "SMT.Stone.Shatters" : "SMT.Stone.Holds";
+  const content = `<div class="smt-roll effect-notice"><p>${game.i18n.format(key, { name: target.name, pct })}</p></div>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: target }),
+    content,
+    rolls: [roll]
+  });
+
+  if (shattered) await target.update({ "system.hp.value": 0, "system.deathAilment": true });
+  return shattered;
 }
 
 // p.66
@@ -297,7 +482,8 @@ async function _postDodgeResult(attacker, target, skillName, outcome) {
     miss: "SMT.DodgeDodged",
     downgrade: "SMT.DodgeDowngraded",
     fumble: "SMT.DodgeFumbled",
-    fail: "SMT.DodgeFailed"
+    fail: "SMT.DodgeFailed",
+    cannot: "SMT.DodgeCannot"
   }[outcome];
 
   const content = await foundry.applications.handlebars.renderTemplate(
@@ -372,7 +558,9 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
       const currentPriority = currentAilment === "none" ? 99 : (priorities[currentAilment] ?? 99);
 
       if (currentAilment === "none" || newPriority < currentPriority) {
-        await targetActor.update({ "system.ailment": ailmentType });
+        // A new ailment is a fresh save clock: the p.68 "can only fail once" allowance
+        // belongs to the ailment that earned it, not to whatever replaces it.
+        await targetActor.update({ "system.ailment": ailmentType, "system.ailmentSaveFailed": false });
       }
     }
   }
@@ -519,12 +707,40 @@ export async function resolveCheckBoost(message, checkData) {
 async function _cascadeCheckChange(message, oldCheckData, newCheckData, oldSuccess, newSuccess, actor) {
   await message.setFlag("smt-rpg", "checkData", { ...newCheckData, resolved: false });
 
-  if (!oldSuccess && newSuccess && newCheckData.hasPowerRoll) {
-    if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Cascade: fail→success, triggering power roll");
-    await _continueSkillFlow(newCheckData, actor, message.id);
-  } else if (oldSuccess && !newSuccess) {
-    if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Cascade: success→fail, cancelling pending attacks");
-    await _cancelPendingAttacks(message.id);
+  const plan = cascadePlan(newCheckData, { oldSuccess, newSuccess });
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Fate Cascade", {
+    skill: newCheckData.skillName, oldSuccess, newSuccess,
+    hasPowerRoll: !!newCheckData.hasPowerRoll,
+    ailmentType: newCheckData.ailmentType, ailmentRate: newCheckData.ailmentRate,
+    plan
+  });
+
+  if (plan === "powerRoll") await _continueSkillFlow(newCheckData, actor, message.id);
+  else if (plan === "ailmentOnly") await _continueAilmentOnly(newCheckData, actor);
+  else if (plan === "cancel") await _cancelPendingAttacks(message.id);
+}
+
+// A skill whose whole effect is its ailment has no power roll and no pending-attack
+// card, so a Fate Point that flips it to a success has to roll the ailment here —
+// the same branch SMTItem#use takes on an un-rerolled success. isCritical carries,
+// which is what doubles the effect rate when the reroll lands a critical (p.67).
+async function _continueAilmentOnly(checkData, actor) {
+  const targets = (checkData.targetTokenUuids ?? [])
+    .map(uuid => ({ uuid, actor: getActorFromTokenUuid(uuid) }))
+    .filter(t => t.actor);
+
+  for (const t of targets) {
+    await resolveAilment({
+      target: t.actor,
+      attacker: actor,
+      ailmentType: checkData.ailmentType,
+      baseRate: checkData.ailmentRate,
+      element: checkData.element,
+      isPhysical: !!checkData.isPhysical,
+      isCritical: !!checkData.isCritical,
+      dodgeFumble: false,
+      targetTokenUuid: t.uuid
+    });
   }
 }
 
@@ -536,7 +752,8 @@ async function _continueSkillFlow(checkData, actor, checkMessageId) {
     basePower, skillPower,
     `${checkData.skillName} — ${game.i18n.localize("SMT.Power")}`,
     checkData.isCritical,
-    checkData.isPhysical ? actor.system.physicalPowerBonusDice : ""
+    checkData.isPhysical ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice,
+    actor.system.boostFor(checkData.element)
   );
 
   const targetUuids = checkData.targetTokenUuids ?? [];

@@ -255,6 +255,14 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
     for (const m of normalized.matchAll(/flags\.smt-rpg\.([A-Za-z0-9_]+)/g)) writes.add(m[1]);
     // flags declared inline on document creation: flags: { "smt-rpg": { key: ... } }
     for (const m of src.matchAll(/["']smt-rpg["']\s*:\s*\{\s*([A-Za-z0-9_]+)\s*:/g)) writes.add(m[1]);
+    // ...and the same thing with COMPUTED keys: flags: { [SCOPE]: { [KEY]: ... } }.
+    // Added 2026-07-28 after this scan reported `aid` as unwritten: it is written that
+    // way and only that way. Concentrate uses the identical form and escaped notice
+    // purely because it also has an update path with a dotted string. A create-only
+    // flag was therefore unrepresentable to this rung.
+    for (const m of src.matchAll(/\[\s*([A-Za-z_$][\w$]*)\s*\]\s*:\s*\{\s*\[\s*([A-Za-z_$][\w$]*)\s*\]\s*:/g)) {
+      if (lookup(m[1]) === "smt-rpg") writes.add(lookup(m[2]));
+    }
   }
   ok(reads.size >= 3, `C8a flag reads found (${reads.size} >= 3)`);
   eq([...reads].filter(k => !writes.has(k)).sort(), [], "C8b every smt-rpg flag read has a writer somewhere");

@@ -39,6 +39,17 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
         initial: "none",
         choices: Object.keys(CONFIG.SMT.buffEffectChoices)
       }),
+      // Recovery skills are four effects, not one (p.100, p.104): heal, cure, revive,
+      // and — for Recarmdra alone — kill the caster afterwards. Resolved through
+      // helpers/recovery.mjs recoveryPlan(). Names mirror ConsumableData deliberately,
+      // since the two paths express the same book effects.
+      healFull: new BooleanField({ initial: false }),
+      // "none" | CONFIG.SMT.skillCureAll | a whitespace- or comma-separated list of
+      // ailment keys (Patra is "restrain sleep panic"). Parsed by curedAilments().
+      curesAilment: new StringField({ initial: "none" }),
+      revive: new BooleanField({ initial: false }),
+      reviveFull: new BooleanField({ initial: false }),
+      selfKO: new BooleanField({ initial: false }),
       // Mechanical passive this skill grants (Amplify / Might, p.109-110); "none" = no effect. Resolution in helpers/passives.mjs.
       passiveEffect: new StringField({
         initial: "none",

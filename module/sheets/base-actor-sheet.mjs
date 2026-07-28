@@ -21,6 +21,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       shoot: SMTBaseActorSheet.#onShoot,
       reload: SMTBaseActorSheet.#onReload,
       concentrate: SMTBaseActorSheet.#onConcentrate,
+      aid: SMTBaseActorSheet.#onAid,
       defend: SMTBaseActorSheet.#onDefend,
       levelUp: SMTBaseActorSheet.#onLevelUp,
       removeEffect: SMTBaseActorSheet.#onRemoveEffect,
@@ -239,55 +240,10 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
   // Basic melee strike: percentile vs Strength TN, then power roll + pending attacks.
   static async #onStrike() {
     const actor = this.document;
-    const { postAttacksToTargets, buildCheckData, resolveTargets, applyStunHitCap } = await import("../helpers/combat.mjs");
-    // A basic strike is a non-reactive action: a poisoned attacker drains HP (p.66).
-    const { applyPoisonDrain, consumeConcentrate } = await import("../helpers/effects.mjs");
-    await applyPoisonDrain(actor);
-    const skillName = game.i18n.localize("SMT.BasicAttack");
-    const hasMight = actor.system.hasMightPassive;
-    let label = `${skillName} (${game.i18n.localize("SMT.Stat.Strength")})`;
-
-    // Spend any Concentrate bonus for this action onto the hit TN (p.64), then the stun cap (p.66).
-    let tn = actor.system.strengthTN;
-    const concentrate = await consumeConcentrate(actor, skillName);
-    if (concentrate) {
-      tn += concentrate;
-      label += ` +${concentrate}%`;
-    }
-    tn = applyStunHitCap(actor, tn);
-
-    const checkResult = await actor.rollPercentile(tn, label, { hasMight });
-
-    if (actor.system.fatePoints.value > 0) {
-      const msg = game.messages.get(checkResult.messageId);
-      if (msg) {
-        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
-          actor, checkResult, tn,
-          hasPowerRoll: true, basePower: actor.system.basePhysicalPower,
-          skillPower: 0, element: "phys", isPhysical: true, skillName,
-          hasMight
-        }));
-      }
-    }
-
-    if (checkResult.isSuccess) {
-      const powerResult = await actor.rollPower(
-        actor.system.basePhysicalPower, 0,
-        `${skillName} — ${game.i18n.localize("SMT.Power")}`,
-        checkResult.isCritical,
-        actor.system.physicalPowerBonusDice
-      );
-      await postAttacksToTargets({
-        attacker: actor,
-        targets: resolveTargets(actor, "1"),
-        rawPower: powerResult.total,
-        element: "phys",
-        isPhysical: true,
-        isCritical: powerResult.isCritical,
-        skillName,
-        checkMessageId: checkResult.messageId
-      });
-    }
+    // The whole strike lives in helpers/combat.mjs so the Counter reaction (p.96)
+    // runs the identical one rather than a second copy that can drift.
+    const { performBasicStrike, resolveTargets } = await import("../helpers/combat.mjs");
+    await performBasicStrike(actor, { targets: resolveTargets(actor, "1") });
   }
 
   // Ranged shot: spends one ammo, percentile vs ranged-weapon TN, then power roll + attacks.
@@ -306,18 +262,20 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     await weapon.update({ "system.ammo.value": weapon.system.ammo.value - 1 });
 
     // Shooting is a non-reactive action: a poisoned attacker drains HP (p.66).
-    const { applyPoisonDrain, consumeConcentrate } = await import("../helpers/effects.mjs");
+    const { applyPoisonDrain, consumeSetupBonuses, rollCurseMishap } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
+    // A Curse rolls its mishap on any action at all (p.67).
+    await rollCurseMishap(actor);
 
     const skillName = game.i18n.localize("SMT.Shoot");
     let label = `${skillName} (${game.i18n.localize("SMT.Stat.Agility")})`;
 
-    // Concentrate (p.64) then the stun cap (p.66) onto the TN.
+    // Concentrate and Aid (p.64) then the stun cap (p.66) onto the TN.
     let tn = rw.tn;
-    const concentrate = await consumeConcentrate(actor, skillName);
-    if (concentrate) {
-      tn += concentrate;
-      label += ` +${concentrate}%`;
+    const setup = await consumeSetupBonuses(actor, skillName);
+    if (setup.total) {
+      tn += setup.total;
+      label += ` +${setup.total}%`;
     }
     tn = applyStunHitCap(actor, tn);
 
@@ -408,6 +366,44 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
         action: result.action, amount: result.amount
       }));
     }
+  }
+
+  // Aid (p.64): support ONE targeted ally, naming an action they have, for +20% to
+  // its TN. The named string must match what that ally's attack site later passes to
+  // consumeSetupBonuses, which is why the options are read off the TARGET, not the aider.
+  static async #onAid() {
+    const actor = this.document;
+    const { applyAid } = await import("../helpers/effects.mjs");
+
+    const target = game.user.targets.first()?.actor;
+    if (!target) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.AidNoTarget"));
+      return;
+    }
+    if (target === actor) {
+      ui.notifications.warn(game.i18n.localize("SMT.Warnings.AidSelf"));
+      return;
+    }
+
+    const options = [game.i18n.localize("SMT.BasicAttack")];
+    if (target.system.hasRangedWeapon) options.push(game.i18n.localize("SMT.Shoot"));
+    for (const skill of target.skills) if (!skill.isPassive) options.push(skill.name);
+
+    const optionTags = options
+      .map(o => `<option value="${foundry.utils.escapeHTML(o)}">${foundry.utils.escapeHTML(o)}</option>`)
+      .join("");
+    const action = await foundry.applications.api.DialogV2.prompt({
+      window: { title: game.i18n.localize("SMT.Action.Aid") },
+      content: `<p>${game.i18n.format("SMT.Action.AidPrompt", { name: target.name })}</p>`
+        + `<select name="action" style="width:100%;">${optionTags}</select>`,
+      ok: {
+        label: game.i18n.localize("SMT.Action.Aid"),
+        callback: (event, button) => button.form.elements.action.value
+      }
+    }).catch(() => null);
+    if (!action) return;
+
+    await applyAid(actor, target, action);
   }
 
   // Defend (p.64): forego an action for a dodge bonus until the actor's next turn.
