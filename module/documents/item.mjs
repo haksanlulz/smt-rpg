@@ -346,12 +346,18 @@ export default class SMTItem extends Item {
       lines.push(game.i18n.format("SMT.Heal.SelfKO", { name: actor.name }));
     }
 
-    if (lines.length) {
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
-      });
-    }
+    // A recovery skill that applied nothing has to SAY so. Patra on an ally carrying
+    // no Restrain/Sleep/Panic, Recarm on someone still standing, Mediarahan on a party
+    // already at full — all three legitimately do nothing, and all three previously
+    // posted the intro card and then went silent, which is indistinguishable from the
+    // skill being broken. That is the exact failure shape this file spent 2026-07-28
+    // fixing, so it does not get to come back as an absence of feedback.
+    if (!lines.length) lines.push(game.i18n.format("SMT.Heal.NoEffect", { name: this.name }));
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
+    });
   }
 
   // Pay this skill's cost again for a later part of a multi-action (p.59: "the cost

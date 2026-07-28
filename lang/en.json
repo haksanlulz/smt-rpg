@@ -465,6 +465,7 @@
   "SMT.Buff.WarCry": "War Cry",
   "SMT.Buff.Debilitate": "Debilitate",
   "SMT.Heal.Cured": "{name} is cured of {ailment}.",
+  "SMT.Heal.NoEffect": "{name} finds nothing to mend.",
   "SMT.Heal.Revived": "{name} is revived with {hp} HP.",
   "SMT.Heal.SelfKO": "{name} gives everything and falls.",
   "SMT.Save.FumbleHalved": "{name} fumbles the save — the ailment remains and HP/MP are halved to {hp}/{mp}.",
