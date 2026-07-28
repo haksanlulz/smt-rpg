@@ -414,9 +414,14 @@ SMT.stone = {
   halveExceptElements: ["phys", "force", "almighty"]
 };
 
-// Fly (p.66): "All damage received is doubled." The clause that also flattens every
-// stat but Agility to 1 is NOT modelled — see GAUNTLET.md §6.
-SMT.fly = { damageMultiplier: 2 };
+// Fly (p.66): "All stats other than Agility are treated as though they are 1. All
+// damage received is doubled."
+//
+// OPERATOR RULING 2026-07-28 on the stat clause, which the book leaves open: the
+// flattening reaches TNs, base power, resistances and saves, but NOT the HP and MP
+// pools. A resource pool is not a check, and collapsing max HP mid-combat is not what
+// the source game does. Read by helpers/ailments.mjs flyStatTotals().
+SMT.fly = { damageMultiplier: 2, exemptStats: ["agility"], flattenedValue: 1 };
 
 // Poison: drain 1d10 HP per non-reactive action (p.66).
 SMT.poison = { die: "1d10" };
