@@ -270,6 +270,18 @@ SMT.passiveEffectChoices = Object.fromEntries(
   Object.entries(SMT.passiveEffects).map(([key, entry]) => [key, entry.label])
 );
 
+// Multi-action (p.59-60): a TN of 100%+ may be spent as repeats of the SAME action
+// against the SAME target, with the TN divided between them.
+//
+// p.60 reads "100 to 199%" for two and "over 200%" for three, which leaves exactly
+// 200 unstated; its own worked example uses 210. Treated as >= 200 here, since the
+// 100-199 band is explicit and a gap of one value is a printing artifact, not a rule.
+// [inferred — the bands as printed do not meet]
+SMT.multiAction = {
+  bands: [{ min: 200, actions: 3 }, { min: 100, actions: 2 }],
+  maxActions: 3
+};
+
 // Percentile check thresholds (actor.rollPercentile / combat._evaluatePercentile)
 SMT.check = {
   fumble: 100,        // d100 == 100 is always a fumble

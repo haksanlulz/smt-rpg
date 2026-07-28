@@ -1,4 +1,4 @@
-import { evaluatePercentile, cascadePlan } from "./checks.mjs";
+import { evaluatePercentile, cascadePlan, multiActionPlan, multiActionTn } from "./checks.mjs";
 import { halveDamageResult, affinityOutcome } from "./damage.mjs";
 import { canDodge, shatterPctFor } from "./ailments.mjs";
 
@@ -157,6 +157,37 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   return valid.length;
 }
 
+// Offer a multi-action (p.59-60). The book says "you MAY choose", so this asks rather
+// than taking the maximum; declining is picking 1. Returns the parts taken.
+//
+// The per-option TN is shown because it is the whole trade — three actions at 70% is
+// a different bet from one at 210%, and the player is the one making it.
+export async function promptMultiAction(tn, plan, label) {
+  if (!plan.eligible || plan.actions < 2) return 1;
+
+  const options = [];
+  for (let n = 1; n <= plan.actions; n++) {
+    const each = multiActionTn(tn, n);
+    const text = n === 1
+      ? game.i18n.format("SMT.MultiAction.Single", { tn: each })
+      : game.i18n.format("SMT.MultiAction.Repeat", { count: n, tn: each });
+    options.push(`<option value="${n}">${foundry.utils.escapeHTML(text)}</option>`);
+  }
+
+  const picked = await foundry.applications.api.DialogV2.prompt({
+    window: { title: game.i18n.localize("SMT.MultiAction.Title") },
+    content: `<p>${game.i18n.format("SMT.MultiAction.Prompt", { action: label, tn })}</p>`
+      + `<select name="parts" style="width:100%;">${options.join("")}</select>`,
+    ok: {
+      label: game.i18n.localize("SMT.MultiAction.Confirm"),
+      callback: (event, button) => button.form.elements.parts.value
+    }
+  }).catch(() => null);
+
+  const parts = Number(picked);
+  return Number.isFinite(parts) && parts >= 1 ? Math.min(parts, plan.actions) : 1;
+}
+
 // A basic strike (p.63), shared by the sheet button and the Counter reaction so the
 // two cannot drift apart.
 //
@@ -184,42 +215,54 @@ export async function performBasicStrike(actor, {
   }
   tn = applyStunHitCap(actor, tn);
 
-  const checkResult = await actor.rollPercentile(tn, label, { hasMight });
+  // Multi-action (p.59-60). A counterattack is exempt: p.96 grants "one free
+  // opportunity" to make "a basic strike", singular.
+  const parts = isReaction ? 1 : await promptMultiAction(tn, multiActionPlan(tn), skillName);
+  const tnEach = multiActionTn(tn, parts);
+  const finalTargets = targets ?? resolveTargets(actor, "1");
 
-  if (actor.system.fatePoints.value > 0) {
-    const msg = game.messages.get(checkResult.messageId);
-    if (msg) {
-      await msg.setFlag("smt-rpg", "checkData", buildCheckData({
-        actor, checkResult, tn,
-        hasPowerRoll: true, basePower: actor.system.basePhysicalPower,
-        skillPower: 0, element: "phys", isPhysical: true, skillName,
-        targetTokenUuids: targets?.map(t => t.document?.uuid).filter(Boolean) ?? null,
-        hasMight
-      }));
+  let last = null;
+  for (let part = 0; part < parts; part++) {
+    // p.59: the target cannot be changed between uses, so finalTargets is resolved once.
+    const partLabel = parts > 1 ? `${label} — ${part + 1}/${parts}` : label;
+    const checkResult = await actor.rollPercentile(tnEach, partLabel, { hasMight });
+    last = checkResult;
+
+    if (actor.system.fatePoints.value > 0) {
+      const msg = game.messages.get(checkResult.messageId);
+      if (msg) {
+        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+          actor, checkResult, tn: tnEach,
+          hasPowerRoll: true, basePower: actor.system.basePhysicalPower,
+          skillPower: 0, element: "phys", isPhysical: true, skillName,
+          targetTokenUuids: finalTargets.map(t => t.document?.uuid).filter(Boolean),
+          hasMight
+        }));
+      }
     }
+
+    if (!checkResult.isSuccess) continue;
+
+    const powerResult = await actor.rollPower(
+      actor.system.basePhysicalPower, 0,
+      `${skillName} — ${game.i18n.localize("SMT.Power")}`,
+      checkResult.isCritical,
+      actor.system.physicalPowerBonusDice
+    );
+    await postAttacksToTargets({
+      attacker: actor,
+      targets: finalTargets,
+      rawPower: powerResult.total,
+      element: "phys",
+      isPhysical: true,
+      isCritical: powerResult.isCritical,
+      skillName,
+      checkMessageId: checkResult.messageId,
+      damageMultiplier,
+      noCounter: isReaction
+    });
   }
-
-  if (!checkResult.isSuccess) return checkResult;
-
-  const powerResult = await actor.rollPower(
-    actor.system.basePhysicalPower, 0,
-    `${skillName} — ${game.i18n.localize("SMT.Power")}`,
-    checkResult.isCritical,
-    actor.system.physicalPowerBonusDice
-  );
-  await postAttacksToTargets({
-    attacker: actor,
-    targets: targets ?? resolveTargets(actor, "1"),
-    rawPower: powerResult.total,
-    element: "phys",
-    isPhysical: true,
-    isCritical: powerResult.isCritical,
-    skillName,
-    checkMessageId: checkResult.messageId,
-    damageMultiplier,
-    noCounter: isReaction
-  });
-  return checkResult;
+  return last;
 }
 
 // Counter / Retaliate / Avenge (p.96, p.110). Rolls the chance and, on a hit, posts

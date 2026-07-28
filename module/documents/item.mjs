@@ -198,39 +198,56 @@ export default class SMTItem extends Item {
 
     // Might: crit threshold TN/5 instead of TN/10 (physical only).
     const hasMight = this.isPhysicalSkill && actor.system.hasMightPassive;
-    const checkResult = await actor.rollPercentile(tn, label, { hasMight });
 
-    // Stash for FP reroll/boost buttons.
-    if (actor.system.fatePoints.value > 0) {
-      const { buildCheckData } = await import("../helpers/combat.mjs");
-      const msg = game.messages.get(checkResult.messageId);
-      if (msg) {
-        await msg.setFlag("smt-rpg", "checkData", buildCheckData({
-          actor,
-          checkResult,
-          tn,
-          hasPowerRoll: this.hasPowerRoll,
-          basePower: this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower,
-          skillPower: this.system.power,
-          element: this.system.element,
-          isPhysical: this.isPhysicalSkill,
-          skillName: this.name,
-          targetsString: this.system.targets,
-          ailmentType: this.system.ailment?.type ?? "none",
-          ailmentRate: this.system.ailment?.rate ?? 0,
-          hasMight
-        }));
+    // Multi-action (p.59-60). The skill and target cannot change between parts, and
+    // the cost is paid for each; the first payment already happened above.
+    const { multiActionPlan, multiActionTn, promptMultiAction, buildCheckData } =
+      await import("../helpers/combat.mjs");
+    const parts = await promptMultiAction(
+      tn, multiActionPlan(tn, { autoSuccess: this.system.autoSuccess, isNegotiation: this.isTalkSkill }), this.name
+    );
+    const tnEach = multiActionTn(tn, parts);
+
+    let checkResult = null;
+    for (let part = 0; part < parts; part++) {
+      // p.60: "If... you are unable to pay the cost... then the remaining parts of the
+      // multi-action are lost." Part one was paid before the branch.
+      if (part > 0 && !(await this._payCostAgain(actor))) break;
+
+      const partLabel = parts > 1 ? `${label} — ${part + 1}/${parts}` : label;
+      checkResult = await actor.rollPercentile(tnEach, partLabel, { hasMight });
+
+      // Stash for FP reroll/boost buttons.
+      if (actor.system.fatePoints.value > 0) {
+        const msg = game.messages.get(checkResult.messageId);
+        if (msg) {
+          await msg.setFlag("smt-rpg", "checkData", buildCheckData({
+            actor,
+            checkResult,
+            tn: tnEach,
+            hasPowerRoll: this.hasPowerRoll,
+            basePower: this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower,
+            skillPower: this.system.power,
+            element: this.system.element,
+            isPhysical: this.isPhysicalSkill,
+            skillName: this.name,
+            targetsString: this.system.targets,
+            ailmentType: this.system.ailment?.type ?? "none",
+            ailmentRate: this.system.ailment?.rate ?? 0,
+            hasMight
+          }));
+        }
+      }
+
+      if (checkResult.isSuccess && this.hasPowerRoll) {
+        const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
+        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
+        await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
       }
     }
 
-    if (checkResult.isSuccess && this.hasPowerRoll) {
-      const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-      const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
-      await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
-    }
-
     // Ailment-only skills (e.g. Stun Gaze).
-    if (checkResult.isSuccess && !this.hasPowerRoll
+    if (checkResult?.isSuccess && !this.hasPowerRoll
         && this.system.ailment?.type && this.system.ailment.type !== "none" && this.system.ailment.rate > 0) {
       const { resolveAilment, resolveTargets } = await import("../helpers/combat.mjs");
       const targets = resolveTargets(actor, this.system.targets);
@@ -335,6 +352,24 @@ export default class SMTItem extends Item {
         content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
       });
     }
+  }
+
+  // Pay this skill's cost again for a later part of a multi-action (p.59: "the cost
+  // must be paid for each time it is used"). Returns false when it cannot be paid,
+  // which ends the multi-action rather than granting a free repeat (p.60).
+  async _payCostAgain(actor) {
+    const cost = this.system.cost;
+    if (cost.resource === "none" || cost.value <= 0) return true;
+
+    const current = actor.system[cost.resource].value;
+    if (current < cost.value) {
+      ui.notifications.warn(game.i18n.format("SMT.Warnings.MultiActionCost", {
+        resource: cost.resource.toUpperCase(), cost: cost.value
+      }));
+      return false;
+    }
+    await actor.update({ [`system.${cost.resource}.value`]: current - cost.value });
+    return true;
   }
 
   // True when a firearm is equipped and has at least one round chambered (p.63).
