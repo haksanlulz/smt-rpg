@@ -38,6 +38,25 @@ export function shatterPctFor(ailment, element) {
   return stone.shatterElements.includes(element) ? stone.shatterPct : 0;
 }
 
+// Fly (p.66): "All stats other than Agility are treated as though they are 1."
+//
+// Returns the stat totals a Flied character uses for checks, base power, resistances
+// and saves. The HP/MP pools are deliberately computed from the UN-flattened totals
+// instead — operator ruling 2026-07-28, since a resource pool is not a check and the
+// source game does not collapse max HP. Unknown stats are passed through untouched
+// rather than flattened, so a future stat cannot be silently zeroed by this.
+export function flyStatTotals(totals, ailment) {
+  const out = { ...(totals ?? {}) };
+  if (ailment !== "fly") return out;
+
+  const { exemptStats, flattenedValue } = CONFIG.SMT.fly;
+  for (const stat of Object.keys(CONFIG.SMT.stats)) {
+    if (!(stat in out) || exemptStats.includes(stat)) continue;
+    out[stat] = flattenedValue;
+  }
+  return out;
+}
+
 // p.58 Fumble Effect Chart, Save row: "The ailment remains, and your HP and MP are
 // halved." The ailment part falls out of the save simply failing; this is the other half.
 export function fumbledSaveResources({ hp, mp }) {

@@ -27,7 +27,7 @@ if (typeof Math.clamp !== "function") {
 }
 globalThis.CONFIG = { SMT };
 
-const { turnStartPlan, canDodge, shatterPctFor, incomingDamageMultiplier, fumbledSaveResources } =
+const { turnStartPlan, canDodge, shatterPctFor, incomingDamageMultiplier, fumbledSaveResources, flyStatTotals } =
   await import("../module/helpers/ailments.mjs");
 const { evaluatePercentile, cascadePlan } = await import("../module/helpers/checks.mjs");
 const { calculateDamage } = await import("../module/helpers/damage.mjs");
@@ -218,6 +218,45 @@ function ok(cond, label) { eq(!!cond, true, label); }
   // Optional-chained on purpose: a missing key must report as a failed assertion,
   // not throw and take the other 200 with it.
   eq(SMT.curse?.mishapPct, 30, "a Cursed character has a 30% chance of a mishap per action (p.67)");
+}
+
+// --- Fly flattens every stat but Agility (p.66) -----------------------------
+// "All stats other than Agility are treated as though they are 1."
+//
+// OPERATOR RULING 2026-07-28 on the half the book leaves open: the flattening reaches
+// TNs, base power, resistances and saves, but NOT the HP/MP pools. base-actor reads
+// the pool stats before calling this, which is the whole reason it takes a totals
+// object rather than mutating the actor.
+{
+  const full = { strength: 20, magic: 18, vitality: 16, agility: 14, luck: 12 };
+
+  eq(flyStatTotals(full, "fly"),
+    { strength: 1, magic: 1, vitality: 1, agility: 14, luck: 1 },
+    "ESCAPE: Fly drops every stat but Agility to 1");
+  eq(flyStatTotals(full, "fly").agility, 14, "Agility is the one exemption the book names");
+
+  for (const a of ["none", "stone", "freeze", "poison", "charm", null, undefined, ""]) {
+    eq(flyStatTotals(full, a), full, `${a} leaves the stats alone`);
+  }
+
+  // It returns a copy — a derived-data pass must not mutate its input.
+  {
+    const source = { ...full };
+    flyStatTotals(source, "fly");
+    eq(source, full, "the input object is not mutated");
+  }
+
+  // An unknown key is passed through rather than flattened, so a stat added later
+  // cannot be silently zeroed by a rule that never mentioned it.
+  eq(flyStatTotals({ ...full, courage: 9 }, "fly").courage, 9,
+    "a stat the config does not know is left untouched");
+  eq(flyStatTotals({}, "fly"), {}, "an empty totals object stays empty");
+  eq(flyStatTotals(undefined, "fly"), {}, "a missing totals object does not throw");
+
+  eq(SMT.fly.flattenedValue, 1, "the flattened value is 1 (p.66)");
+  eq(SMT.fly.exemptStats, ["agility"], "Agility alone is exempt");
+  eq(SMT.fly.damageMultiplier, 2, "and Fly still doubles incoming damage");
+  ok(SMT.fly.exemptStats.every(s => s in SMT.stats), "the exempt list names real stats");
 }
 
 // --- p.58 Fumble Effect Chart, Save row -------------------------------------

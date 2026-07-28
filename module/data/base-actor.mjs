@@ -6,6 +6,7 @@ import {
 } from "../helpers/passives.mjs";
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 import { resolveResourceMax } from "../helpers/resources.mjs";
+import { flyStatTotals } from "../helpers/ailments.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
 
@@ -190,6 +191,18 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       this[`${stat}Total`] = Math.min(this[stat] + this.statBonuses[stat], 40);
     }
 
+    // Fly flattens every stat but Agility to 1 (p.66). Operator ruling 2026-07-28:
+    // that reaches everything below EXCEPT the HP/MP pools, so the pool stats are
+    // read here, before the flattening, and nothing else is.
+    const poolStats = { vitality: this.vitalityTotal, magic: this.magicTotal };
+    if (this.ailment === "fly") {
+      const flied = flyStatTotals(
+        Object.fromEntries(STATS.map(s => [s, this[`${s}Total`]])),
+        this.ailment
+      );
+      for (const stat of STATS) this[`${stat}Total`] = flied[stat];
+    }
+
     // Stat TNs: (stat x 5) + level (p.35)
     const tnPerStat = CONFIG.SMT.tnPerStat;
     this.strengthTN = (this.strengthTotal * tnPerStat) + lvl;
@@ -201,11 +214,11 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     // HP/MP = (vitality|magic + level) x (multiplier + passive bonus) (p.36, p.109)
     const { hpBonus, mpBonus } = this._getPassiveMultiplierBonuses();
     this.hp.max = resolveResourceMax({
-      stat: this.vitalityTotal, level: lvl,
+      stat: poolStats.vitality, level: lvl,
       multiplier: this.hpMultiplier + hpBonus, override: this.hpMaxOverride
     });
     this.mp.max = resolveResourceMax({
-      stat: this.magicTotal, level: lvl,
+      stat: poolStats.magic, level: lvl,
       multiplier: this.mpMultiplier + mpBonus, override: this.mpMaxOverride
     });
 
