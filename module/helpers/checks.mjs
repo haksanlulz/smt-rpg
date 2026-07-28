@@ -6,6 +6,36 @@
 // DamageData: { targetTokenUuid, originalDamage, currentDamage, resolved }
 // DamageResult: { rawPower, affinity, afterAffinity, resistanceApplied, finalDamage, isDrain, isRepel, isNull, drainedAmount, reflectedDamage, dodgeFumble }
 
+// How many times a TN may be spent, and at what TN each (p.59-60).
+//
+// "Divide the original TN by the number of actions taken to find the TN for each
+// action... (Adjust the critical value for each based on the new TN, post-division.)"
+// The critical adjustment falls out for free: evaluatePercentile derives the crit
+// threshold from whatever TN it is handed, so passing the divided TN is enough.
+//
+// Two things are barred outright rather than merely discouraged: an auto-success
+// skill can never multi-action even at 300% (p.60, restated p.96), and negotiation
+// never can (p.74).
+export function multiActionPlan(tn, { autoSuccess = false, isNegotiation = false } = {}) {
+  const value = Number.isFinite(tn) ? Math.floor(tn) : 0;
+  if (autoSuccess || isNegotiation) return { actions: 1, tnEach: value, eligible: false };
+
+  const band = CONFIG.SMT.multiAction.bands.find(b => value >= b.min);
+  if (!band) return { actions: 1, tnEach: value, eligible: false };
+
+  const actions = Math.min(band.actions, CONFIG.SMT.multiAction.maxActions);
+  return { actions, tnEach: Math.floor(value / actions), eligible: true };
+}
+
+// The TN one part of an N-part multi-action rolls against. Split out so a caller that
+// lets the player take FEWER parts than the maximum still divides by what was taken,
+// which is what p.60's "divide the original TN by the number of actions taken" says.
+export function multiActionTn(tn, actions) {
+  const value = Number.isFinite(tn) ? Math.floor(tn) : 0;
+  const parts = Number.isFinite(actions) && actions >= 1 ? Math.floor(actions) : 1;
+  return Math.floor(value / parts);
+}
+
 // What a Fate Point owes the skill once it moves the outcome (p.59).
 //
 // The guard here used to be `newSuccess && hasPowerRoll`, which is right for the

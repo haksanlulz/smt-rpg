@@ -389,6 +389,12 @@
 
   "SMT.Poison.Drain": "{name} loses {damage} HP to poison.",
 
+  "SMT.Warnings.MultiActionCost": "Not enough {resource} to continue the multi-action. Need {cost}; the remaining actions are lost.",
+  "SMT.MultiAction.Title": "Multi-Action",
+  "SMT.MultiAction.Prompt": "{action} has a TN of {tn}%. Repeat it, splitting the TN between each attempt?",
+  "SMT.MultiAction.Single": "Once at {tn}%",
+  "SMT.MultiAction.Repeat": "{count}x at {tn}% each",
+  "SMT.MultiAction.Confirm": "Act",
   "SMT.Action.Aid": "Aid",
   "SMT.Action.AidHint": "Target an ally, name an action they have: +20% to its TN. Stacks from multiple aiders; lost if they are afflicted.",
   "SMT.Action.AidPrompt": "Name the action {name} will take. They gain +20% to its TN.",
