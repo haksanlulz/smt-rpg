@@ -527,16 +527,10 @@
   border-color: var(--smt-fate);
 }
 
-/* Pay Out Rewards (p.46, p.48) gets its OWN full-width row beneath the tracker
-   controls. It used to be appended straight into .combat-controls, which Foundry
-   sizes for icon-only buttons — a labelled button there cramps the bar and pushes
-   off the sidebar. Reported from play 2026-07-28; see GAUNTLET.md §6. */
-.smt-rewards-row {
-  display: flex;
-  padding: 4px 6px;
-  box-sizing: border-box;
-  width: 100%;
-}
+/* The Pay Out Rewards control is deliberately UNSTYLED here. It is built from core's
+   own `combat-controls` / `combat-control combat-control-lg` classes, so it follows
+   the active theme, spacing and disabled styling without this system restating any of
+   it. Restyling it locally is what broke it (GAUNTLET.md §6, 2026-07-28). */
 
 /* Both of these were applied and never styled — found by C13, 2026-07-28. The list
    is the one that showed: a bare <ul> takes the browser's ~40px indent inside a
@@ -550,38 +544,6 @@
   padding-left: 0;
   margin: 4px 0 0;
   overflow-wrap: anywhere;
-}
-
-.smt-grant-rewards {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: var(--smt-bg);
-  border: 1px solid var(--smt-border);
-  border-radius: 3px;
-  color: var(--smt-text-dim);
-  cursor: pointer;
-  font-size: 0.8em;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.smt-grant-rewards:hover:not(:disabled) {
-  color: var(--smt-fate);
-  border-color: var(--smt-fate);
-}
-
-.smt-grant-rewards.paid,
-.smt-grant-rewards:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .effects-list {
@@ -1189,14 +1151,13 @@ button.condition-pip.ailment-save:hover {
 .smt-roll.reward-result .reward-note { color: var(--smt-text-dim); font-size: 0.85em; }
 .smt-roll.reward-result .recipient-names { font-size: 0.9em; }
 
-#combat button.smt-grant-rewards,
-.combat-tracker button.smt-grant-rewards,
-button.smt-grant-rewards {
-  flex: 0 0 auto;
-  margin: 4px 0 0;
-  width: 100%;
-}
-button.smt-grant-rewards.paid { opacity: 0.6; }
+/* REMOVED 2026-07-28. This was the reported defect, not a missing rule:
+     flex: 0 0 auto;  width: 100%;
+   inside core's `.combat-controls`, which is `display: flex` with no wrap and already
+   holds four or five other buttons. The control demanded the full container width and
+   refused to shrink, so everything in that row was pushed off the sidebar.
+   The button now carries core's own `combat-control combat-control-lg` (flex: 1) and
+   this system styles it not at all. */
 
 /* Demon compendium picker — the dialog is resizable, so the list has to grow with
    it. Without the flex chain the select keeps its `size` height and dragging the

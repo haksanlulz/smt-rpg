@@ -396,27 +396,36 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
     ?? root.querySelector(".combat-tracker-controls")
     ?? root;
 
-  // Its OWN row, as a sibling AFTER the controls bar — never inside it. Foundry
-  // sizes .combat-controls for icon-only buttons, so a labelled button appended
-  // there cramps the bar and overflows the sidebar (reported from play 2026-07-28).
-  // When the controls lookup fell through to root there is no sibling to insert
-  // after, so the row is appended to root instead.
-  const row = document.createElement("div");
-  row.classList.add("smt-rewards-row");
+  // Its own row, built out of Foundry's OWN container and control classes rather than
+  // a bespoke one, so it inherits v14's theming, spacing and disabled styling for free
+  // (verified against 14.365.0's templates/sidebar/tabs/combat/footer.hbs).
+  //
+  // A second `combat-controls` nav rather than appending into the existing one: that
+  // nav is `display: flex` with no wrap, and in the GM round state already holds five
+  // buttons including one `combat-control-lg`. A sixth would compete for width in a
+  // narrow sidebar. Its own row keeps `flex: 1` meaningful.
+  const row = document.createElement("nav");
+  row.className = "combat-controls";
+  row.dataset.tooltipDirection = "UP";
   if (controls !== root && controls.parentNode) controls.after(row);
   else root.appendChild(row);
 
+  // Markup mirrors core's own labelled control (the End Combat button): icon marked
+  // inert so it is not an event target, label in a span.
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.action = "smt-grant-rewards";
-  button.classList.add("smt-grant-rewards");
-  button.innerHTML = `<i class="fas fa-coins"></i> ${game.i18n.localize("SMT.Rewards.PayOut")}`;
-  button.title = game.i18n.localize("SMT.Rewards.PayOutHint");
-  // Disable if already paid out.
-  if (combat.getFlag("smt-rpg", "rewardsPaid")) {
-    button.disabled = true;
-    button.classList.add("paid");
-  }
+  button.className = "combat-control combat-control-lg";
+  const icon = document.createElement("i");
+  icon.className = "fa-solid fa-coins";
+  icon.toggleAttribute("inert", true);
+  const label = document.createElement("span");
+  label.textContent = game.i18n.localize("SMT.Rewards.PayOut");
+  button.append(icon, label);
+  button.dataset.tooltip = game.i18n.localize("SMT.Rewards.PayOutHint");
+  button.setAttribute("aria-label", game.i18n.localize("SMT.Rewards.PayOut"));
+  // Disable if already paid out. `disabled` is the state; core styles it.
+  if (combat.getFlag("smt-rpg", "rewardsPaid")) button.disabled = true;
   button.addEventListener("click", async (event) => {
     event.preventDefault();
     button.disabled = true;
