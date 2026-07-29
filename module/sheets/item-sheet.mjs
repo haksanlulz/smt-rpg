@@ -1,5 +1,5 @@
 import { SMT } from "../config.mjs";
-import { ELEMENTS } from "../data/fields.mjs";
+import { ELEMENTS, AFFINITY_CATEGORIES } from "../data/fields.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ItemSheetV2 } = foundry.applications.sheets;
@@ -11,7 +11,9 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
     tag: "form",
     position: { width: 520, height: 480 },
     actions: {
-      editImage: SMTItemSheet.#onEditImage
+      editImage: SMTItemSheet.#onEditImage,
+      addSkillRow: SMTItemSheet.#onAddSkillRow,
+      removeSkillRow: SMTItemSheet.#onRemoveSkillRow
     },
     form: {
       submitOnChange: true
@@ -89,9 +91,39 @@ export default class SMTItemSheet extends HandlebarsApplicationMixin(ItemSheetV2
         label: SMT.elements[key],
         rating: affinities[key]
       }));
+      // The p.65 category axes. Three printed Magatama grant one of these rather than
+      // an elemental rating — Kamudo (a STARTER) is "Ailment Attack Weak", Muspell is
+      // "Strong Ailment Attack", Kamurogi is "Magic Weak" (p.40) — and until the field
+      // had an editor none of the three could be authored at all.
+      const categories = this.document.system.categoryAffinities ?? {};
+      context.categoryAffinityEntries = AFFINITY_CATEGORIES.map(key => ({
+        key,
+        label: SMT.affinityCategories[key],
+        rating: categories[key] ?? "normal"
+      }));
     }
 
     return context;
+  }
+
+  // A Magatama's skillList had no add or remove control, so the default empty array
+  // rendered nothing and stayed empty forever — the whole p.42 progression (Lunge@1,
+  // Hell Thrust@4, Life Bonus@6, Berserk@10, Counter@15, Last Resort@20) was
+  // unreachable. Rewriting the whole array rather than splicing: ArrayField updates
+  // replace wholesale, and a partial write silently drops the untouched entries.
+  static async #onAddSkillRow() {
+    const rows = this.document.system.skillList.map(r => ({ ...r }));
+    rows.push({ skillName: "", learnLevel: 1 });
+    await this.document.update({ "system.skillList": rows });
+  }
+
+  static async #onRemoveSkillRow(event, target) {
+    const index = Number(target.dataset.index);
+    if (!Number.isInteger(index)) return;
+    const rows = this.document.system.skillList
+      .map(r => ({ ...r }))
+      .filter((_, i) => i !== index);
+    await this.document.update({ "system.skillList": rows });
   }
 
   // v13+ FilePicker (replaces deprecated `new FilePicker`).

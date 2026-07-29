@@ -43,15 +43,31 @@
       {{/each}}
     </div>
 
+    <h3>{{localize "SMT.AffinityCategories"}}</h3>
+    <div class="affinities-grid">
+      {{#each categoryAffinityEntries as |entry|}}
+      <div class="affinity-cell {{entry.rating}}">
+        <label>{{localize entry.label}}</label>
+        <select name="system.categoryAffinities.{{entry.key}}">
+          {{#each @root.affinityChoices as |label key|}}
+            <option value="{{key}}" {{#if (eq key entry.rating)}}selected{{/if}}>{{localize label}}</option>
+          {{/each}}
+        </select>
+      </div>
+      {{/each}}
+    </div>
+
     <h3>{{localize "SMT.SkillList"}}</h3>
     <div class="skill-list-editor">
       {{#each system.skillList as |entry idx|}}
       <div class="skill-entry">
-        <input type="text" name="system.skillList.{{idx}}.skillName" value="{{entry.skillName}}" placeholder="Skill Name" />
+        <input type="text" name="system.skillList.{{idx}}.skillName" value="{{entry.skillName}}" placeholder="{{localize 'SMT.SkillName'}}" />
         <label>{{localize "SMT.LVShort"}}</label>
         <input type="number" name="system.skillList.{{idx}}.learnLevel" value="{{entry.learnLevel}}" min="1" />
+        <a class="item-control" data-action="removeSkillRow" data-index="{{idx}}" data-tooltip="{{localize 'SMT.RemoveSkillRow'}}"><i class="fas fa-trash"></i></a>
       </div>
       {{/each}}
+      <a class="add-item-btn" data-action="addSkillRow"><i class="fas fa-plus"></i> {{localize "SMT.AddSkillRow"}}</a>
     </div>
 
     <div class="form-group full-width">
