@@ -2,6 +2,7 @@ import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
 import { incomingDamageMultiplier } from "../helpers/ailments.mjs";
+import { blocksMagatamaSwitch } from "../helpers/magatama.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -127,6 +128,29 @@ export default class SMTActor extends Actor {
       actor: this.name, type: this.type, roll: roll?.total ?? null,
       favoredStat: this.system.favoredStat, applied: growth.stat
     });
+  }
+
+  // p.39: a fiend's active Magatama "cannot be switched at all" while in combat.
+  //
+  // Enforced on the document rather than in the sheet because the sheet's radio binds
+  // straight to system.activeMagatama and DocumentSheetV2 auto-saves it — there is no
+  // handler to hang this on, and a macro or another client would bypass one anyway.
+  // The offending key is dropped rather than the whole update refused, so an unrelated
+  // edit submitted in the same pass still lands.
+  async _preUpdate(changed, options, user) {
+    if (this.type === "fiend") {
+      const inCombat = !!game.combat?.started
+        && game.combat.combatants.some(c => c.actor?.id === this.id);
+      if (blocksMagatamaSwitch({
+        current: this.system.activeMagatama,
+        incoming: changed.system?.activeMagatama,
+        inCombat
+      })) {
+        ui.notifications.warn(game.i18n.localize("SMT.Warnings.MagatamaInCombat"));
+        delete changed.system.activeMagatama;
+      }
+    }
+    return super._preUpdate(changed, options, user);
   }
 
   // Roll 1d100 vs tn, post the card, return the outcome.

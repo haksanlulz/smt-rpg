@@ -389,6 +389,7 @@
 
   "SMT.Poison.Drain": "{name} loses {damage} HP to poison.",
 
+  "SMT.Warnings.MagatamaInCombat": "A Magatama cannot be switched during combat.",
   "SMT.Warnings.MultiActionCost": "Not enough {resource} to continue the multi-action. Need {cost}; the remaining actions are lost.",
   "SMT.MultiAction.Title": "Multi-Action",
   "SMT.MultiAction.Prompt": "{action} has a TN of {tn}%. Repeat it, splitting the TN between each attempt?",

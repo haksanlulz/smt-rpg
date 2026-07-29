@@ -219,7 +219,7 @@ export function buildFusedSystem(demonA, demonB, { level, expMultiplier = 1.3 } 
   for (const stat of ["strength", "magic", "vitality", "agility", "luck"]) {
     const av = Number(a[stat]) || 0;
     const bv = Number(b[stat]) || 0;
-    stats[stat] = Math.clamp(Math.round((av + bv) / 2), 0, 40);
+    stats[stat] = Math.clamp(Math.round((av + bv) / 2), 0, CONFIG.SMT.statCap);
   }
 
   // Higher-level ingredient wins (ties → first). Read _source so a transient

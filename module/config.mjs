@@ -270,6 +270,21 @@ SMT.passiveEffectChoices = Object.fromEntries(
   Object.entries(SMT.passiveEffects).map(([key, entry]) => [key, entry.label])
 );
 
+// p.39: "stats have a maximum of 40; no matter what kind of modifiers you receive
+// from your Magatama, you can never exceed this maximum." Owned here because it was
+// a bare literal in two places — base-actor's total, and the fusion averager — and two
+// restatements of one printed number is one edit away from disagreeing.
+SMT.statCap = 40;
+
+// p.36: "Starting Macca = Level x 50." Held as the book constant; nothing consumes it
+// yet, because the system has no character-creation flow to attach it to. Recorded in
+// GAUNTLET.md §6 as found-not-built rather than left as an undocumented gap.
+SMT.startingMaccaPerLevel = 50;
+
+// Fiends (p.39): up to three Magatama ingested at once, only one active, and the
+// active one "cannot be switched at all" while in combat.
+SMT.magatama = { maxIngested: 3 };
+
 // Multi-action (p.59-60): a TN of 100%+ may be spent as repeats of the SAME action
 // against the SAME target, with the TN divided between them.
 //

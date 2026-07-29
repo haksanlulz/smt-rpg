@@ -7,6 +7,7 @@ import {
 import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 import { resolveResourceMax } from "../helpers/resources.mjs";
 import { flyStatTotals } from "../helpers/ailments.mjs";
+import { statTn, dodgeTn, negotiationTn, resistance, basePower, fatePoints } from "../helpers/derived.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
 
@@ -188,7 +189,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     const lvl = this.level;
 
     for (const stat of STATS) {
-      this[`${stat}Total`] = Math.min(this[stat] + this.statBonuses[stat], 40);
+      this[`${stat}Total`] = Math.min(this[stat] + this.statBonuses[stat], CONFIG.SMT.statCap);
     }
 
     // Fly flattens every stat but Agility to 1 (p.66). Operator ruling 2026-07-28:
@@ -203,13 +204,13 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       for (const stat of STATS) this[`${stat}Total`] = flied[stat];
     }
 
-    // Stat TNs: (stat x 5) + level (p.35)
-    const tnPerStat = CONFIG.SMT.tnPerStat;
-    this.strengthTN = (this.strengthTotal * tnPerStat) + lvl;
-    this.magicTN = (this.magicTotal * tnPerStat) + lvl;
-    this.vitalityTN = (this.vitalityTotal * tnPerStat) + lvl;
-    this.agilityTN = (this.agilityTotal * tnPerStat) + lvl;
-    this.luckTN = (this.luckTotal * tnPerStat) + lvl;
+    // Stat TNs: (stat x 5) + level (p.35). Formulas live in helpers/derived.mjs so the
+    // eight printed sample characters can be asserted against them from node.
+    this.strengthTN = statTn(this.strengthTotal, lvl);
+    this.magicTN = statTn(this.magicTotal, lvl);
+    this.vitalityTN = statTn(this.vitalityTotal, lvl);
+    this.agilityTN = statTn(this.agilityTotal, lvl);
+    this.luckTN = statTn(this.luckTotal, lvl);
 
     // HP/MP = (vitality|magic + level) x (multiplier + passive bonus) (p.36, p.109)
     const { hpBonus, mpBonus } = this._getPassiveMultiplierBonuses();
@@ -223,18 +224,17 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     });
 
     // Resistances: (vitality|magic + level) / 2 (p.36)
-    this.physicalResistance = Math.floor((this.vitalityTotal + lvl) / 2);
-    this.magicalResistance = Math.floor((this.magicTotal + lvl) / 2);
+    this.physicalResistance = resistance(this.vitalityTotal, lvl);
+    this.magicalResistance = resistance(this.magicTotal, lvl);
 
     // Base power: stat + level (p.36)
-    this.basePhysicalPower = this.strengthTotal + lvl;
-    this.baseMagicalPower = this.magicTotal + lvl;
+    this.basePhysicalPower = basePower(this.strengthTotal, lvl);
+    this.baseMagicalPower = basePower(this.magicTotal, lvl);
 
     // Dodge TN = agility + 10; Negotiation TN = (luck x 2) + 20 (p.35). Both are NOT level-based.
     // Expert Dodge (+5%, p.110) rides here with the flat base bonus.
-    this.dodgeTN = this.agilityTotal + CONFIG.SMT.dodgeBonus
-      + dodgeTnBonus(this._passiveSkills, CONFIG.SMT.passiveEffects);
-    this.negotiationTN = (this.luckTotal * CONFIG.SMT.negotiation.multiplier) + CONFIG.SMT.negotiation.bonus;
+    this.dodgeTN = dodgeTn(this.agilityTotal, dodgeTnBonus(this._passiveSkills, CONFIG.SMT.passiveEffects));
+    this.negotiationTN = negotiationTn(this.luckTotal);
     this.saveTN = this.vitalityTN;
 
     // Affinity Changer skills (p.109). Applied after any magatama override, and by
@@ -249,7 +249,7 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     this._applyBuffModifiers();
 
     // Fate = (luck / 5) + 5 (p.36)
-    this.fatePoints.max = Math.floor(this.luckTotal / CONFIG.SMT.fate.maxLuckDivisor) + CONFIG.SMT.fate.maxBase;
+    this.fatePoints.max = fatePoints(this.luckTotal);
     // EXP for next level = (level+1)^3 x expMultiplier (p.48), via the shared curve.
     this.expNext = expThresholdForLevel(lvl + 1, this.expMultiplier);
   }

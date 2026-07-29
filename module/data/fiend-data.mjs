@@ -34,5 +34,15 @@ export default class FiendData extends SMTBaseActorData {
         this.affinities[element] = rating;
       }
     }
+
+    // Category axes (p.65) — Kamudo's "Ailment Attack Weak", Muspell's "Strong
+    // Ailment Attack", Kamurogi's "Magic Weak". These are not elements and were
+    // silently unrepresentable before 2026-07-29.
+    const magCategories = active.system.categoryAffinities ?? {};
+    for (const [category, rating] of Object.entries(magCategories)) {
+      if (rating !== "normal" && category in this.categoryAffinities) {
+        this.categoryAffinities[category] = rating;
+      }
+    }
   }
 }
