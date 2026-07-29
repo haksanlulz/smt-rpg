@@ -17,6 +17,12 @@ SMT.elements = {
   none: "SMT.Element.None"
 };
 
+// The p.65 attack CATEGORIES — not elements. Labels for the magatama and actor sheets.
+SMT.affinityCategories = {
+  magic: "SMT.AffinityCategory.Magic",
+  ailment: "SMT.AffinityCategory.Ailment"
+};
+
 SMT.affinityRatings = {
   normal: "SMT.Affinity.Normal",
   strong: "SMT.Affinity.Strong",
