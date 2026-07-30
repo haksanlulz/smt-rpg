@@ -386,8 +386,9 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   const combat = data?.combat ?? app?.viewed ?? game.combat;
   if (!combat) return;
 
-  // Re-render safety: never add a second button.
-  if (root.querySelector("[data-action='smt-grant-rewards']")) return;
+  // Re-render safety: never add a second button. Keyed on our OWN attribute, not
+  // data-action — see the note on the button below.
+  if (root.querySelector("[data-smt-action='grant-rewards']")) return;
 
   // Controls bar across v13/v14 markup; fall back to root if the container class shifts.
   const controls = root.querySelector(".combat-controls")
@@ -414,7 +415,11 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   // inert so it is not an event target, label in a span.
   const button = document.createElement("button");
   button.type = "button";
-  button.dataset.action = "smt-grant-rewards";
+  // NOT data-action. The tracker is an AppV2 and its click delegation grabs every
+  // [data-action] inside its root, looks the name up in ITS OWN actions map, and throws
+  // "Cannot read properties of null" on a miss — which it did on every click even though
+  // our own listener had already run. A private attribute keeps core's dispatcher out.
+  button.dataset.smtAction = "grant-rewards";
   button.className = "combat-control combat-control-lg";
   const icon = document.createElement("i");
   icon.className = "fa-solid fa-coins";
@@ -424,11 +429,11 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   button.append(icon, label);
   button.dataset.tooltip = game.i18n.localize("SMT.Rewards.PayOutHint");
   button.setAttribute("aria-label", game.i18n.localize("SMT.Rewards.PayOut"));
-  // Disable if already paid out. `disabled` is the state; core styles it.
-  if (combat.getFlag("smt-rpg", "rewardsPaid")) button.disabled = true;
+  // Never disabled, and never disabled-on-click. Operator ruling 2026-07-29: the GM
+  // decides when to press this, so it stays live for the whole encounter and pays out
+  // whatever is defeated and not yet rewarded.
   button.addEventListener("click", async (event) => {
     event.preventDefault();
-    button.disabled = true;
     const { grantCombatRewards } = await import("./module/helpers/rewards.mjs");
     await grantCombatRewards(combat, { notifyEmpty: true });
   });

@@ -462,6 +462,7 @@
   "SMT.PassiveEffect.Endure": "Endure",
   "SMT.Endure.Survived": "{name} endures the blow and holds on at 1 HP.",
   "SMT.Passive.CombatEndRecovery": "{name} recovers {hp} HP and {mp} MP as the fight ends.",
+  "SMT.Rewards.NothingNew": "Nothing new to pay out — everything defeated has already been rewarded.",
   "SMT.AffinityCategories": "Category Affinities",
   "SMT.AffinityCategory.Magic": "Magic",
   "SMT.AffinityCategory.Ailment": "Ailment",

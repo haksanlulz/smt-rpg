@@ -195,7 +195,22 @@ async function _grantLootToActor(actor, names) {
   await actor.createEmbeddedDocuments("Item", itemData);
 }
 
-// Pay out an encounter's rewards once (p.46, p.48). GM-only, idempotent.
+// Pay out whatever is currently marked defeated (p.46, p.48). GM-only.
+//
+// OPERATOR RULING 2026-07-29, after this refused to pay a second time: "just make pay
+// out rewards, reward whatever is marked defeated, period. its not your job to decide
+// for the gm." The button now NEVER refuses and never locks the encounter.
+//
+// The old whole-encounter `rewardsPaid` boolean did two wrong things. It blocked every
+// later click, and — worse — it stamped itself even when NOTHING was owed, so a single
+// mis-click with no corpses on the field permanently killed the payout and the only way
+// back was deleting the encounter and rebuilding it.
+//
+// Replaced with a ledger of foe ids already paid. Clicking pays whatever is defeated
+// and not yet in the ledger, so the GM can click after every kill, or once at the end,
+// or by mistake, and always get exactly what is owed. Nothing is refused and nothing is
+// double-granted. If the GM genuinely wants to re-pay a foe, clearing the flag is one
+// line in a macro — but that is their call to make, not this function's to prevent.
 export async function grantCombatRewards(combat, { notifyEmpty = false } = {}) {
   if (!canGrantRewards()) {
     ui.notifications.warn(game.i18n.localize("SMT.Warnings.RewardsGM"));
@@ -203,20 +218,17 @@ export async function grantCombatRewards(combat, { notifyEmpty = false } = {}) {
   }
   if (!combat) return false;
 
-  if (combat.getFlag(FLAG_SCOPE, PAID_KEY)) {
-    if (notifyEmpty) ui.notifications.info(game.i18n.localize("SMT.Rewards.AlreadyPaid"));
-    return false;
-  }
-
   if (_inFlight.has(combat.id)) return false;
   _inFlight.add(combat.id);
   try {
-    // Re-check now that we hold the claim, in case a sibling call just committed.
-    if (combat.getFlag(FLAG_SCOPE, PAID_KEY)) return false;
-
-    const foes = harvestFoes(combat);
+    const alreadyPaid = new Set(combat.getFlag(FLAG_SCOPE, PAID_KEY) ?? []);
+    const foes = harvestFoes(combat).filter(f => !alreadyPaid.has(f.id));
     const recipients = rewardRecipients(combat, foes);
 
+    if (!foes.length) {
+      if (notifyEmpty) ui.notifications.info(game.i18n.localize("SMT.Rewards.NothingNew"));
+      return false;
+    }
     if (!recipients.length) {
       if (notifyEmpty) ui.notifications.warn(game.i18n.localize("SMT.Warnings.RewardsNoRecipients"));
       return false;
@@ -226,8 +238,7 @@ export async function grantCombatRewards(combat, { notifyEmpty = false } = {}) {
     const tally = tallyFoeRewards(foes, partyLevel);
 
     if (tally.exp <= 0 && tally.macca <= 0 && !tally.items.length) {
-      // Nothing owed: stamp so repeated triggers don't re-scan, but post no card.
-      await combat.setFlag(FLAG_SCOPE, PAID_KEY, true);
+      // Nothing owed. Record NOTHING — stamping here is what made a mis-click fatal.
       if (notifyEmpty) ui.notifications.info(game.i18n.localize("SMT.Rewards.Nothing"));
       return false;
     }
@@ -246,8 +257,8 @@ export async function grantCombatRewards(combat, { notifyEmpty = false } = {}) {
       for (const holder of lootHolders) await _grantLootToActor(holder, tally.items);
     }
 
-    // Stamp before posting so a card-render failure can't reopen the payout.
-    await combat.setFlag(FLAG_SCOPE, PAID_KEY, true);
+    // Record these foes before posting so a card-render failure can't re-pay them.
+    await combat.setFlag(FLAG_SCOPE, PAID_KEY, [...alreadyPaid, ...foes.map(f => f.id)]);
 
     await postRewardCard({
       foes: tally.breakdown,

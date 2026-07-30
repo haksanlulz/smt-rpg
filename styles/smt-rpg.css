@@ -995,6 +995,128 @@ button.condition-pip.ailment-save:hover {
 .smt-roll.ailment-save .save-result.success { background: var(--smt-success); color: #fff; }
 .smt-roll.ailment-save .save-result.failure { background: var(--smt-failure); color: #fff; }
 
+/* ---- Negotiation Card (p.73-76) ----
+   Added 2026-07-29. The card had shipped with NO rules at all: every class on it was
+   unstyled, so its nine buttons rendered as bare boxes with text the same colour as the
+   card and the two group labels were invisible. Reported from play with a screenshot.
+   C13 could not see it — those classes are not `smt-` prefixed, which is the cost of
+   scoping that scan to the project namespace. */
+.smt-roll.negotiation .negotiation-skill {
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin-bottom: 4px;
+}
+
+.smt-roll.negotiation .negotiation-hint {
+  font-size: 0.8em;
+  color: var(--smt-text-dim);
+  font-style: italic;
+  margin: 6px 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.smt-roll.negotiation .negotiation-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smt-roll.negotiation .negotiation-demands,
+.smt-roll.negotiation .negotiation-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.smt-roll.negotiation .negotiation-group-label {
+  flex: 1 0 100%;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--smt-fate);
+  font-weight: bold;
+}
+
+.smt-roll.negotiation .negotiation-buttons button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  background: var(--smt-bg-light);
+  color: var(--smt-text);
+  cursor: pointer;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.75em;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.smt-roll.negotiation .negotiation-buttons button:hover:not(:disabled) {
+  border-color: var(--smt-fate);
+  color: var(--smt-fate);
+}
+
+.smt-roll.negotiation .negotiation-buttons button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Ailment-save outcome (p.69). Both modifiers shipped unstyled, so a save that
+   recovered looked identical to one that held. Surfaced by C13 on 2026-07-29. */
+.smt-roll.ailment-save.recovered {
+  border-left: 3px solid var(--smt-success, #4caf50);
+}
+
+.smt-roll.ailment-save.held {
+  border-left: 3px solid var(--smt-failure, #b0413e);
+}
+
+/* ---- Counter Offer Card (p.96) ----
+   Added 2026-07-29. Shipped the previous day with no rules at all — the same defect as
+   the negotiation card, in a card written the same week. Caught by the widened C13. */
+.smt-roll.counter-offer .counter-parties {
+  font-size: 0.85em;
+  color: var(--smt-text-dim);
+  margin: 2px 0 6px;
+}
+
+.smt-roll.counter-offer .counter-note {
+  font-size: 0.75em;
+  color: var(--smt-text-dim);
+  font-style: italic;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.smt-roll.counter-offer .card-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.smt-roll.counter-offer .card-buttons button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--smt-border);
+  border-radius: 3px;
+  background: var(--smt-bg-light);
+  color: var(--smt-text);
+  cursor: pointer;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+.smt-roll.counter-offer .card-buttons button:hover:not(:disabled) {
+  border-color: var(--smt-fate);
+  color: var(--smt-fate);
+}
+
 /* ---- Fate Point Buttons ---- */
 .smt-roll .fate-buttons {
   display: flex;
