@@ -268,6 +268,43 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   eq([...reads].filter(k => !writes.has(k)).sort(), [], "C8b every smt-rpg flag read has a writer somewhere");
 }
 
+// --- C14: no class declares the same member twice --------------------------
+// 2026-07-29: a second `_preUpdate` was added to SMTActor and silently replaced the
+// existing one, deleting the HP/MP source clamp it had been written to provide. A
+// duplicate class member is legal JavaScript — the later definition wins — so C1's
+// parse check passes, C2 sees one export, and no suite imports the Foundry-coupled
+// documents at all. Nothing looked.
+//
+// Deliberately scoped to method and accessor declarations at class-body indentation,
+// which is what this codebase writes. Overloads do not exist in JS, so any repeat of a
+// name within one class body is a bug, never an idiom.
+{
+  const dupes = [];
+  for (const [file, src] of SRC) {
+    // Split on class declarations so members are attributed to the right class.
+    const classes = [...src.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)[^{]*\{/g)];
+    for (let i = 0; i < classes.length; i++) {
+      const start = classes[i].index + classes[i][0].length;
+      const end = i + 1 < classes.length ? classes[i + 1].index : src.length;
+      const body = src.slice(start, end);
+      const seen = new Map();
+      // `  async name(`, `  name(`, `  static name(`, `  get name(`, `  set name(`
+      const member = /^\s{2}(?:static\s+)?(?:async\s+)?(?:(get|set)\s+)?(#?[A-Za-z_$][\w$]*)\s*\(/gm;
+      for (const m of body.matchAll(member)) {
+        // A getter and a setter of the same name are a legitimate pair.
+        const key = `${m[1] ?? "method"}:${m[2]}`;
+        if (m[2] === "constructor") continue;
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+      }
+      for (const [key, count] of seen) {
+        if (count > 1) dupes.push(`${rel(file)} class ${classes[i][1]} declares ${key} ${count}x`);
+      }
+    }
+  }
+  ok(SRC.size >= 20, `C14a source files scanned for duplicate members (${SRC.size} >= 20)`);
+  eq(dupes.sort(), [], "C14b no class declares the same member twice");
+}
+
 // --- C13: every smt- class this system applies has a style rule ------------
 // Reported from play 2026-07-28: the Pay Out Rewards button was "cramped and goes off
 // screen". `.smt-grant-rewards` had ZERO rules anywhere in the stylesheet — it was
