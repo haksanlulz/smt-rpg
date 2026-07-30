@@ -268,6 +268,39 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   eq([...reads].filter(k => !writes.has(k)).sort(), [], "C8b every smt-rpg flag read has a writer somewhere");
 }
 
+// --- C15: dynamic-import destructures resolve ------------------------------
+// C2 checks STATIC imports. This codebase reaches for `const { a, b } = await
+// import("./x.mjs")` everywhere to dodge circular deps, and those were invisible to it.
+//
+// 2026-07-29: item.mjs destructured multiActionPlan and multiActionTn from combat.mjs,
+// which imports them from checks.mjs for its own use and does not re-export. Both came
+// back undefined and every non-auto-success skill use threw "multiActionPlan is not a
+// function". A total kill on skill use, shipped, and found only by clicking a skill.
+{
+  const missing = [];
+  const pattern = /const\s*\{([^}]+)\}\s*=\s*await import\(\s*["']([^"']+)["']\s*\)/g;
+  let destructures = 0;
+
+  for (const [file, src] of SRC) {
+    for (const m of src.matchAll(pattern)) {
+      const target = resolve(dirname(file), m[2]);
+      if (!existsSync(target)) { missing.push(`${rel(file)} imports missing ${m[2]}`); continue; }
+      const targetSrc = stripJsComments(readFileSync(target, "utf8"));
+      for (const raw of m[1].split(",")) {
+        // `a`, `a: b`, and trailing whitespace all appear in this codebase.
+        const name = raw.split(":")[0].trim();
+        if (!name) continue;
+        destructures++;
+        const declared = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(targetSrc);
+        const listed = new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`).test(targetSrc);
+        if (!declared && !listed) missing.push(`${rel(file)}: '${name}' is not exported by ${m[2]}`);
+      }
+    }
+  }
+  ok(destructures >= 15, `C15a dynamic-import bindings checked (${destructures} >= 15)`);
+  eq(missing.sort(), [], "C15b every dynamic-import destructure resolves to a real export");
+}
+
 // --- C14: no class declares the same member twice --------------------------
 // 2026-07-29: a second `_preUpdate` was added to SMTActor and silently replaced the
 // existing one, deleting the HP/MP source clamp it had been written to provide. A
@@ -349,6 +382,72 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   ok(styled.size >= 5, `C13b smt- style rules found (${styled.size} >= 5)`);
   eq([...used].filter(c => !styled.has(c) && !hooks.has(c)).sort(), [],
     "C13c every smt- class the system applies has a style rule or is a JS hook");
+
+  // WIDENED 2026-07-29. Scoping the above to the `smt-` namespace covered a handful of
+  // classes and missed the ones that mattered: the whole negotiation card shipped with
+  // no rules at all and rendered nine buttons as bare boxes with invisible text, because
+  // `negotiation-buttons` and friends carry no prefix. Most of this system's own classes
+  // do not.
+  //
+  // So: check every class this system's OWN templates apply, minus a framework allowlist.
+  // The allowlist is the honest cost — Foundry and Font Awesome classes are styled
+  // elsewhere and demanding local rules for them is the false-positive shape that gets a
+  // rung deleted (§3). Anything added to it should be a real framework class, not a
+  // local one being excused.
+  const FRAMEWORK = new Set([
+    // Font Awesome
+    "fas", "far", "fab", "fa-solid", "fa-regular", "fa-brands", "fa-fw",
+    // Foundry core / AppV2
+    "window-content", "sheet", "sheet-header", "sheet-body", "sheet-tabs", "tab", "active",
+    "form-group", "form-fields", "flexrow", "flexcol", "editor", "editor-content",
+    "profile-img", "resource", "rollable", "item", "item-name", "item-controls",
+    "item-control", "items-list", "items-header", "notes", "hint", "disabled",
+    "combat-control", "combat-control-lg", "combat-controls", "inline-control",
+    "full-width", "clickable", "highlight"
+  ]);
+  // Known unstyled classes as of the widening. These are DEBT, recorded so the rung can
+  // assert the list never grows — the ratchet pattern. Most are `data-tab` values that
+  // double as class names and legitimately need no rule; the rest are chat-card and sheet
+  // sections that genuinely have none. Removing a name from this list is the fix.
+  const KNOWN_UNSTYLED = new Set([
+    // tab / state names that are not style hooks
+    "combat", "skills", "magatama", "gear", "inventory", "effects", "bio", "skill",
+    "consumable", "npc", "level-up", "cross", "rankshift",
+    // genuinely unstyled sheet + chat-card pieces
+    "affinities-section", "attack-target-row", "attack-targets", "auto-success",
+    "cost", "effect-name", "empty-note", "fusion-clan-source",
+    "inherit-count", "item-use", "recruited-by", "reward-foes", "reward-loot",
+    "reward-recipients", "roll-boost", "roll-value", "skill-list", "skills-section",
+    "target-name", "target-outcome", "targets", "tn"
+  ]);
+
+  const templateClasses = new Set();
+  for (const [, src] of HBS_SRC) {
+    // A class attribute routinely embeds Handlebars: `class="tab {{#if (eq activeTab
+    // 'x')}}active{{/if}}"`. Strip the whole {{...}} expression FIRST — filtering the
+    // split tokens instead leaves bare identifiers from inside the expression behind
+    // (`activeTab` was reported as an unstyled class twice before this was fixed).
+    for (const m of src.matchAll(/class=["']([^"']*)["']/g)) {
+      const literal = m[1].replace(/\{\{[^}]*\}?\}?/g, " ");
+      for (const token of literal.split(/\s+/)) {
+        if (!token) continue;
+        if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(token)) continue;
+        if (token.startsWith("fa-")) continue;
+        if (FRAMEWORK.has(token)) continue;
+        templateClasses.add(token);
+      }
+    }
+  }
+  const allStyled = new Set([...css.matchAll(/\.([A-Za-z][A-Za-z0-9_-]*)/g)].map(m => m[1]));
+  const unstyled = [...templateClasses].filter(c => !allStyled.has(c)).sort();
+
+  ok(templateClasses.size >= 60, `C13d template classes checked (${templateClasses.size} >= 60)`);
+  eq(unstyled.filter(c => !KNOWN_UNSTYLED.has(c)), [],
+    "C13e no NEW class is applied without a style rule");
+  // The ratchet's other half: a name that has since been styled must leave the list, or
+  // the list slowly becomes a licence rather than a debt register.
+  eq([...KNOWN_UNSTYLED].filter(c => allStyled.has(c)).sort(), [],
+    "C13f the known-unstyled list holds nothing that is now styled");
 }
 
 // --- C9: GAUNTLET.md §5 specs are linked to a test or dated as manual ------

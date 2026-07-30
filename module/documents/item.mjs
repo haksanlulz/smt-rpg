@@ -201,8 +201,12 @@ export default class SMTItem extends Item {
 
     // Multi-action (p.59-60). The skill and target cannot change between parts, and
     // the cost is paid for each; the first payment already happened above.
-    const { multiActionPlan, multiActionTn, promptMultiAction, buildCheckData } =
-      await import("../helpers/combat.mjs");
+    //
+    // multiActionPlan and multiActionTn come from checks.mjs, NOT combat.mjs —
+    // combat.mjs imports them for its own use and does not re-export. Destructuring
+    // all four from combat.mjs left both undefined and threw on every skill use.
+    const { multiActionPlan, multiActionTn } = await import("../helpers/checks.mjs");
+    const { promptMultiAction, buildCheckData } = await import("../helpers/combat.mjs");
     const parts = await promptMultiAction(
       tn, multiActionPlan(tn, { autoSuccess: this.system.autoSuccess, isNegotiation: this.isTalkSkill }), this.name
     );
