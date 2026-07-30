@@ -43,12 +43,27 @@ export default class SMTActor extends Actor {
     return this.items.filter(i => i.type === "consumable");
   }
 
-  // Clamp persisted HP/MP into [0, derived max] on every write. The derived _clampCurrentValues
-  // only fixes the displayed value, not the stored _source — so manual bar edits (e.g. typing 9999)
-  // and heal-to-full sentinels would otherwise persist above max. This pins the source value.
+  // THE ONLY _preUpdate on this class. A second definition was added on 2026-07-29 for
+  // the Magatama rule below and silently replaced this one — a duplicate class member is
+  // legal JS, the later wins, and no rung looked (GAUNTLET.md §6, C14 now does).
+  //
+  // Two guards live here:
+  //
+  // 1. Clamp persisted HP/MP into [0, derived max] on every write. The derived
+  //    _clampCurrentValues only fixes the displayed value, not the stored _source — so
+  //    manual bar edits (typing 9999) and heal-to-full sentinels would otherwise persist
+  //    above max. This pins the source value.
+  //
+  // 2. p.39: a fiend's active Magatama "cannot be switched at all" while in combat.
+  //    Enforced on the document rather than in the sheet because the sheet's radio binds
+  //    straight to system.activeMagatama and DocumentSheetV2 auto-saves it — there is no
+  //    handler to hang it on, and a macro or another client would bypass one anyway. The
+  //    offending key is dropped rather than the whole update refused, so an unrelated
+  //    edit submitted in the same pass still lands.
   async _preUpdate(changed, options, user) {
     const allowed = await super._preUpdate(changed, options, user);
     if (allowed === false) return false;
+
     for (const res of ["hp", "mp"]) {
       const v = foundry.utils.getProperty(changed, `system.${res}.value`);
       const max = this.system?.[res]?.max;
@@ -56,6 +71,20 @@ export default class SMTActor extends Actor {
         foundry.utils.setProperty(changed, `system.${res}.value`, Math.clamp(Math.floor(Number(v) || 0), 0, max));
       }
     }
+
+    if (this.type === "fiend") {
+      const inCombat = !!game.combat?.started
+        && game.combat.combatants.some(c => c.actor?.id === this.id);
+      if (blocksMagatamaSwitch({
+        current: this.system.activeMagatama,
+        incoming: changed.system?.activeMagatama,
+        inCombat
+      })) {
+        ui.notifications.warn(game.i18n.localize("SMT.Warnings.MagatamaInCombat"));
+        delete changed.system.activeMagatama;
+      }
+    }
+
     return allowed;
   }
 
@@ -130,28 +159,6 @@ export default class SMTActor extends Actor {
     });
   }
 
-  // p.39: a fiend's active Magatama "cannot be switched at all" while in combat.
-  //
-  // Enforced on the document rather than in the sheet because the sheet's radio binds
-  // straight to system.activeMagatama and DocumentSheetV2 auto-saves it — there is no
-  // handler to hang this on, and a macro or another client would bypass one anyway.
-  // The offending key is dropped rather than the whole update refused, so an unrelated
-  // edit submitted in the same pass still lands.
-  async _preUpdate(changed, options, user) {
-    if (this.type === "fiend") {
-      const inCombat = !!game.combat?.started
-        && game.combat.combatants.some(c => c.actor?.id === this.id);
-      if (blocksMagatamaSwitch({
-        current: this.system.activeMagatama,
-        incoming: changed.system?.activeMagatama,
-        inCombat
-      })) {
-        ui.notifications.warn(game.i18n.localize("SMT.Warnings.MagatamaInCombat"));
-        delete changed.system.activeMagatama;
-      }
-    }
-    return super._preUpdate(changed, options, user);
-  }
 
   // Roll 1d100 vs tn, post the card, return the outcome.
   async rollPercentile(tn, label, { hasMight = false } = {}) {

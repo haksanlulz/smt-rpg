@@ -102,6 +102,13 @@ const MUTATIONS = [
       s + "\n<div><span>Hardcoded English label</span></div>\n")
   },
   {
+    // The 2026-07-29 escape in one line: a second definition of a method that already
+    // exists, which JS accepts and silently lets win.
+    rung: "C14b duplicate class member", expect: "C14b",
+    apply: (d) => edit(d, "module/documents/actor.mjs", s =>
+      s.replace(/^\}\s*$/m, "  async levelUp() { return null; }\n}\n"))
+  },
+  {
     // The 2026-07-28 play report in one line: a class applied by the system with no
     // rule anywhere. Planted on a template so the probe exercises the .hbs collector.
     rung: "C13c unstyled smt- class", expect: "C13c",
