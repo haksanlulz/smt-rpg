@@ -2,18 +2,22 @@
 # requires-python = ">=3.10"
 # dependencies = ["pymupdf"]
 # ///
-"""Import demon stat blocks from a Tokyo Conception rulebook PDF you own.
+"""Import demon stat blocks and Magatama from a Tokyo Conception rulebook PDF you own.
 
     uv run --script tools/import-rulebook.py --pdf /path/to/rulebook.pdf
 
-Writes data-local/demon-stats.json, which the system loads at init. That path is
-gitignored: the stat blocks are the book's content and are not redistributed. This
-script is the shippable half -- supply your own PDF and it builds your own data.
+Writes data-local/demon-stats.json and data-local/magatama-stats.json, which the
+system loads at init. That path is gitignored: the stat blocks are the book's content
+and are not redistributed. This script is the shippable half -- supply your own PDF
+and it builds your own data.
 
 No prose is captured. Names, numbers and skill tables only; the flavour text beside
-each stat block is deliberately skipped.
+each stat block is deliberately skipped. The one exception is the Magatama affinity
+grant, which the book states only in prose -- and there the parser accepts a CLOSED
+vocabulary of keywords and elements and truncates at the first word outside it, so a
+sentence is never carried through as description text.
 
-How it reads the page, since neither layout is a real table in the PDF:
+How it reads the demon pages, since neither layout is a real table in the PDF:
   * Blocks are found by their header row (name + LV/LVL + CLAN).
   * Fields are found by LABEL ANCHOR, not fixed coordinates -- general demons
     (p.126-211) and bosses (p.213-235) use different layouts.
@@ -22,6 +26,10 @@ How it reads the page, since neither layout is a real table in the PDF:
   * Skill-table columns are located from an all-dash placeholder row, which has
     exactly one token per column and so is an exact ruler. The ruler is medianed
     across every block of a layout so one odd page cannot set the columns.
+
+The Magatama table (p.42) is a different shape again: it is printed ROTATED, so each
+Magatama is a COLUMN at a fixed x and each field is a horizontal band anchored by its
+label down the right-hand side. See MagatamaImporter.
 """
 import argparse
 import json
@@ -371,6 +379,259 @@ class Importer:
                 + [self.parse(h, ws, True, p, ruler_for(True, p)) for h, ws, p in boss])
 
 
+MAGATAMA_PAGE = 42                     # the whole table, printed rotated 90 degrees
+MAGATAMA_PROSE = (39, 41)              # the per-Magatama paragraphs, inclusive
+
+# Field labels run down the RIGHT of the rotated table, one per band. A bare digit in
+# that column CONTINUES the label above it ("Skill" on one line, "1" on the next), so
+# it opens no band of its own.
+MAGATAMA_FIELDS = ("Name", "St", "Ma", "Vi", "Ag", "Lu", "Acquire", "Skill", "LV", "Special")
+# Every word in a column shares one baseline x, and the columns are ~13pt apart, so a
+# tight tolerance both groups a column and rejects page furniture outright. The page
+# number and the per-purchaser watermark sit at x 5-65, left of every column.
+COLUMN_TOL = 4.0
+MAGATAMA_STATS = [("St", "strength"), ("Ma", "magic"), ("Vi", "vitality"),
+                  ("Ag", "agility"), ("Lu", "luck")]
+
+# The affinity grant is stated only in the p.39-41 prose ("It grants Null Ice and Elec
+# Weak"), never in the table. Both triggers are followed by a CLOSED vocabulary check:
+# the capture is truncated at the first word outside GRANT_VOCAB, and discarded unless
+# it opens with an affinity keyword. That is what keeps Kailash's "grants not only the
+# Almighty attack spell Megido" from being read as an affinity grant.
+GRANT_TRIGGER = re.compile(r"\bgrants?\s+(?:you\s+)?|\bhaving\s+a\s+", re.I)
+GRANT_KEYWORDS = {"null", "strong", "weak", "drain", "repel"}
+GRANT_VOCAB = GRANT_KEYWORDS | {
+    "phys", "fire", "ice", "elec", "force", "mind", "nerve", "ruin", "dark", "light",
+    "almighty", "magic", "ailment", "attack", "attacks", "and",
+    # Masakados (p.41) is the one grant phrased as an exclusion rather than a list.
+    "affinity", "to", "all", "elements", "besides",
+}
+HEADING = re.compile(r"^[A-Z][A-Z0-9:'\- ]*$")
+
+
+class MagatamaImporter:
+    """The 25 Magatama: stat bonuses and skill list from the p.42 table, affinity
+    grants from the p.39-41 prose.
+
+    The table is printed rotated 90 degrees. That inverts the usual reading: a
+    Magatama is a COLUMN at one fixed x, and a field ("St", "Acquire", "Skill 3") is a
+    horizontal BAND bounded by its own label and the next label below it. Cells are
+    therefore read DOWN their column -- "Hell" then "Fang", "Tower" then "of" then
+    "Kagutsuchi" -- which is why every cell joins its words in y order, not x order.
+
+    The Name band is the one exception to "a band starts at its label": the names are
+    printed ABOVE the "Name" label rather than beside it, so that band opens at the top
+    of the page instead."""
+
+    def __init__(self, doc):
+        self.doc = doc
+
+    def words(self, idx):
+        return [(round(x, 1), round(y, 1), w)
+                for x, y, _x1, _y1, w, *_ in self.doc[idx].get_text("words")]
+
+    @staticmethod
+    def bands(ws, label_x):
+        """(field, lo, hi) for each label in the right-hand column, in printed order."""
+        labels = sorted(((y, w) for x, y, w in ws if abs(x - label_x) <= COLUMN_TOL))
+        fields = [(y, w) for y, w in labels if w in MAGATAMA_FIELDS]
+        out = []
+        for i, (y, w) in enumerate(fields):
+            lo = 0.0 if i == 0 else y
+            hi = fields[i + 1][0] if i + 1 < len(fields) else 10_000.0
+            out.append((w, lo, hi))
+        return out
+
+    @staticmethod
+    def cell(ws, lo, hi, col_x):
+        toks = sorted((y, w) for x, y, w in ws if lo <= y < hi and abs(x - col_x) <= COLUMN_TOL)
+        return clean(" ".join(w for _, w in toks))
+
+    def table(self):
+        ws = self.words(MAGATAMA_PAGE + PRINTED_OFFSET)
+        label_x = next((x for x, _y, w in ws if w == "Name"), None)
+        if label_x is None:
+            return [], ["p.42: no 'Name' label found -- the Magatama table did not parse"], []
+
+        bands = self.bands(ws, label_x)
+        if not bands or bands[0][0] != "Name":
+            return [], ["p.42: the first field band is not 'Name'"], []
+
+        # Column x positions come from the Name band itself, so a change in the number
+        # of printed Magatama is picked up rather than assumed.
+        _f, lo, hi = bands[0]
+        cols = {}
+        for x, y, w in ws:
+            if lo <= y < hi and abs(x - label_x) > COLUMN_TOL:
+                cols.setdefault(x, []).append((y, w))
+        columns = {x: " ".join(w for _, w in sorted(toks)) for x, toks in cols.items()}
+
+        entries, errs = [], []
+        for col_x in sorted(columns, reverse=True):      # printed right-to-left
+            d = {"name": columns[col_x], "page": MAGATAMA_PAGE, "skills": []}
+            pending = None                                # a Skill/Special awaiting its LV
+            for field, blo, bhi in bands[1:]:
+                value = self.cell(ws, blo, bhi, col_x)
+                if field == "LV":
+                    if pending and value:
+                        lv = num(value)
+                        if lv is None:
+                            errs.append(f"{d['name']}: learn level {value!r} is not a number")
+                        else:
+                            d["skills"].append({"name": pending, "learnLv": lv})
+                    elif value:
+                        errs.append(f"{d['name']}: learn level {value!r} with no skill above it")
+                    pending = None
+                elif field in ("Skill", "Special"):
+                    pending = value or None
+                elif field == "Acquire":
+                    d["acquisition"] = value
+                else:
+                    key = dict(MAGATAMA_STATS).get(field)
+                    if key:
+                        d.setdefault("statBonuses", {})[key] = num(value)
+            entries.append(d)
+
+        # Anything belonging to no column is reported, never dropped silently -- but
+        # WHERE it sits decides whether that is a problem. Inside the span the columns
+        # occupy, a stray means a column failed to register and its cells are being
+        # lost, so the import refuses. Outside it, the page simply carries furniture:
+        # the printed page number and the per-purchaser watermark at the left margin,
+        # and the rotated "CHARACTER CREATION" running head to the right of the labels.
+        pitch = min((b - a for a, b in zip(sorted(columns), sorted(columns)[1:])), default=0.0)
+        lo_c, hi_c = min(columns) - pitch, max(columns) + pitch
+        inside, outside = set(), set()
+        for x, _y, w in ws:
+            if abs(x - label_x) <= COLUMN_TOL or any(abs(x - c) <= COLUMN_TOL for c in columns):
+                continue
+            (inside if lo_c <= x <= hi_c else outside).add(w)
+        if inside:
+            errs.append(f"p.42: {len(inside)} word(s) inside the table but in no column "
+                        f"(a Magatama column did not register): " + ", ".join(sorted(inside)[:6]))
+        return entries, errs, sorted(outside)
+
+    def prose_sections(self):
+        """(heading, body) for the p.39-41 prose, split on its ALL-CAPS headings."""
+        text = "\n".join(self.doc[p + PRINTED_OFFSET].get_text()
+                         for p in range(MAGATAMA_PROSE[0], MAGATAMA_PROSE[1] + 1))
+        sections, head, buf = [], None, []
+        for line in text.splitlines():
+            s = line.strip()
+            if s and HEADING.fullmatch(s):
+                if head is not None:
+                    sections.append((head, " ".join(buf)))
+                head, buf = s, []
+            elif head is not None and s:
+                buf.append(s)
+        if head is not None:
+            sections.append((head, " ".join(buf)))
+        return sections
+
+    def grants(self, names):
+        """name -> the affinity clause the book states for it, or "" for none."""
+        sections = self.prose_sections()
+        by_head = {h: b for h, b in sections}
+        out = {}
+        for name in names:
+            body = by_head.get(name.upper())
+            if body is None:
+                # Masakados has no heading of its own: it is described under
+                # "LEGENDARY MAGATAMA". Fall back to the section that names it.
+                body = next((b for _h, b in sections if name in b), "")
+            out[name] = extract_grant(body)
+        return out
+
+    def run(self):
+        entries, errs, ignored = self.table()
+        grants = self.grants([d["name"] for d in entries])
+        for d in entries:
+            d["grant"] = grants.get(d["name"], "")
+            d["isStarter"] = d.get("acquisition", "").lower() == "starter"
+        return entries, errs, ignored
+
+
+def extract_grant(paragraph):
+    """The affinity clause inside a prose paragraph, or "" if it states none.
+
+    Truncates at the first word outside the closed grant vocabulary, which is what
+    separates a real grant from a trigger word used in another sense, and requires the
+    result to OPEN with an affinity keyword -- every grant the book prints does. The
+    longest candidate wins rather than the first, so a decoy earlier in the paragraph
+    cannot shadow the real clause after it."""
+    best = ""
+    for m in GRANT_TRIGGER.finditer(paragraph or ""):
+        toks = []
+        for raw in paragraph[m.end():].split():
+            word = raw.strip(".,;:").lower()
+            if word not in GRANT_VOCAB:
+                break
+            toks.append(raw.strip(".,;:") if "," not in raw else raw.strip(".;:"))
+        if not toks or toks[0].lower() not in GRANT_KEYWORDS:
+            continue
+        text = " ".join(toks).strip().rstrip(",")
+        if len(text) > len(best):
+            best = text
+    return best
+
+
+def verify_magatama(entries):
+    """The table and the prose are two independent printings, and the eight sample
+    character sheets (p.25-32) are a third. Anchors are read off the RENDERED sample
+    sheets, so a systematic extraction error cannot pass unnoticed."""
+    errs, warns = [], []
+
+    if len(entries) != 25:
+        errs.append(f"expected 25 Magatama (24 + Masakados), got {len(entries)}")
+    starters = [d for d in entries if d.get("isStarter")]
+    if len(starters) != 8:
+        errs.append(f"expected 8 starter Magatama (p.39), got {len(starters)}")
+
+    for d in entries:
+        where = f"{d['name']} (p.{d['page']})"
+        bonuses = d.get("statBonuses") or {}
+        if len(bonuses) != 5 or any(v is None for v in bonuses.values()):
+            errs.append(f"{where}: {sum(v is not None for v in bonuses.values())}/5 stat bonuses")
+        # p.39: "stats have a maximum of 40". A bonus outside 0-10 is a misread column.
+        for k, v in bonuses.items():
+            if v is not None and not 0 <= v <= 10:
+                errs.append(f"{where}: {k} bonus {v} outside 0-10")
+        if not d.get("acquisition"):
+            errs.append(f"{where}: no acquisition")
+        if not d["skills"]:
+            errs.append(f"{where}: no skills")
+        for s in d["skills"]:
+            if re.fullmatch(r"\d+", s["name"]) or "Order #" in s["name"] or "(Order" in s["name"]:
+                errs.append(f"{where}: page furniture imported as a skill: {s['name']!r}")
+            if not 1 <= s["learnLv"] <= 99:
+                errs.append(f"{where}: skill {s['name']!r} learn level {s['learnLv']} out of range")
+        if not d.get("grant"):
+            # Marogareh and Kailash are printed with no affinity grant at all; anything
+            # else with none means the prose scan missed a paragraph.
+            warns.append(f"{where}: no affinity grant stated (as printed)")
+
+    # p.25-32 print three of the starters on made character sheets, independently of
+    # both the p.42 table and the p.39 prose. Bonuses and grants are checked together
+    # because they come from two different pages via two different parsers.
+    anchors = {
+        "Marogareh": dict(strength=4, magic=1, vitality=2, agility=2, luck=1, grant=""),
+        "Shiranui": dict(strength=1, magic=5, vitality=0, agility=4, luck=0,
+                         grant="Null Fire and Force Weak"),
+        "Ankh": dict(strength=1, magic=2, vitality=5, agility=0, luck=2,
+                     grant="Null Light and Dark Weak"),
+    }
+    by_name = {d["name"]: d for d in entries}
+    for name, want in anchors.items():
+        got = by_name.get(name)
+        if not got:
+            errs.append(f"anchor missing: {name}")
+            continue
+        for k, v in want.items():
+            actual = got.get("grant") if k == "grant" else (got.get("statBonuses") or {}).get(k)
+            if actual != v:
+                errs.append(f"anchor {name}.{k}: expected {v!r}, got {actual!r}")
+    return errs, warns
+
+
 def verify(demons):
     """Structural checks. A wrong number here produces a working wrong answer, so
     the import refuses rather than writing something plausible but unverified."""
@@ -447,6 +708,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pdf", required=True, help="path to your own rulebook PDF")
     ap.add_argument("--out", default="data-local/demon-stats.json")
+    ap.add_argument("--out-magatama", default="data-local/magatama-stats.json")
     ap.add_argument("--force", action="store_true",
                     help="write even if verification fails (not recommended)")
     args = ap.parse_args()
@@ -454,7 +716,8 @@ def main():
     if not os.path.exists(args.pdf):
         sys.exit(f"no such file: {args.pdf}")
 
-    demons = Importer(args.pdf).run()
+    importer = Importer(args.pdf)
+    demons = importer.run()
     errs, warns = verify(demons)
 
     print(f"parsed {len(demons)} demons "
@@ -476,11 +739,45 @@ def main():
     else:
         print("verification passed: counts, per-demon completeness, and 4 page anchors")
 
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
-        json.dump({"source": "Tokyo Conception Ch.5", "count": len(demons), "demons": demons},
-                  fh, ensure_ascii=False, indent=1)
-    print(f"-> {args.out}")
+    write_json(args.out, {"source": "Tokyo Conception Ch.5",
+                          "count": len(demons), "demons": demons})
+
+    magatama, table_errs, ignored = MagatamaImporter(importer.doc).run()
+    m_errs, m_warns = verify_magatama(magatama)
+    m_errs = table_errs + m_errs
+
+    print(f"\nparsed {len(magatama)} Magatama "
+          f"({sum(1 for d in magatama if d.get('isStarter'))} starter), "
+          f"{sum(len(d['skills']) for d in magatama)} skill rows, "
+          f"{sum(1 for d in magatama if d.get('grant'))} affinity grants")
+    if ignored:
+        print(f"  ignored {len(ignored)} word(s) outside the table "
+              f"(page furniture): {', '.join(ignored[:8])}")
+    for w in m_warns:
+        print(f"  note (as printed in the book): {w}")
+
+    if m_errs:
+        print(f"\nMagatama verification FAILED ({len(m_errs)} problems):")
+        for e in m_errs[:20]:
+            print("  " + e)
+        if len(m_errs) > 20:
+            print(f"  ... +{len(m_errs) - 20} more")
+        if not args.force:
+            sys.exit("\nrefusing to write the Magatama. "
+                     "Re-run with --force only if you know why.")
+    else:
+        print("verification passed: counts, per-Magatama completeness, "
+              "and 3 sample-character anchors")
+
+    write_json(args.out_magatama, {"source": "Tokyo Conception Ch.2",
+                                   "count": len(magatama), "magatama": magatama})
+
+
+def write_json(path, payload):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=1)
+    print(f"-> {path}")
 
 
 if __name__ == "__main__":
