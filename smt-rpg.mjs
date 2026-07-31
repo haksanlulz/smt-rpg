@@ -95,6 +95,18 @@ Hooks.once("init", () => {
     }
   });
 
+  // And the Magatama picker (p.42), the fiend-side equivalent.
+  game.keybindings.register("smt-rpg", "openMagatamaPicker", {
+    name: "SMT.Keybind.OpenMagatamaPicker",
+    hint: "SMT.Keybind.OpenMagatamaPickerHint",
+    editable: [{ key: "KeyM", modifiers: ["Control", "Shift"] }],
+    restricted: true, // GM only
+    onDown: () => {
+      import("./module/helpers/magatama-compendium.mjs").then(m => m.openMagatamaPicker());
+      return true;
+    }
+  });
+
   CONFIG.Actor.dataModels.fiend = FiendData;
   CONFIG.Actor.dataModels.demon = DemonData;
   CONFIG.Actor.dataModels.human = HumanData;
@@ -194,11 +206,12 @@ function _registerStatusEffects() {
   CONFIG.statusEffects = list;
 }
 
-// Preload the imported demon stat blocks once the world is up. Absent by design on a
-// fresh clone (the data comes from the user's own rulebook PDF via
-// tools/import-rulebook.py), so this logs and moves on rather than failing.
+// Preload the imported demon stat blocks and Magatama once the world is up. Both are
+// absent by design on a fresh clone (the data comes from the user's own rulebook PDF
+// via tools/import-rulebook.py), so each logs and moves on rather than failing.
 Hooks.once("ready", () => {
   import("./module/helpers/compendium.mjs").then(m => m.loadDemonStats());
+  import("./module/helpers/magatama-compendium.mjs").then(m => m.loadMagatamaStats());
 });
 
 // Chat message button handlers
