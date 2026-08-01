@@ -55,7 +55,32 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
         initial: "none",
         choices: Object.keys(CONFIG.SMT.passiveEffects)
       }),
-      inheritanceType: new StringField({ initial: "" })
+      inheritanceType: new StringField({ initial: "" }),
+      // Fractional-HP attacks (p.102-103): "reduced to half their current HP" /
+      // "to 20% of their current HP" / "to 1 HP". Not damage maths — the target's
+      // CURRENT HP decides the number, so these carry no potency. helpers/damage.mjs
+      // fractionalEnd() is the single resolver.
+      fractionalHP: new StringField({
+        initial: "none",
+        choices: ["none", "half", "toPercent", "toOne"]
+      }),
+      fractionalPercent: new NumberField({ integer: true, min: 1, max: 99, initial: 20 }),
+      // "Fate points cannot reduce this amount." Printed on Thunderclap, Holy Wrath,
+      // Godly Light and Evil Gaze — NOT on Sol Niger, which the book leaves bare.
+      // Blocks the Halve Damage button on the resulting card.
+      fpImmune: new BooleanField({ initial: false }),
+      // Drain skills (p.103): damage as normal, then the caster recovers what the
+      // target actually lost. Deathtouch drains HP, Mana Drain MP, Life Drain and
+      // Domination both. Distinct from the Drain AFFINITY.
+      drainsHP: new BooleanField({ initial: false }),
+      drainsMP: new BooleanField({ initial: false }),
+      // Conditional instant kill riding an attack: "50% chance to Instant Kill a
+      // Stoned target" (Zan group, p.98), "Instant Kill all Sleeping targets"
+      // (Eternal Rest). The condition is the target's ailment BEFORE the hit.
+      killCondition: new SchemaField({
+        ailment: new StringField({ initial: "none" }),
+        rate: new NumberField({ integer: true, min: 0, max: 100, initial: 0 })
+      })
     };
   }
 }

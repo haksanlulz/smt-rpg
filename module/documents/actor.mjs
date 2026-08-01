@@ -1,4 +1,4 @@
-import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
+import { calculateDamage, applyDamageToHp, fractionalEnd, drainAmounts } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
 import { incomingDamageMultiplier } from "../helpers/ailments.mjs";
@@ -294,7 +294,7 @@ export default class SMTActor extends Actor {
 
   // Apply an attack: affinity/resistance -> mutate HP -> post card. Handles null/drain/repel.
   // rawPower may come from a flag, so it's clamped.
-  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false, damageMultiplier = 1 }) {
+  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false, damageMultiplier = 1, fractional = null, fpImmune = false, drains = null }) {
     rawPower = SMTActor.#clampHpDelta(rawPower);
 
     const affinity = this.system.affinities[element] ?? "normal";
@@ -316,6 +316,18 @@ export default class SMTActor extends Actor {
       magicAffinity, ailmentAffinity, isPhysicalAttack: isPhysical, incomingMultiplier,
       finalMultiplier: damageMultiplier
     });
+
+    // Fractional-HP attacks (p.102-103): the target's current HP decides the number.
+    // The affinity ABSOLUTES still gate — Null Light stops Thunderclap outright, and
+    // a Repel reflects nothing because there is no power to reflect — but weak/strong
+    // multipliers and resistance do not apply to a fraction. [inferred — the book
+    // states the fraction and says nothing about scaling it]
+    if (fractional && !result.isNull && !result.isDrain && !result.isRepel) {
+      const end = fractionalEnd(this.system.hp.value, fractional.kind, fractional.pct);
+      result.finalDamage = Math.max(this.system.hp.value - end, 0);
+      result.afterAffinity = result.finalDamage;
+      result.resistanceApplied = 0;
+    }
     let hpBefore = null;
 
     if (CONFIG.SMT.debug) console.log("smt-rpg | Damage Calculation", {
@@ -384,10 +396,39 @@ export default class SMTActor extends Actor {
       await this.update(update);
     }
 
+    // Drain skills (p.103): the caster recovers what the target actually lost — the
+    // p.98 worked example measures recovery after resistance, so `dealt`, not the
+    // computed damage. MP loss mirrors the final damage, floored at the pool.
+    if (drains && attacker && result.finalDamage > 0
+        && !result.isNull && !result.isDrain && !result.isRepel) {
+      const hpDealt = hpBefore !== null ? hpBefore - this.system.hp.value : 0;
+      const { hpDrained, mpDrained } = drainAmounts({
+        hpDealt, mpBefore: this.system.mp.value, finalDamage: result.finalDamage,
+        drainsHP: !!drains.hp, drainsMP: !!drains.mp
+      });
+      const attackerUpdate = {};
+      if (hpDrained > 0) {
+        const newHp = Math.min(attacker.system.hp.value + hpDrained, attacker.system.hp.max);
+        chatData.drainedHP = newHp - attacker.system.hp.value;
+        attackerUpdate["system.hp.value"] = newHp;
+      }
+      if (mpDrained > 0) {
+        await this.update({ "system.mp.value": this.system.mp.value - mpDrained });
+        const newMp = Math.min(attacker.system.mp.value + mpDrained, attacker.system.mp.max);
+        chatData.drainedMP = newMp - attacker.system.mp.value;
+        attackerUpdate["system.mp.value"] = newMp;
+      }
+      if (Object.keys(attackerUpdate).length) {
+        chatData.attackerName = attacker.name;
+        await attacker.update(attackerUpdate);
+      }
+    }
+
     // Resulting HP for the card; read after the mutation above.
     chatData.targetHp = this.system.hp.value;
     chatData.targetHpMax = this.system.hp.max;
     chatData.targetDefeated = this.system.hp.value <= 0;
+    if (fpImmune) chatData.fpImmune = true;
 
     const content = await foundry.applications.handlebars.renderTemplate(
       "systems/smt-rpg/templates/chat/damage-result.hbs",
@@ -398,7 +439,9 @@ export default class SMTActor extends Actor {
       content
     });
 
-    // Stash for the FP "Halve Damage" button.
+    // Stash for the FP "Halve Damage" button. `fpImmune` rides the flag so both the
+    // button gate and the resolver refuse it — "Fate points cannot reduce this
+    // amount" (p.102-103) is a property of the card.
     if (result.finalDamage > 0 && !result.isNull && !result.isDrain && !result.isRepel) {
       const { getTokenUuid } = await import("../helpers/combat.mjs");
       await dmgMsg.setFlag("smt-rpg", "damageData", {
@@ -406,6 +449,7 @@ export default class SMTActor extends Actor {
         originalDamage: result.finalDamage,
         currentDamage: result.finalDamage,
         hpBefore,
+        fpImmune: !!fpImmune,
         resolved: false
       });
     }

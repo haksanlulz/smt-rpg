@@ -122,6 +122,43 @@ export function parseAilmentSentence(effect) {
   return { type, rate: Math.min(Math.max(Number(m[1]), 0), 100) };
 }
 
+// Attack riders stated inside effect sentences, in BOTH printings' grammars.
+// ch4 writes prose ("targets hit are reduced to half their current HP", "Fate points
+// cannot reduce this amount", "Drain HP from 1 target"); the stat blocks write terse
+// cells ("HP Halved", "HP 1/5", "HP 1", "If target is Stoned, Instant Kill 30%").
+// Both resolve to the same schema fields, and only non-defaults are returned.
+export function attackRiders(effect) {
+  const s = String(effect ?? "");
+  const out = {};
+
+  if (/reduced to half their current HP/i.test(s) || /^HP Halved$/i.test(s.trim())) {
+    out.fractionalHP = "half";
+  } else {
+    const pct = /reduced to (\d+)% of their current HP/i.exec(s);
+    if (pct) { out.fractionalHP = "toPercent"; out.fractionalPercent = Number(pct[1]); }
+    else if (/^HP 1\/5$/i.test(s.trim())) { out.fractionalHP = "toPercent"; out.fractionalPercent = 20; }
+    else if (/reduced? (?:the target |targets |affected targets )?to 1 HP/i.test(s)
+      || /^HP 1$/i.test(s.trim())) {
+      out.fractionalHP = "toOne";
+    }
+  }
+
+  if (/[Ff]ate points cannot reduce/i.test(s)) out.fpImmune = true;
+
+  if (/Drains? HP/i.test(s)) out.drainsHP = true;
+  if (/Drains? MP/i.test(s) || /equal amount of MP/i.test(s)) out.drainsMP = true;
+  if (/drains? HP & MP/i.test(s)) { out.drainsHP = true; out.drainsMP = true; }
+
+  const stoned = /(\d+)% chance to Instant Kill (?:a )?Stoned targets?/i.exec(s)
+    ?? (/If target is Stoned, Instant Kill (\d+)%/i.exec(s));
+  if (stoned) out.killCondition = { ailment: "stone", rate: Number(stoned[1]) };
+  else if (/Instant Kill all Sleeping targets/i.test(s) || /If target is Sleeping, Instant Kill/i.test(s)) {
+    out.killCondition = { ailment: "sleep", rate: 100 };
+  }
+
+  return out;
+}
+
 // Build the Item payload for a skill. Pure apart from CONFIG reads.
 export function buildSkillSystem(entry) {
   const { listed, corpus } = entry ?? {};
@@ -146,6 +183,13 @@ export function buildSkillSystem(entry) {
   if (/^auto-success$/i.test(effect)) system.autoSuccess = true;
   const ailment = parseAilment(corpus?.effect) ?? parseAilmentSentence(effect);
   if (ailment) system.ailment = ailment;
+
+  // Riders from either printing's sentence; the ch4 prose wins where both state one.
+  const riders = { ...attackRiders(corpus?.effect), ...attackRiders(listed?.effect) };
+  // A conditional kill is not an ailment roll: "30% chance to Instant Kill a Stoned
+  // target" must never degrade into an unconditional 30% death.
+  if (riders.killCondition) delete system.ailment;
+  Object.assign(system, riders);
   return system;
 }
 

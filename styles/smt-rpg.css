@@ -1414,3 +1414,12 @@ button.condition-pip.ailment-save:hover {
   overflow-wrap: anywhere;
   font-size: 0.9em;
 }
+
+/* "Fate points cannot reduce this amount" (p.102-103) — the card says why the
+   halve button is absent, instead of leaving a silent gap. */
+.fp-immune-note {
+  font-size: 0.85em;
+  font-style: italic;
+  opacity: 0.85;
+  margin-top: 2px;
+}

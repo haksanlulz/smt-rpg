@@ -119,6 +119,10 @@ export function buildConsumableSystem(entry, consumableType) {
       const kill = INSTANT_KILL.exec(effect);
       if (ail && ail[2].toLowerCase() in CONFIG.SMT.ailments) {
         system.attackAilment = { type: ail[2].toLowerCase(), rate: Number(ail[1]) };
+      } else if (kill && /Instant Kill Stoned/i.test(effect)) {
+        // Mazan Rock's kill fires only on Stoned targets; the consumable schema has
+        // no condition field, and an unconditional 30% death is worse than none.
+        caveats.push(`${entry.name}: kills only Stoned targets — not modeled on items; effect text carries it`);
       } else if (kill) {
         system.attackAilment = { type: "death", rate: Number(kill[1]) };
       }

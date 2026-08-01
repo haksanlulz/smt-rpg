@@ -1,5 +1,5 @@
 import { evaluatePercentile, cascadePlan, multiActionPlan, multiActionTn } from "./checks.mjs";
-import { halveDamageResult, affinityOutcome } from "./damage.mjs";
+import { halveDamageResult, affinityOutcome, killConditionMet } from "./damage.mjs";
 import { canDodge, shatterPctFor } from "./ailments.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
@@ -48,6 +48,30 @@ function _sanitizeAilmentRate(rate) {
   if (!Number.isFinite(rate) || rate <= 0) return 0;
   const { min, max } = CONFIG.SMT.ailmentRate;
   return Math.clamp(Math.floor(rate), min, max);
+}
+
+// Attack riders off a flag (p.98/p.102-103). Flags are author-forgeable, so every
+// leg is whitelisted: an unknown fractional kind or ailment key drops the rider
+// entirely rather than doing something almost right.
+function _sanitizeRiders(riders) {
+  if (!riders || typeof riders !== "object") return null;
+  const out = {};
+  const kind = riders.fractional?.kind;
+  if (kind === "half" || kind === "toPercent" || kind === "toOne") {
+    const pct = Number.isFinite(riders.fractional.pct)
+      ? Math.clamp(Math.floor(riders.fractional.pct), 1, 99) : 20;
+    out.fractional = { kind, pct };
+  }
+  if (riders.fpImmune === true) out.fpImmune = true;
+  if (riders.drains && (riders.drains.hp === true || riders.drains.mp === true)) {
+    out.drains = { hp: riders.drains.hp === true, mp: riders.drains.mp === true };
+  }
+  const kc = riders.killCondition;
+  if (kc && kc.ailment in CONFIG.SMT.ailments && kc.ailment !== "none") {
+    const rate = _sanitizeAilmentRate(kc.rate);
+    if (rate > 0) out.killCondition = { ailment: kc.ailment, rate };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 // Targeting
@@ -127,7 +151,7 @@ async function _renderPendingCard(attackData) {
 // `damageMultiplier` is Retaliate/Avenge's ×2/×3 on the damage dealt (p.110), and
 // `noCounter` marks a hit that must not itself provoke a counterattack — the free
 // strikes from a fumbled flee (p.70) and a counterattack itself.
-export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false }) {
+export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, riders = null }) {
   const valid = (targets ?? []).filter(t => t.actor);
   if (!valid.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
@@ -138,6 +162,7 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
     attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
     rawPower, element, isPhysical, isCritical, skillName,
     ailmentType, ailmentRate, damageMultiplier, noCounter,
+    riders: riders ?? null,
     checkMessageId: checkMessageId ?? null,
     targets: valid.map(t => ({
       targetTokenUuid: t.document.uuid,
@@ -365,10 +390,14 @@ export async function resolveAttack(message, index, skipDodge = false) {
     const element = _sanitizeElement(live.element);
     const ailmentType = _sanitizeAilmentType(live.ailmentType);
     const ailmentRate = _sanitizeAilmentRate(live.ailmentRate);
+    const riders = _sanitizeRiders(live.riders);
     const isPhysical = !!live.isPhysical;
     let isCritical = !!live.isCritical;
     let dodgeFumble = false;
     let dodgeOutcome = null;
+    // The kill condition reads the ailment the hit FOUND (p.98) — captured before
+    // damage resolves, because the hit itself may wake a sleeper.
+    const ailmentBefore = target.system.ailment ?? "none";
 
     // p.68's Dodge column reads N for Stone, Restrain, Freeze, Sleep and Shock —
     // those targets never get the roll, so the button must not offer them one.
@@ -433,7 +462,10 @@ export async function resolveAttack(message, index, skipDodge = false) {
       attacker,
       skillName: live.skillName,
       dodgeFumble,
-      damageMultiplier: _sanitizeAmount(live.damageMultiplier) || 1
+      damageMultiplier: _sanitizeAmount(live.damageMultiplier) || 1,
+      fractional: riders?.fractional ?? null,
+      fpImmune: !!riders?.fpImmune,
+      drains: riders?.drains ?? null
     });
 
     if (shatterPct > 0 && await _resolveStoneShatter(target, shatterPct)) {
@@ -446,6 +478,29 @@ export async function resolveAttack(message, index, skipDodge = false) {
       ailmentType, ailmentRate,
       dmgResultExists: !!dmgResult
     });
+    // Conditional instant kill (Zan group p.98, Eternal Rest): fires only when the
+    // hit landed and the target's PRE-HIT ailment matches the printed condition.
+    if (dmgResult && !dmgResult.isNull && !dmgResult.isDrain && !dmgResult.isRepel
+        && killConditionMet(riders?.killCondition, ailmentBefore)
+        && target.system.hp.value > 0) {
+      const roll = new Roll("1d100");
+      await roll.evaluate();
+      const killed = roll.total <= riders.killCondition.rate;
+      await roll.toMessage({
+        speaker: ChatMessage.getSpeaker({ actor: attacker }),
+        flavor: game.i18n.format(killed ? "SMT.KillCondition.Killed" : "SMT.KillCondition.Resisted", {
+          target: target.name,
+          ailment: game.i18n.localize(CONFIG.SMT.ailments[riders.killCondition.ailment]),
+          rate: riders.killCondition.rate
+        })
+      });
+      if (killed) {
+        await target.update({ "system.hp.value": 0, "system.deathAilment": true });
+        await _markTargetResolved(message, index, game.i18n.localize("SMT.KillCondition.Note"));
+        return;
+      }
+    }
+
     if (dmgResult && !dmgResult.isNull && !dmgResult.isDrain && !dmgResult.isRepel
         && ailmentType && ailmentType !== "none" && ailmentRate > 0) {
       await resolveAilment({
@@ -629,7 +684,7 @@ export async function resolveAilment({ target, attacker, ailmentType, baseRate, 
 // Fate Point Resolution
 
 // Build the checkData flag payload. Numeric inputs are trusted here; reroll/boost re-sanitize on read.
-export function buildCheckData({ actor, checkResult, tn, hasPowerRoll, basePower, skillPower = 0, element, isPhysical, skillName, targetTokenUuids = null, targetsString = "1", ailmentType = "none", ailmentRate = 0, hasMight = false }) {
+export function buildCheckData({ actor, checkResult, tn, hasPowerRoll, basePower, skillPower = 0, element, isPhysical, skillName, targetTokenUuids = null, targetsString = "1", ailmentType = "none", ailmentRate = 0, hasMight = false, riders = null }) {
   return {
     actorTokenUuid: getTokenUuid(actor) ?? actor.id,
     rollResult: checkResult.result,
@@ -648,6 +703,7 @@ export function buildCheckData({ actor, checkResult, tn, hasPowerRoll, basePower
     ailmentType,
     ailmentRate,
     hasMight,
+    riders: riders ?? null,
     resolved: false
   };
 }
@@ -759,6 +815,7 @@ async function _cascadeCheckChange(message, oldCheckData, newCheckData, oldSucce
   });
 
   if (plan === "powerRoll") await _continueSkillFlow(newCheckData, actor, message.id);
+  else if (plan === "fractionalAttack") await _continueFractionalAttack(newCheckData, actor, message.id);
   else if (plan === "ailmentOnly") await _continueAilmentOnly(newCheckData, actor);
   else if (plan === "cancel") await _cancelPendingAttacks(message.id);
 }
@@ -814,7 +871,29 @@ async function _continueSkillFlow(checkData, actor, checkMessageId) {
     skillName: checkData.skillName,
     checkMessageId,
     ailmentType: checkData.ailmentType ?? "none",
-    ailmentRate: checkData.ailmentRate ?? 0
+    ailmentRate: checkData.ailmentRate ?? 0,
+    riders: _sanitizeRiders(checkData.riders)
+  });
+}
+
+// After an FP flips a fractional-HP skill fail->success: no power to roll — the
+// pending attack card IS the effect (p.102-103).
+async function _continueFractionalAttack(checkData, actor, checkMessageId) {
+  const targets = (checkData.targetTokenUuids ?? [])
+    .map(uuid => fromUuidSync(uuid)?.object)
+    .filter(Boolean);
+  await postAttacksToTargets({
+    attacker: actor,
+    targets,
+    rawPower: 0,
+    element: checkData.element,
+    isPhysical: checkData.isPhysical,
+    isCritical: !!checkData.isCritical,
+    skillName: checkData.skillName,
+    checkMessageId,
+    ailmentType: checkData.ailmentType ?? "none",
+    ailmentRate: checkData.ailmentRate ?? 0,
+    riders: _sanitizeRiders(checkData.riders)
   });
 }
 
@@ -832,6 +911,13 @@ async function _cancelPendingAttacks(checkMessageId) {
 export async function resolveHalveDamage(message, damageData) {
   const live = message.getFlag("smt-rpg", "damageData");
   if (!live || live.resolved) return;
+  // "Fate points cannot reduce this amount" (p.102-103). The button is never
+  // offered on such a card; this guard is the second lock on the same door, so a
+  // macro or a relayed click cannot reach past the render gate.
+  if (live.fpImmune) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.FateImmune"));
+    return;
+  }
   damageData = live;
 
   if (_inFlight.has(message.id)) return;

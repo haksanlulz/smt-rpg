@@ -238,7 +238,8 @@ export default class SMTItem extends Item {
             targetsString: this.system.targets,
             ailmentType: this.system.ailment?.type ?? "none",
             ailmentRate: this.system.ailment?.rate ?? 0,
-            hasMight
+            hasMight,
+            riders: this.attackRiders
           }));
         }
       }
@@ -248,10 +249,31 @@ export default class SMTItem extends Item {
         const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
         await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
       }
+
+      // Fractional-HP attacks (p.102-103) roll no power — the target's current HP is
+      // the whole number — but they are still attacks: the hit posts a pending card
+      // and the target may dodge (p.97's "make attacks" rule).
+      if (checkResult.isSuccess && !this.hasPowerRoll && this.attackRiders?.fractional) {
+        const { postAttacksToTargets, resolveTargets } = await import("../helpers/combat.mjs");
+        await postAttacksToTargets({
+          attacker: actor,
+          targets: resolveTargets(actor, this.system.targets),
+          rawPower: 0,
+          element: this.system.element,
+          isPhysical: this.isPhysicalSkill,
+          isCritical: checkResult.isCritical,
+          skillName: this.name,
+          checkMessageId: checkResult.messageId,
+          ailmentType: this.system.ailment?.type ?? "none",
+          ailmentRate: this.system.ailment?.rate ?? 0,
+          riders: this.attackRiders
+        });
+      }
     }
 
-    // Ailment-only skills (e.g. Stun Gaze).
-    if (checkResult?.isSuccess && !this.hasPowerRoll
+    // Ailment-only skills (e.g. Stun Gaze). A fractional skill's ailment rides its
+    // pending attack card instead, so it must not also resolve here.
+    if (checkResult?.isSuccess && !this.hasPowerRoll && !this.attackRiders?.fractional
         && this.system.ailment?.type && this.system.ailment.type !== "none" && this.system.ailment.rate > 0) {
       const { resolveAilment, resolveTargets } = await import("../helpers/combat.mjs");
       const targets = resolveTargets(actor, this.system.targets);
@@ -552,6 +574,23 @@ export default class SMTItem extends Item {
     }));
   }
 
+  // The attack riders this skill carries (p.98/p.102-103), in the shape attackData
+  // and checkData store them. Null when the skill has none, so plain attacks add
+  // nothing to their flags.
+  get attackRiders() {
+    const s = this.system;
+    const riders = {};
+    if (s.fractionalHP && s.fractionalHP !== "none") {
+      riders.fractional = { kind: s.fractionalHP, pct: s.fractionalPercent ?? 20 };
+    }
+    if (s.fpImmune) riders.fpImmune = true;
+    if (s.drainsHP || s.drainsMP) riders.drains = { hp: !!s.drainsHP, mp: !!s.drainsMP };
+    if (s.killCondition?.ailment && s.killCondition.ailment !== "none" && s.killCondition.rate > 0) {
+      riders.killCondition = { ailment: s.killCondition.ailment, rate: s.killCondition.rate };
+    }
+    return Object.keys(riders).length ? riders : null;
+  }
+
   // Post pending-attack cards; damage applied later via Dodge/Apply buttons.
   async _postPendingAttacks(attacker, powerResult, checkMessageId) {
     const { postAttacksToTargets, resolveTargets } = await import("../helpers/combat.mjs");
@@ -565,7 +604,8 @@ export default class SMTItem extends Item {
       skillName: this.name,
       checkMessageId,
       ailmentType: this.system.ailment?.type ?? "none",
-      ailmentRate: this.system.ailment?.rate ?? 0
+      ailmentRate: this.system.ailment?.rate ?? 0,
+      riders: this.attackRiders
     });
   }
 
