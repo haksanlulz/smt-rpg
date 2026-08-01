@@ -922,6 +922,238 @@ def verify_skills(skills, demons, magatama, junk):
     return errs, warns, {"distinct": len(by_key), "crossChecked": checked}
 
 
+ITEM_PAGES = (116, 117)                # ITEM PRICE LIST, ordinary horizontal tables
+GEAR_PAGE = 118                        # GEAR PRICE LIST, rotated like p.42
+GEAR_LABELS = ("Name", "Type", "Buy", "Sell", "Effect", "Gear Power", "Phys Resist")
+GEAR_SCALAR = {"Buy", "Sell", "Gear Power", "Phys Resist"}
+GEAR_LABEL_X = 450.0                   # everything right of the last entry column
+
+
+class GearItemImporter:
+    """The ITEM PRICE LIST (p.116-117) and the GEAR PRICE LIST (p.118).
+
+    Two different shapes. The item list is an ordinary horizontal table -- name
+    column anchors a record, cells split by the header's own x positions, wrapped
+    effects gathered from a band around the anchor row, exactly the ch4 skill-list
+    pattern.
+
+    The gear list is ROTATED like the p.42 Magatama table, with one addition that
+    table does not have: MULTI-LINE cells. Each gear is a column anchored by its
+    name's first-line x; a wrapped cell continues in lines that stack RIGHT-TO-LEFT
+    (each next line ~5pt left of the last), so a cell reads lines in descending x,
+    words within a line in ascending y. Entry windows are the midpoints between
+    neighbouring name anchors, which is what keeps a five-line effect inside its own
+    gear. Scalar bands (Buy / Sell / Gear Power / Phys Resist) print their values on
+    the label's own row, so they are read at that row alone -- which also keeps the
+    page number and the watermark, which sit far below, out of the last band."""
+
+    def __init__(self, doc):
+        self.doc = doc
+
+    def words(self, idx):
+        return [(round(x, 1), round(y, 1), w)
+                for x, y, _x1, _y1, w, *_ in self.doc[idx].get_text("words")]
+
+    @staticmethod
+    def rows(ws, tol=3.0):
+        buckets = {}
+        for x, y, w in ws:
+            k = next((k for k in buckets if abs(k - y) <= tol), y)
+            buckets.setdefault(k, []).append((x, w))
+        return [(k, sorted(v)) for k, v in sorted(buckets.items())]
+
+    # --- the horizontal item list -------------------------------------------
+
+    def item_page(self, printed):
+        ws = self.words(printed + PRINTED_OFFSET)
+        rows = self.rows(ws)
+        header = None
+        for y, items in rows:
+            toks = [w for _, w in items]
+            if toks[:4] == ["Name", "Buy", "Sell", "Effect"]:
+                header = (y, [x for x, _ in items[:4]])
+                break
+        if header is None:
+            return []
+        hy, xs = header
+        bounds = xs + [10_000.0]
+
+        body = [(y, items) for y, items in rows if y > hy + 4]
+        name_x = xs[0]
+        anchors = [y for y, items in body
+                   if any(abs(x - name_x) <= 12 and x < xs[1] for x, _ in items)]
+        if not anchors:
+            return []
+        gaps = sorted(b - a for a, b in zip(anchors, anchors[1:]))
+        pitch = gaps[len(gaps) // 2] if gaps else 16.0
+
+        # No gap-break here, deliberately: a two-line effect makes a legitimate gap
+        # near twice the pitch (p.117's first row is exactly that, and a break there
+        # ended the table at one item). Nothing below these tables ever lands in the
+        # name column -- the watermark sits at x~5 -- so the guards on the record
+        # itself are the protection, not a break.
+        out = []
+        for i, y in enumerate(anchors):
+            prev = anchors[i - 1] if i else None
+            nxt = anchors[i + 1] if i + 1 < len(anchors) else None
+            lo = (prev + y) / 2 if prev is not None else y - pitch * 0.6
+            hi = (y + nxt) / 2 if nxt is not None else y + pitch * 0.6
+            band = sorted(((by, x, w) for by, items in body if lo <= by < hi
+                           for x, w in items))
+            cells = ["", "", "", ""]
+            for _by, x, w in band:
+                ci = 0
+                for j in range(4):
+                    if x >= bounds[j] - 3.0:
+                        ci = j
+                cells[ci] = (cells[ci] + " " + w).strip()
+            name = clean(cells[0])
+            if not name or name.isupper():
+                continue
+            # The per-purchaser watermark's "(Order" token sits inside the name
+            # window, so it anchors like a row. Same furniture rule as every other
+            # parser: refuse it by content, never import it.
+            if re.fullmatch(r"\d+", name) or "Order #" in name or "(Order" in name:
+                continue
+            out.append({"name": name, "buy": num(cells[1]), "sell": num(cells[2]),
+                        "effect": clean(cells[3]), "page": printed})
+        return out
+
+    # --- the rotated gear list ----------------------------------------------
+
+    def gear_page(self, printed):
+        ws = self.words(printed + PRINTED_OFFSET)
+        label_ws = [(x, y, w) for x, y, w in ws if x >= GEAR_LABEL_X]
+        entry_ws = [(x, y, w) for x, y, w in ws if x < GEAR_LABEL_X]
+
+        # Label rows: a rotated two-line label ("Gear" then "Power") lands as two
+        # words on one row at descending x.
+        labels = []
+        for y, items in self.rows(label_ws):
+            text = " ".join(w for _x, w in sorted(items, key=lambda t: -t[0]))
+            if text in GEAR_LABELS:
+                labels.append((y, text))
+        if [t for _y, t in labels] != list(GEAR_LABELS):
+            return [], [f"p.{printed}: gear labels read as {[t for _y, t in labels]}"]
+
+        # Entry anchors: the name band's FIRST row carries every gear's first name
+        # word, one per column -- and a gear whose name WRAPS puts its second line on
+        # that same row, ~10pt left ("(Masterwork)" beside "Katana"). Cluster anchors
+        # closer than the column pitch so a wrapped name is one entry, not two.
+        name_y = labels[0][0]
+        anchor_xs = sorted(x for x, y, _w in entry_ws if abs(y - name_y) <= 3.0)
+        clusters = []
+        for x in anchor_xs:
+            if clusters and x - clusters[-1][-1] < 12.0:
+                clusters[-1].append(x)
+            else:
+                clusters.append([x])
+        windows = []
+        for i, cl in enumerate(clusters):
+            lo = (max(clusters[i - 1]) + min(cl)) / 2 if i \
+                else min(cl) - (min(clusters[1]) - max(cl)) / 2
+            hi = (max(cl) + min(clusters[i + 1])) / 2 if i + 1 < len(clusters) \
+                else max(cl) + (min(cl) - max(clusters[i - 1])) / 2
+            windows.append((lo, hi))
+
+        def cell(lo_x, hi_x, lo_y, hi_y):
+            """Multi-line rotated cell: lines in DESCENDING x, words in ascending y."""
+            got = [(x, y, w) for x, y, w in entry_ws
+                   if lo_x <= x < hi_x and lo_y <= y < hi_y]
+            lines = {}
+            for x, y, w in got:
+                k = next((k for k in lines if abs(k - x) <= 3.0), x)
+                lines.setdefault(k, []).append((y, w))
+            out = []
+            for k in sorted(lines, reverse=True):
+                out.extend(w for _y, w in sorted(lines[k]))
+            return clean(" ".join(out))
+
+        out = []
+        errs = []
+        # Printed order: a rotated table reads right-to-left, Knife first.
+        for lo_x, hi_x in reversed(windows):
+            d = {}
+            for li, (ly, label) in enumerate(labels):
+                if label in GEAR_SCALAR:
+                    value = cell(lo_x, hi_x, ly - 3.0, ly + 3.0)
+                else:
+                    hi_y = labels[li + 1][0] - 3.0 if li + 1 < len(labels) else 10_000.0
+                    value = cell(lo_x, hi_x, 0.0 if li == 0 else ly - 3.0, hi_y)
+                key = {"Name": "name", "Type": "type", "Buy": "buy", "Sell": "sell",
+                       "Effect": "effect", "Gear Power": "gearPower",
+                       "Phys Resist": "physResist"}[label]
+                d[key] = num(value) if label in GEAR_SCALAR else value
+            d["page"] = printed
+            out.append(d)
+        return out, errs
+
+    def run(self):
+        consumables = []
+        for p in range(ITEM_PAGES[0], ITEM_PAGES[1] + 1):
+            consumables.extend(self.item_page(p))
+        gear, errs = self.gear_page(GEAR_PAGE)
+        return consumables, gear, errs
+
+
+def verify_gear_items(consumables, gear, table_errs):
+    """Counts read off the rendered pages, plus anchors from three different rows."""
+    errs = list(table_errs)
+    warns = []
+
+    if len(consumables) != 48:
+        errs.append(f"expected 48 items in the ITEM PRICE LIST, got {len(consumables)}")
+    if len(gear) != 20:
+        errs.append(f"expected 20 entries in the GEAR PRICE LIST, got {len(gear)}")
+
+    for c in consumables:
+        where = f"{c['name']} (p.{c['page']})"
+        if not c["effect"]:
+            errs.append(f"{where}: no effect text")
+        if re.fullmatch(r"\d+", c["name"]) or "Order #" in c["name"]:
+            errs.append(f"{where}: page furniture imported as an item")
+        if c["buy"] is None and c["sell"] is None:
+            errs.append(f"{where}: neither price parsed")
+    for g in gear:
+        where = f"{g['name']} (p.{g['page']})"
+        if not g["effect"]:
+            errs.append(f"{where}: no effect text")
+        if not g["type"]:
+            errs.append(f"{where}: no type")
+
+    anchors_c = {
+        "Medicine": {"buy": 100, "sell": 50, "effect": "One ally recovers 50 HP."},
+        "Spyglass": {"sell": 50000},
+        "Bead of Life": {"buy": None, "sell": 10000},
+    }
+    by_c = {c["name"]: c for c in consumables}
+    for name, want in anchors_c.items():
+        got = by_c.get(name)
+        if not got:
+            errs.append(f"anchor missing: {name}")
+            continue
+        for k, v in want.items():
+            if got.get(k) != v:
+                errs.append(f"anchor {name}.{k}: expected {v!r}, got {got.get(k)!r}")
+
+    anchors_g = {
+        "Knife": {"type": "Weapon", "buy": 20, "sell": 10, "gearPower": 5, "physResist": None},
+        "Plate Mail": {"type": "Head/Body/Leg Armor", "physResist": 12, "sell": 5000},
+        "MP5": {"type": "Weapon (Firearm)", "gearPower": 12},
+        "Katana (Masterwork)": {"gearPower": 35, "sell": 6000},
+    }
+    by_g = {g["name"]: g for g in gear}
+    for name, want in anchors_g.items():
+        got = by_g.get(name)
+        if not got:
+            errs.append(f"anchor missing: {name}")
+            continue
+        for k, v in want.items():
+            if got.get(k) != v:
+                errs.append(f"anchor {name}.{k}: expected {v!r}, got {got.get(k)!r}")
+    return errs, warns
+
+
 def verify_magatama(entries):
     """The table and the prose are two independent printings, and the eight sample
     character sheets (p.25-32) are a third. Anchors are read off the RENDERED sample
@@ -1058,6 +1290,7 @@ def main():
     ap.add_argument("--out", default="data-local/demon-stats.json")
     ap.add_argument("--out-magatama", default="data-local/magatama-stats.json")
     ap.add_argument("--out-skills", default="data-local/skill-stats.json")
+    ap.add_argument("--out-gear", default="data-local/gear-stats.json")
     ap.add_argument("--dump-words", action="store_true",
                     help="also write data-local/word-dump.json: the raw word lists this "
                          "importer parsed, per pdf page index. The in-Foundry importer's "
@@ -1079,6 +1312,7 @@ def main():
             (BOSS_PAGES[0] + PRINTED_OFFSET, BOSS_PAGES[1] + PRINTED_OFFSET),
             (MAGATAMA_PROSE[0] + PRINTED_OFFSET, MAGATAMA_PAGE + PRINTED_OFFSET),
             (SKILL_PAGES[0] + PRINTED_OFFSET, SKILL_PAGES[1] + PRINTED_OFFSET),
+            (ITEM_PAGES[0] + PRINTED_OFFSET, GEAR_PAGE + PRINTED_OFFSET),
         ]
         pages = {}
         for lo, hi in ranges:
@@ -1172,6 +1406,27 @@ def main():
 
     write_json(args.out_skills, {"source": "Tokyo Conception Ch.4",
                                  "count": len(skills), "skills": skills})
+
+    consumables, gear, g_table_errs = GearItemImporter(importer.doc).run()
+    g_errs, g_warns = verify_gear_items(consumables, gear, g_table_errs)
+
+    print(f"\nparsed {len(consumables)} price-list items and {len(gear)} gear entries")
+    for w in g_warns:
+        print(f"  note: {w}")
+    if g_errs:
+        print(f"\nGear/item verification FAILED ({len(g_errs)} problems):")
+        for e in g_errs[:20]:
+            print("  " + e)
+        if len(g_errs) > 20:
+            print(f"  ... +{len(g_errs) - 20} more")
+        if not args.force:
+            sys.exit("\nrefusing to write the gear list. "
+                     "Re-run with --force only if you know why.")
+    else:
+        print("verification passed: counts and seven row anchors across both lists")
+
+    write_json(args.out_gear, {"source": "Tokyo Conception Ch.4 p.116-118",
+                               "consumables": consumables, "gear": gear})
 
 
 def write_json(path, payload):

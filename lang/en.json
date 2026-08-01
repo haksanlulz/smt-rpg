@@ -233,6 +233,7 @@
   "SMT.ConsumableType.Rock": "Rock",
   "SMT.ConsumableType.Bead": "Bead",
   "SMT.ConsumableType.Key": "Key Item",
+  "SMT.ConsumableType.Ammo": "Ammo",
 
   "SMT.SkillName": "Skill Name",
   "SMT.MagatamaName": "Magatama Name",
@@ -631,6 +632,7 @@
   "SMT.Importer.PackLabel": "SMT Demons",
   "SMT.Importer.PackMagatama": "SMT Magatama",
   "SMT.Importer.PackSkills": "SMT Skills",
+  "SMT.Importer.PackGear": "SMT Gear & Items",
   "SMT.Importer.PackSummary": "{count} into \"{pack}\"",
   "SMT.Importer.IgnoredFurniture": "Ignored {count} page-furniture word(s) outside the p.42 table.",
   "SMT.Importer.Writing": "Writing {pack}: {done} of {total}…",
