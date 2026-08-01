@@ -67,7 +67,7 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | **documents the system creates** | **Foundry's DataModel validates them on create** | every field written exists on that document's schema, with the right enum value and nested shape | `test/demon-skills.test.mjs` (runtime, per-type) + `contract` C12 (static, coarse) |
 | **the installed system** | **load the world and play** | boots · a sheet opens · an attack resolves end-to-end · HP persists | **manual** — §5 `system-loads-cold`, `every-chat-button-fires` |
 | manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun. |
-| **in-Foundry importer** *(demons slice BUILT 2026-08-01; UI never observed)* | **a GM points it at their own PDF in a live client** | world pack created; entry counts match the CLI importer's verified anchors; live progress; client never freezes; a failed run writes nothing | `test/importer-parity.test.mjs` — the parse is held byte-identical to the CLI reference over the same words (194/194, red-proved twice). The pdf.js EXTRACTION layer has no node rung; it is gated at runtime by the ported verifier, which refuses to write on any count/anchor/completeness failure. The dialog itself: **manual** — §5 `the-ten-minute-path`, NEVER. |
+| **in-Foundry importer** *(Demons + Magatama + Skills packs BUILT 2026-08-01; Gear pack NOT — the CLI has no gear parser yet; UI never observed)* | **a GM points it at their own PDF in a live client** | three world packs created atomically; entry counts match the CLI importer's verified anchors; live progress; client never freezes; a failed run writes nothing | `test/importer-parity.test.mjs` — all three parsers held byte-identical to the CLI reference over the same words (194/194 demons, 25/25 Magatama incl. prose grants, 248/248 skills; red-proved three ways). The p.39-41 prose is reconstructed from WORDS with a fixed column split so both sides derive grants identically. The pdf.js EXTRACTION layer has no node rung; it is gated at runtime by the ported verifiers, which refuse to write on any failure — and the p.42 rotation is extraction's sharpest untested edge. The dialog itself: **manual** — §5 `the-ten-minute-path`, NEVER. |
 | **world compendiums + drag-drop** *(1.0 oracle #4 — packs NOT BUILT)* | **a user drags an entry from the sidebar onto a scene or sheet** | the dragged document is a WORKING actor/item — stats land, skills attach, bonuses apply | document-shape suites cover the payloads (`demon-skills`, `magatama-data`, `skill-learning`); the drag itself is **manual** — §5 `every-drag-lands` |
 | **socket relay (remote play)** *(gated into 1.0 — DEFERRED with a verified blocker)* | **two connected clients: a player rolls, the GM client resolves** | the roll relays and resolves identically to a local one | **manual only** — a second client cannot be automated headless. Blocker on record: unconditional recompute drops the basic-Strike `1d10x10`; thread diceTotal/skillPower through `#onStrike`/`#onShoot` first. |
 
@@ -463,10 +463,11 @@ Check: manual — last verified: NEVER
 *(Added 2026-08-01.)*
 ```
 Given the word lists the CLI importer extracted from the operator's PDF
-When the in-Foundry parser consumes those exact words
-Then every field of every one of the 194 demons is byte-identical to the
-     CLI importer's verified output, and the ported verifier returns zero
-     errors and the same three as-printed warnings
+When the in-Foundry parsers consume those exact words
+Then every field of every record is byte-identical to the CLI importer's
+     verified output — 194 demons, 25 Magatama with their prose-stated
+     affinity grants, and 248 ch4 skill rows — and the ported verifiers
+     return zero errors and the same as-printed warnings
 Check: test/importer-parity.test.mjs  (tagged  // spec: browser-parse-matches-the-cli-parse)
 ```
 

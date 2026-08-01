@@ -155,6 +155,42 @@ function costFromCorpus(corpus) {
   return { value: 0, resource: "none" };
 }
 
+// The richest stat-block row per skill key, from an explicit demon list. The importer
+// uses this with freshly-parsed demons; the module-level cache above serves the
+// data-local path. Same preference: a row that fills the columns ch4 lacks wins.
+export function corpusIndexFrom(demons) {
+  const idx = new Map();
+  for (const d of demons ?? []) {
+    for (const row of d.skills ?? []) {
+      const k = skillKey(row.name);
+      const prior = idx.get(k);
+      if (!prior || (!prior.type && row.type)) idx.set(k, row);
+    }
+  }
+  return idx;
+}
+
+// Entries for a FULL skill pack: every skill either printing defines — the ch4 list
+// where it has one, filled from the stat blocks where it does not, plus the
+// corpus-only names the list omits (Makajamaon, the boss uniques, the talk skills
+// that demons print). Sorted by name so the pack order is stable across imports.
+export function skillPackEntries(listedSkills, demons) {
+  const corpus = corpusIndexFrom(demons);
+  const listedBy = new Map();
+  for (const s of listedSkills ?? []) {
+    const k = skillKey(s.name);
+    if (!listedBy.has(k)) listedBy.set(k, s);
+  }
+  const entries = [];
+  for (const s of listedBy.values()) {
+    entries.push({ name: s.name, listed: s, corpus: corpus.get(skillKey(s.name)) ?? null });
+  }
+  for (const [k, row] of corpus) {
+    if (!listedBy.has(k)) entries.push({ name: row.name, listed: null, corpus: row });
+  }
+  return entries.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Item payloads for a list of skill names. Names with no definition in either printing
 // are returned separately rather than created as blanks -- the two talk skills two
 // Magatama teach are exactly this, and a blank Item is worse than a stated gap.

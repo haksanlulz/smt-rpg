@@ -16,8 +16,8 @@
 //     only ever compares y values to each other (row bucketing, bands), so a
 //     consistent baseline works as well as a consistent top.
 //   * The p.42 Magatama table is printed ROTATED; rotated text carries its rotation
-//     in transform[1]/[2] and this word shape does not model it. Demons (this slice)
-//     are unrotated. The Magatama lane must extend this file before reusing it.
+//     in transform[1]/[2] and is mapped below by swapping the advance axis. It is the
+//     extraction's sharpest untested edge and its items are counted for the report.
 
 const round1 = (v) => Math.round(v * 10) / 10;
 
@@ -38,12 +38,43 @@ export async function pageWords(page) {
   const height = page.view[3] - page.view[1];
   const words = [];
   let splitItems = 0;
+  let rotatedItems = 0;
   for (const item of content.items) {
     const str = item.str ?? "";
     if (!str.trim()) continue;
-    const x = item.transform[4];
-    const y = height - item.transform[5];
+    const [a, b, , , e, f] = item.transform;
     const parts = str.split(/\s+/).filter(Boolean);
+
+    // Rotated text (the p.42 Magatama table): the transform's cosine goes to zero and
+    // the sine carries the direction. The reading axis becomes VERTICAL in page
+    // space, so the advance that splits a horizontal run across x splits a rotated
+    // one across y — and x stays fixed, which is exactly what makes each Magatama a
+    // column. b < 0 is clockwise (reads top-to-bottom, the p.42 case); b > 0 is
+    // counter-clockwise, top-normalized by the run's own advance. Both are
+    // approximations of PyMuPDF's glyph boxes and both are counted, because the
+    // downstream parse anchors on labels within the SAME extraction — consistency is
+    // what matters, not agreement with PyMuPDF's absolute values.
+    const rotated = Math.abs(a) < 0.001 && Math.abs(b) > 0.001;
+    if (rotated) {
+      rotatedItems += 1;
+      const x = e;
+      const yTop = b < 0 ? height - f : height - f - item.width;
+      if (parts.length === 1) {
+        words.push([round1(x), round1(yTop), parts[0]]);
+        continue;
+      }
+      splitItems += 1;
+      let cursor = 0;
+      for (const part of parts) {
+        const idx = str.indexOf(part, cursor);
+        words.push([round1(x), round1(yTop + item.width * (idx / str.length)), part]);
+        cursor = idx + part.length;
+      }
+      continue;
+    }
+
+    const x = e;
+    const y = height - f;
     if (parts.length === 1) {
       words.push([round1(x), round1(y), parts[0]]);
       continue;
@@ -59,7 +90,7 @@ export async function pageWords(page) {
       cursor = idx + part.length;
     }
   }
-  return { words, splitItems };
+  return { words, splitItems, rotatedItems };
 }
 
 // Extract every page index in `indices` from a loaded pdf.js document.
@@ -67,15 +98,17 @@ export async function pageWords(page) {
 export async function extractPages(doc, indices, onProgress = () => {}) {
   const pages = {};
   let splitTotal = 0;
+  let rotatedTotal = 0;
   let done = 0;
   for (const idx of indices) {
     // pdf.js numbers pages from 1; the parse keys by 0-based pdf index.
     const page = await doc.getPage(idx + 1);
-    const { words, splitItems } = await pageWords(page);
+    const { words, splitItems, rotatedItems } = await pageWords(page);
     pages[idx] = words;
     splitTotal += splitItems;
+    rotatedTotal += rotatedItems;
     done += 1;
     onProgress(done, indices.length);
   }
-  return { pages, splitTotal };
+  return { pages, splitTotal, rotatedTotal };
 }
