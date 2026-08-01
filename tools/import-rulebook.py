@@ -382,6 +382,7 @@ class Importer:
 
 MAGATAMA_PAGE = 42                     # the whole table, printed rotated 90 degrees
 MAGATAMA_PROSE = (39, 41)              # the per-Magatama paragraphs, inclusive
+PROSE_COLUMN_SPLIT = 265.0             # the p.39-41 two-column gutter (x 240-270)
 
 # Field labels run down the RIGHT of the rotated table, one per band. A bare digit in
 # that column CONTINUES the label above it ("Skill" on one line, "1" on the next), so
@@ -511,19 +512,39 @@ class MagatamaImporter:
                         f"(a Magatama column did not register): " + ", ".join(sorted(inside)[:6]))
         return entries, errs, sorted(outside)
 
+    def prose_lines(self, idx):
+        """Reading-order lines for a two-column prose page, from its WORD list.
+
+        Deliberately words-based rather than get_text(): the in-Foundry importer only
+        has words (pdf.js), and the two implementations must reconstruct the same
+        lines or the affinity grants cannot be held equal by the parity suite. The
+        columns split at a fixed x — measured off the rendered pages, where the gap
+        between columns sits at x 240-270 on all three — and each column reads
+        top-to-bottom, left column first."""
+        ws = self.words(idx)
+        lines = []
+        for column in (lambda x: x < PROSE_COLUMN_SPLIT, lambda x: x >= PROSE_COLUMN_SPLIT):
+            col = [(x, y, w) for x, y, w in ws if column(x)]
+            buckets = {}
+            for x, y, w in col:
+                k = next((k for k in buckets if abs(k - y) <= 3.0), y)
+                buckets.setdefault(k, []).append((x, w))
+            for k in sorted(buckets):
+                lines.append(" ".join(w for _x, w in sorted(buckets[k])))
+        return lines
+
     def prose_sections(self):
         """(heading, body) for the p.39-41 prose, split on its ALL-CAPS headings."""
-        text = "\n".join(self.doc[p + PRINTED_OFFSET].get_text()
-                         for p in range(MAGATAMA_PROSE[0], MAGATAMA_PROSE[1] + 1))
         sections, head, buf = [], None, []
-        for line in text.splitlines():
-            s = line.strip()
-            if s and HEADING.fullmatch(s):
-                if head is not None:
-                    sections.append((head, " ".join(buf)))
-                head, buf = s, []
-            elif head is not None and s:
-                buf.append(s)
+        for p in range(MAGATAMA_PROSE[0], MAGATAMA_PROSE[1] + 1):
+            for line in self.prose_lines(p + PRINTED_OFFSET):
+                s = line.strip()
+                if s and HEADING.fullmatch(s):
+                    if head is not None:
+                        sections.append((head, " ".join(buf)))
+                    head, buf = s, []
+                elif head is not None and s:
+                    buf.append(s)
         if head is not None:
             sections.append((head, " ".join(buf)))
         return sections
