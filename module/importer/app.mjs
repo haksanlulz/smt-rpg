@@ -14,10 +14,12 @@ import { GENERAL_PAGES, BOSS_PAGES, PRINTED_OFFSET, parseDemons, verifyDemons }
 import { MAGATAMA_PAGE, MAGATAMA_PROSE, parseMagatama, verifyMagatama }
   from "./magatama-parse.mjs";
 import { SKILL_PAGES, parseSkillList, verifySkillList } from "./skill-parse.mjs";
+import { ITEM_PAGES, GEAR_PAGE, parseGearItems, verifyGearItems } from "./gear-parse.mjs";
 import { loadPdfjs, extractPages } from "./extract.mjs";
 import { buildDemonSystem, buildDemonSkills } from "../helpers/compendium.mjs";
 import { buildMagatamaSystem } from "../helpers/magatama-compendium.mjs";
 import { buildSkillSystem, skillPackEntries } from "../helpers/skill-compendium.mjs";
+import { buildGearItemPayloads } from "../helpers/gear-compendium.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -28,6 +30,7 @@ const PACKS = [
   { name: "smt-demons", type: "Actor", labelKey: "SMT.Importer.PackLabel" },
   { name: "smt-magatama", type: "Item", labelKey: "SMT.Importer.PackMagatama" },
   { name: "smt-skills", type: "Item", labelKey: "SMT.Importer.PackSkills" },
+  { name: "smt-gear", type: "Item", labelKey: "SMT.Importer.PackGear" },
 ];
 const WRITE_CHUNK = 25;
 
@@ -134,6 +137,7 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     for (let p = BOSS_PAGES[0]; p <= BOSS_PAGES[1]; p++) indices.push(p + PRINTED_OFFSET);
     for (let p = MAGATAMA_PROSE[0]; p <= MAGATAMA_PAGE; p++) indices.push(p + PRINTED_OFFSET);
     for (let p = SKILL_PAGES[0]; p <= SKILL_PAGES[1]; p++) indices.push(p + PRINTED_OFFSET);
+    for (let p = ITEM_PAGES[0]; p <= GEAR_PAGE; p++) indices.push(p + PRINTED_OFFSET);
     const maxIndex = Math.max(...indices);
 
     // A PDF that does not even have the pages cannot be the book. Refuse before
@@ -157,14 +161,16 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     const demons = parseDemons(pages);
     const { entries: magatama, errs: tableErrs, ignored } = parseMagatama(pages);
     const { skills, junk } = parseSkillList(pages);
+    const { consumables, gear, errs: gearTableErrs } = parseGearItems(pages);
 
-    // --- verify all three; a failure ANYWHERE has written nothing -----------
+    // --- verify all four; a failure ANYWHERE has written nothing ------------
     await this.#setStatus(i18n.localize("SMT.Importer.Verifying"));
     const dv = verifyDemons(demons);
     const mv = verifyMagatama(magatama);
     const sv = verifySkillList(skills, demons, magatama, junk);
-    const errs = [...dv.errs, ...tableErrs, ...mv.errs, ...sv.errs];
-    const warns = [...dv.warns, ...mv.warns, ...sv.warns];
+    const gv = verifyGearItems(consumables, gear, gearTableErrs);
+    const errs = [...dv.errs, ...tableErrs, ...mv.errs, ...sv.errs, ...gv.errs];
+    const warns = [...dv.warns, ...mv.warns, ...sv.warns, ...gv.warns];
     if (errs.length) {
       // The shareable diagnostic: every error verbatim, count first. This is the
       // wrong-PDF path and the layout-drift path; both refuse rather than half-import.
@@ -207,6 +213,9 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     });
     const skillPayloads = skillPackEntries(skills, demons).map(entry =>
       ({ name: entry.name, type: "skill", system: buildSkillSystem(entry) }));
+    const { payloads: gearPayloads, caveats: gearCaveats } =
+      buildGearItemPayloads(consumables, gear);
+    caveats.push(...gearCaveats);
 
     // --- write, pack by pack ------------------------------------------------
     const CompendiumCollection = foundry.documents.collections.CompendiumCollection;
@@ -215,6 +224,7 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
       [PACKS[0], "Actor", demonPayloads],
       [PACKS[1], "Item", magatamaPayloads],
       [PACKS[2], "Item", skillPayloads],
+      [PACKS[3], "Item", gearPayloads],
     ];
     for (const [meta, docType, payloads] of jobs) {
       await this.#setStatus(i18n.localize("SMT.Importer.CreatingPack"));

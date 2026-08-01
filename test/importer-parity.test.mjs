@@ -19,6 +19,12 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SMT } from "../module/config.mjs";
+
+if (typeof Math.clamp !== "function") {
+  Math.clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+}
+globalThis.CONFIG = { SMT };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -226,6 +232,114 @@ if (existsSync(SKILLS)) {
   }
 } else {
   console.log("  SKIPPED: skill-stats.json absent — skill parity leg did not run.");
+}
+
+// ------------------------------------------- gear + item price lists (48 + 20)
+
+const { parseGearItems, verifyGearItems } = await import("../module/importer/gear-parse.mjs");
+const { classifyGear, buildGearSystem, buildConsumableSystem, buildGearItemPayloads } =
+  await import("../module/helpers/gear-compendium.mjs");
+
+// Pure classification legs — the routing rules are decisions, so they are pinned.
+eq(classifyGear("Weapon").gearType, "weapon-melee", "Weapon routes to melee");
+eq(classifyGear("Weapon (Firearm)").gearType, "weapon-ranged", "Firearm routes to ranged");
+eq(classifyGear("Weapon (Grenade)"), { route: "consumable", consumableType: "rock" },
+  "a grenade is a single-use attack item — the Rock family, wherever it is printed");
+eq(classifyGear("Ammo"), { route: "consumable", consumableType: "ammo" },
+  "Bullets are the new ammo consumable type");
+eq(classifyGear("Head Armor"), { route: "gear", gearType: "armor", slot: "Head" },
+  "armor keeps its printed slot");
+eq(classifyGear("Head/Body/Leg Armor").slot, "Head/Body/Leg", "the full-body slot survives");
+
+const GEARDATA = join(ROOT, "data-local/gear-stats.json");
+if (existsSync(GEARDATA)) {
+  const refGear = JSON.parse(readFileSync(GEARDATA, "utf8"));
+  const { consumables, gear, errs: gErrs } = parseGearItems(dump.pages);
+
+  eq(gErrs, [], "gear table parse reports no errors");
+  eq(consumables.length, refGear.consumables.length,
+    `port parses ${refGear.consumables.length} price-list items`);
+  eq(gear.length, refGear.gear.length, `port parses ${refGear.gear.length} gear entries`);
+
+  let gIdentical = 0;
+  const cByName = new Map(consumables.map(c => [c.name, c]));
+  for (const ref of refGear.consumables) {
+    const got = cByName.get(ref.name);
+    if (JSON.stringify(got) === JSON.stringify(ref)) { passed++; gIdentical++; }
+    else {
+      failed++;
+      failures.push(`item ${ref.name} diverges: port=${JSON.stringify(got)?.slice(0, 120)}`);
+    }
+  }
+  const gByName = new Map(gear.map(g => [g.name, g]));
+  for (const ref of refGear.gear) {
+    const got = gByName.get(ref.name);
+    if (JSON.stringify(got) === JSON.stringify(ref)) { passed++; gIdentical++; }
+    else {
+      failed++;
+      failures.push(`gear ${ref.name} diverges: port=${JSON.stringify(got)?.slice(0, 120)}`);
+    }
+  }
+  console.log(`  parity: ${gIdentical}/${refGear.consumables.length + refGear.gear.length} `
+    + `gear+items byte-identical to the reference`);
+
+  const gv = verifyGearItems(consumables, gear, gErrs);
+  eq(gv.errs, [], "ported gear verifier: zero errors");
+
+  // Builder shape checks against the schemas, same discipline as skill-learning:
+  // field names parsed out of the data models, enums resolved from CONFIG.
+  const gearSchema = new Set(
+    [...readFileSync(join(ROOT, "module/data/gear-data.mjs"), "utf8")
+      .matchAll(/^\s{6}([a-zA-Z]+):\s*new\s+\w+Field/gm)].map(m => m[1]));
+  const consumableSchema = new Set(
+    [...readFileSync(join(ROOT, "module/data/consumable-data.mjs"), "utf8")
+      .matchAll(/^\s{6}([a-zA-Z]+):\s*new\s+\w+Field/gm)].map(m => m[1]));
+  ok(gearSchema.has("slot"), "the gear schema declares the new slot field");
+
+  const { payloads } = buildGearItemPayloads(consumables, gear);
+  eq(payloads.length, consumables.length + gear.length, "every printed row builds a payload");
+  for (const p of payloads) {
+    const schema = p.type === "gear" ? gearSchema : consumableSchema;
+    for (const key of Object.keys(p.system)) {
+      ok(schema.has(key), `${p.name}: writes "${key}", which the ${p.type} schema declares`);
+    }
+    if (p.type === "consumable") {
+      ok(Object.keys(SMT.consumableTypes).includes(p.system.consumableType),
+        `${p.name}: consumableType "${p.system.consumableType}" is declared`);
+    } else {
+      ok(Object.keys(SMT.gearTypes).includes(p.system.gearType),
+        `${p.name}: gearType "${p.system.gearType}" is declared`);
+    }
+  }
+
+  // Row anchors through the BUILDER — the mechanically-load-bearing conversions.
+  const byPayload = new Map(payloads.map(p => [p.name, p]));
+  eq(byPayload.get("Knife").system.powerBonus, 5, "Knife carries its printed power");
+  eq(byPayload.get("MP5").system.ammo, { max: 30, value: 30 },
+    "MP5's Ammo Count is read out of the effect text");
+  eq(byPayload.get("Tricorne Hat").system.resistBonus.magical, 2,
+    "Tricorne's magic resistance is read out of the effect text");
+  eq(byPayload.get("Plate Mail").system.resistBonus.physical, 12, "Plate Mail's printed resist");
+  eq(byPayload.get("Hand Grenade").type, "consumable", "a grenade builds as a consumable");
+  eq(byPayload.get("Hand Grenade").system.attackElement, "phys", "…attacking with Phys");
+  ok(byPayload.get("Hand Grenade").system.attackAll, "…all enemies");
+  eq(byPayload.get("Bullets x10").system.consumableType, "ammo", "Bullets build as ammo");
+  eq(byPayload.get("Medicine").system.healHP, 50, "Medicine heals its printed 50");
+  ok(byPayload.get("Soma").system.healFull, "Soma is a full heal");
+  ok(byPayload.get("Bead Chain").system.healAllAllies, "Bead Chain hits the whole party");
+  ok(byPayload.get("Revival Bead").system.revive && !byPayload.get("Revival Bead").system.reviveFull,
+    "Revival Bead revives at 1 HP");
+  ok(byPayload.get("Balm of Rising").system.reviveFull, "Balm of Rising revives at full");
+  eq(byPayload.get("Dis-Poison").system.curesAilment, "poison", "Dis-Poison cures poison");
+  eq(byPayload.get("Megido Rock").system.attackPower, 30, "Megido Rock's +30 is read");
+  eq(byPayload.get("Megido Rock").system.attackElement, "almighty", "…as Almighty");
+  ok(byPayload.get("Spyglass").system.reusable, "Spyglass is not discarded on use");
+  const sacred = buildConsumableSystem(consumables.find(c => c.name === "Sacred Water"));
+  eq(sacred.system.curesAilment ?? "none", "none",
+    "Sacred Water's three cures cannot fit the one-ailment field…");
+  eq(sacred.caveats.length, 1, "…and that is a caveat, not a silent drop");
+} else {
+  console.log("  SKIPPED: gear-stats.json absent — gear parity leg did not run.");
 }
 
 console.log(`\nsmt-rpg importer-parity tests: ${passed} passed, ${failed} failed`);

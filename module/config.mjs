@@ -164,7 +164,8 @@ SMT.consumableTypes = {
   gem: "SMT.ConsumableType.Gem",
   rock: "SMT.ConsumableType.Rock",
   bead: "SMT.ConsumableType.Bead",
-  key: "SMT.ConsumableType.Key"
+  key: "SMT.ConsumableType.Key",
+  ammo: "SMT.ConsumableType.Ammo"
 };
 
 // HP/MP = (vitality|magic + level) x multiplier (p.36), keyed by actor type.
