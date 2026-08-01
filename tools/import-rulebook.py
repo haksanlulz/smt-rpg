@@ -1037,6 +1037,11 @@ def main():
     ap.add_argument("--out", default="data-local/demon-stats.json")
     ap.add_argument("--out-magatama", default="data-local/magatama-stats.json")
     ap.add_argument("--out-skills", default="data-local/skill-stats.json")
+    ap.add_argument("--dump-words", action="store_true",
+                    help="also write data-local/word-dump.json: the raw word lists this "
+                         "importer parsed, per pdf page index. The in-Foundry importer's "
+                         "parse is a port of this one, and the parity suite runs the port "
+                         "over these exact words and diffs the output against --out.")
     ap.add_argument("--force", action="store_true",
                     help="write even if verification fails (not recommended)")
     args = ap.parse_args()
@@ -1045,6 +1050,27 @@ def main():
         sys.exit(f"no such file: {args.pdf}")
 
     importer = Importer(args.pdf)
+
+    if args.dump_words:
+        # Every page range any importer reads, keyed by PDF INDEX (printed + 2).
+        ranges = [
+            (GENERAL_PAGES[0] + PRINTED_OFFSET, GENERAL_PAGES[1] + PRINTED_OFFSET),
+            (BOSS_PAGES[0] + PRINTED_OFFSET, BOSS_PAGES[1] + PRINTED_OFFSET),
+            (MAGATAMA_PROSE[0] + PRINTED_OFFSET, MAGATAMA_PAGE + PRINTED_OFFSET),
+            (SKILL_PAGES[0] + PRINTED_OFFSET, SKILL_PAGES[1] + PRINTED_OFFSET),
+        ]
+        pages = {}
+        for lo, hi in ranges:
+            for idx in range(lo, hi + 1):
+                if idx not in pages:
+                    pages[idx] = importer.words(idx)
+        write_json("data-local/word-dump.json", {
+            "source": "PyMuPDF word lists, rounded to 0.1, keyed by pdf index",
+            "printedOffset": PRINTED_OFFSET,
+            "generalPages": list(GENERAL_PAGES),
+            "bossPages": list(BOSS_PAGES),
+            "pages": pages,
+        })
     demons = importer.run()
     errs, warns = verify(demons)
 
