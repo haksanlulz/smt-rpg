@@ -550,7 +550,15 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
 
   const paths = new Set();
   for (const [, src] of SRC) {
-    for (const m of src.matchAll(/["'`]system\.([a-zA-Z][a-zA-Z0-9_]*)/g)) paths.add(m[1]);
+    for (const m of src.matchAll(/["'`]system\.([a-zA-Z][a-zA-Z0-9_-]*)/g)) {
+      // Foundry's socket channel for a system is MANDATED to be "system.<id>" —
+      // helpers/socket.mjs carries "system.smt-rpg", which is a wire address, not a
+      // schema path. Matched with the hyphen included (no schema field can carry
+      // one) and excluded by exact id, so a genuinely wrong field named "smt"
+      // would still land here.
+      if (m[1] === "smt-rpg") continue;
+      paths.add(m[1]);
+    }
   }
   ok(paths.size >= 10, `C12b system.* write paths found (${paths.size} >= 10)`);
   eq([...paths].filter(p => !declared.has(p)).sort(), [],

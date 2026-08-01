@@ -69,7 +69,7 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun. |
 | **in-Foundry importer** *(all four packs BUILT 2026-08-01 — Demons, Magatama, Skills, Gear & Items; UI never observed)* | **a GM points it at their own PDF in a live client** | four world packs created atomically; entry counts match the CLI importer's verified anchors; live progress; client never freezes; a failed run writes nothing | `test/importer-parity.test.mjs` — all four parsers held byte-identical to the CLI reference over the same words (194/194 demons, 25/25 Magatama incl. prose grants, 248/248 skills, 68/68 gear+items; red-proved four ways). The p.39-41 prose is reconstructed from WORDS with a fixed column split so both sides derive grants identically; p.118 is a second ROTATED table with multi-line cells reading right-to-left. The pdf.js EXTRACTION layer has no node rung; it is gated at runtime by the ported verifiers, which refuse to write on any failure — the two rotated pages are extraction's sharpest untested edge. The dialog itself: **manual** — §5 `the-ten-minute-path`, NEVER. |
 | **world compendiums + drag-drop** *(1.0 oracle #4 — packs NOT BUILT)* | **a user drags an entry from the sidebar onto a scene or sheet** | the dragged document is a WORKING actor/item — stats land, skills attach, bonuses apply | document-shape suites cover the payloads (`demon-skills`, `magatama-data`, `skill-learning`); the drag itself is **manual** — §5 `every-drag-lands` |
-| **socket relay (remote play)** *(gated into 1.0 — DEFERRED with a verified blocker)* | **two connected clients: a player rolls, the GM client resolves** | the roll relays and resolves identically to a local one | **manual only** — a second client cannot be automated headless. Blocker on record: unconditional recompute drops the basic-Strike `1d10x10`; thread diceTotal/skillPower through `#onStrike`/`#onShoot` first. |
+| **socket relay (remote play)** *(BUILT 2026-08-01; never run with a second client)* | **two connected clients: a player clicks, the active GM's client resolves** | every cross-permission action (dodge/apply, halve, counter, negotiation, buff/dispel/provoke) resolves identically to a solo-GM click; ids-only payloads; refused loudly with no GM connected | `test/socket-relay.test.mjs` — the pure core (routing, registry, payload rule) with the ids-only invariant red-proved both ways. **The recorded blocker was found already closed**: `resolveAttack` reads `rawPower` from the flag and the 07-28 refactor threaded `basePower: rw.power` through both strike paths — the OPEN line had gone stale again. The two-client exchange itself: **manual only**, NEVER run. |
 
 > **Twice now, every node suite has been green while a feature was completely broken** — halve-damage (2026-06-07) and demon creation (2026-07-27). Both times the code was correct as JavaScript and wrong as *Foundry*. That is not bad luck; it is the shape of this project's blind spot, and it is why §1 clause 4 forbids reporting an artifact-affecting change as working.
 
@@ -457,6 +457,25 @@ Check: manual — last verified: NEVER
 ```
 
 **Why this is its own row.** The 2026-06-07 escape was reported *from the card* — the symptom was HP moving wrongly, not a stack trace. The card is the only surface most defects in this system ever present on, and nothing checks that it agrees with the sheet.
+
+### SPEC relayed-payloads-carry-ids-only
+
+*(Added 2026-08-01 with the remote-play relay.)*
+
+```
+Given a player client relaying a combat action to the active GM
+When the socket payload is built and when the GM-side handler receives it
+Then the payload carries only message ids, token uuids, enum keys and a row
+     index — never a damage, power, HP or rate value — and the handler
+     re-reads every number from the flags and documents it already trusts
+And a payload with a smuggled extra field, a wrong type, or an unknown
+     action is rejected before any handler runs
+Check: test/socket-relay.test.mjs  (tagged  // spec: relayed-payloads-carry-ids-only)
+```
+
+**Why this is the load-bearing rule of the relay.** Chat flags are already treated as author-forgeable — the `_sanitize*` helpers exist because of it. A socket message is MORE forgeable: any client can emit anything on the system channel. The design answer is that the wire carries no numbers at all: a relayed action is "press button N on message M", and the executing GM client derives every value the same way it would have derived it locally. A forged payload can at worst press a button that exists — and the registry/validator reject even that unless the shape is exact. The suite also pins the exactly-one-executor guard (`activeGM?.isSelf`), which is what keeps two connected GMs from double-applying damage.
+
+**What no node rung covers:** the actual two-client exchange. §2's socket-relay row is manual-only; nothing here has ever run with a second connected client.
 
 ### SPEC browser-parse-matches-the-cli-parse
 

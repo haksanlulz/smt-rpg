@@ -467,10 +467,8 @@ export default class SMTItem extends Item {
 
   // Buff/debuff/dispel (p.96): auto-succeed, AoE by allegiance. Dispel strips its group; buff stacks per target.
   async _castBuff(actor) {
-    const {
-      applyBuff, clearBuffGroup, postBuffCard, postEffectNotice
-    } = await import("../helpers/effects.mjs");
-    const { getAutoTargets } = await import("../helpers/combat.mjs");
+    const { getAutoTargets, getTokenUuid } = await import("../helpers/combat.mjs");
+    const { runRelayed } = await import("../helpers/socket.mjs");
 
     const key = this.system.buffEffect;
     const dispelGroup = CONFIG.SMT.buffDispels[key];
@@ -479,34 +477,31 @@ export default class SMTItem extends Item {
     // Buffs/Dekunda hit allies (caster included); debuffs/Dekaja hit foes. getAutoTargets drops self, so union it back.
     const affectsAllies = dispelGroup === "nda" || def?.sign > 0;
     const tokens = getAutoTargets(actor, affectsAllies ? "All Allies" : "All Foes");
-    const targets = tokens.map(t => t.actor).filter(Boolean);
-    if (affectsAllies && !targets.includes(actor)) targets.unshift(actor);
+    const uuids = tokens.map(t => t.document?.uuid).filter(Boolean);
+    const selfUuid = getTokenUuid(actor);
+    if (affectsAllies && selfUuid && !uuids.includes(selfUuid)) uuids.unshift(selfUuid);
 
-    if (!targets.length) {
+    if (!uuids.length) {
       ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
       return;
     }
 
-    if (dispelGroup) {
-      let cleared = 0;
-      for (const target of targets) cleared += await clearBuffGroup(target, dispelGroup);
-      const label = game.i18n.localize(CONFIG.SMT.buffEffectChoices[key]);
-      await postEffectNotice(actor, game.i18n.format("SMT.EffectMsg.Dispelled", { skill: label, count: cleared }));
-      return;
-    }
-
-    for (const target of targets) {
-      const summary = await applyBuff(target, key, { source: actor });
-      await postBuffCard(actor, summary);
-    }
+    // Cross-ownership: a debuff creates Active Effects on the other side's actors, so
+    // the whole application is routed — a GM runs it locally, a player's client hands
+    // the id list to the active GM. Ids only; the effect itself derives from CONFIG.
+    await runRelayed(dispelGroup ? "buffClear" : "buffCast", {
+      casterTokenUuid: selfUuid ?? "",
+      targetTokenUuids: uuids,
+      key
+    });
   }
 
   // Provoke (p.105): auto-success; one 1d10 debuffs every foe (−resist, +phys/mag power).
   async _castProvoke(actor) {
-    const { getAutoTargets } = await import("../helpers/combat.mjs");
-    const { applyProvoke } = await import("../helpers/effects.mjs");
-    const targets = getAutoTargets(actor, "All Foes").map(t => t.actor).filter(Boolean);
-    if (!targets.length) {
+    const { getAutoTargets, getTokenUuid } = await import("../helpers/combat.mjs");
+    const { runRelayed } = await import("../helpers/socket.mjs");
+    const uuids = getAutoTargets(actor, "All Foes").map(t => t.document?.uuid).filter(Boolean);
+    if (!uuids.length) {
       ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
       return;
     }
@@ -516,17 +511,13 @@ export default class SMTItem extends Item {
     );
     await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
 
-    const lines = [];
-    for (const foe of targets) {
-      const res = await applyProvoke(foe, { source: actor });
-      if (res) lines.push(`${foe.name}: −${res.amount} resist, +${res.amount} power`);
-    }
-    if (lines.length) {
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="smt-roll effect-notice"><p>${lines.join("<br>")}</p></div>`
-      });
-    }
+    // Cross-ownership: every foe gains an Active Effect, so the application routes
+    // through the relay like the other buffs. The intro card above stays local — a
+    // player may create chat messages.
+    await runRelayed("provoke", {
+      casterTokenUuid: getTokenUuid(actor) ?? "",
+      targetTokenUuids: uuids
+    });
   }
 
   // Talk skill (p.72): approach begins a negotiation with one demon; support posts an interjection notice.
