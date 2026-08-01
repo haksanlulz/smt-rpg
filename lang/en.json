@@ -314,6 +314,7 @@
   "SMT.Damage.Reflected": "Reflected",
 
   "SMT.Warnings.NoTargets": "No targets selected — damage not applied.",
+  "SMT.Warnings.NoActiveGM": "No GM is connected — this action needs one to resolve.",
   "SMT.Warnings.NoItems": "No items remaining.",
   "SMT.Warnings.NoAmmo": "Out of ammo! Use an action to reload.",
   "SMT.Warnings.NoRangedWeapon": "No firearm equipped.",

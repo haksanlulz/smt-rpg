@@ -14,6 +14,7 @@ import SMTActorSheet from "./module/sheets/actor-sheet.mjs";
 import SMTNPCSheet from "./module/sheets/npc-sheet.mjs";
 import SMTItemSheet from "./module/sheets/item-sheet.mjs";
 import SMTImporterApp from "./module/importer/app.mjs";
+import { registerRelay, runRelayed } from "./module/helpers/socket.mjs";
 
 // Token-HUD ailment icons, keyed by CONFIG.SMT.ailments id (p.67-68). Mirror system.ailment; see syncAilmentStatus.
 const AILMENT_ICONS = {
@@ -236,6 +237,9 @@ Hooks.once("ready", () => {
   import("./module/helpers/compendium.mjs").then(m => m.loadDemonStats());
   import("./module/helpers/magatama-compendium.mjs").then(m => m.loadMagatamaStats());
   import("./module/helpers/skill-compendium.mjs").then(m => m.loadSkillStats());
+  // The GM-proxy relay for remote play: player clicks on cross-permission buttons
+  // are executed by the active GM's client. See helpers/socket.mjs for the payload rule.
+  registerRelay();
 });
 
 // Chat message button handlers
@@ -485,7 +489,7 @@ async function _bindAttackButtons(message, html) {
     html.querySelectorAll(".attack-buttons").forEach(el => el.remove());
     return;
   }
-  const { resolveAttack, getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
+  const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
 
   // Bind each target row independently; only the GM/target-owner may resolve that row.
   for (const rowEl of html.querySelectorAll(".attack-target-row")) {
@@ -513,12 +517,12 @@ async function _bindAttackButtons(message, html) {
     dodgeBtn?.addEventListener("click", async (event) => {
       event.preventDefault();
       disableBoth();
-      await resolveAttack(message, index, false);
+      await runRelayed("resolveAttack", { messageId: message.id, index, skipDodge: false });
     });
     applyBtn?.addEventListener("click", async (event) => {
       event.preventDefault();
       disableBoth();
-      await resolveAttack(message, index, true);
+      await runRelayed("resolveAttack", { messageId: message.id, index, skipDodge: true });
     });
   }
 }
@@ -574,8 +578,7 @@ async function _bindFateDamageButtons(message, html) {
   halveBtn.textContent = game.i18n.localize("SMT.FateHalveDamage");
   halveBtn.addEventListener("click", async (event) => {
     event.preventDefault();
-    const { resolveHalveDamage } = await import("./module/helpers/combat.mjs");
-    await resolveHalveDamage(message, message.getFlag("smt-rpg", "damageData"));
+    await runRelayed("halveDamage", { messageId: message.id });
   });
 
   container.append(halveBtn);
@@ -596,8 +599,7 @@ async function _bindCounterButton(message, html) {
   btn.addEventListener("click", async (event) => {
     event.preventDefault();
     btn.disabled = true;
-    const { resolveCounterAttack } = await import("./module/helpers/combat.mjs");
-    await resolveCounterAttack(message, message.getFlag("smt-rpg", "counterData"));
+    await runRelayed("counterAttack", { messageId: message.id });
   });
 }
 
@@ -629,19 +631,18 @@ async function _bindNegotiationButtons(message, html) {
   for (const btn of buttons) {
     btn.addEventListener("click", async (event) => {
       event.preventDefault();
-      const { resolveDemand, resolveNegotiationOutcome } = await import("./module/helpers/negotiation.mjs");
       if (btn.dataset.action === "negotiation-demand") {
         // Disable just this button briefly so a double-click can't double-post the demand.
         btn.disabled = true;
         try {
-          await resolveDemand(message, btn.dataset.kind);
+          await runRelayed("negotiationDemand", { messageId: message.id, kind: btn.dataset.kind });
         } finally {
           btn.disabled = false;
         }
       } else {
         // Outcome spends the card: disable every outcome button up front against a race.
         for (const o of outcomeBtns) o.disabled = true;
-        await resolveNegotiationOutcome(message, btn.dataset.outcome);
+        await runRelayed("negotiationOutcome", { messageId: message.id, outcome: btn.dataset.outcome });
       }
     });
   }
