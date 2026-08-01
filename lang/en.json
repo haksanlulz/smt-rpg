@@ -299,6 +299,11 @@
   "SMT.FateReroll": "Fate: Reroll",
   "SMT.FateBoostTN": "Fate: Boost TN (+20%)",
   "SMT.FateHalveDamage": "Fate: Halve Damage",
+  "SMT.Warnings.FateImmune": "Fate points cannot reduce this damage.",
+  "SMT.KillCondition.Killed": "{target} is destroyed outright ({ailment}, {rate}%).",
+  "SMT.KillCondition.Resisted": "{target} resists the instant kill ({ailment}, {rate}%).",
+  "SMT.KillCondition.Note": "Instant Kill",
+  "SMT.Damage.FateImmune": "Fate points cannot reduce this amount.",
 
   "SMT.Damage.Raw": "Power",
   "SMT.Damage.AfterAffinity": "After Affinity",

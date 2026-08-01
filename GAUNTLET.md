@@ -458,6 +458,30 @@ Check: manual — last verified: NEVER
 
 **Why this is its own row.** The 2026-06-07 escape was reported *from the card* — the symptom was HP moving wrongly, not a stack trace. The card is the only surface most defects in this system ever present on, and nothing checks that it agrees with the sheet.
 
+### SPEC attack-effect-riders-resolve-as-printed
+
+*(Added 2026-08-01.)*
+
+```
+Given the printed attack riders of p.98 and p.102-103 — fractional HP,
+      fate-point immunity, HP/MP drains, and ailment-conditional kills
+When a skill carrying one is imported, its check is made, and its pending
+     attack resolves
+Then the rider does exactly what its sentence says: the fraction reads the
+     target's current HP and rounding never kills; the halve button is
+     neither offered nor honored where the book forbids it; the caster
+     recovers what the target actually lost; and a conditional kill fires
+     only on the pre-hit ailment it names
+And a rider is carried as itself — Zan's kill-on-Stoned never degrades
+     into an unconditional death ailment, and Sol Niger, which the book
+     prints bare, gains no fate immunity nobody wrote
+Check: test/attack-effects.test.mjs  (tagged  // spec: attack-effect-riders-resolve-as-printed)
+```
+
+**The two dishonesty modes this spec pins.** A rider parsed *almost* right is worse than one not parsed: an unguarded read of "50% chance to Instant Kill a Stoned target" produces a skill that kills anyone half the time, and an over-eager immunity list (the earlier working notes had Sol Niger FP-immune; the book prints it bare) quietly widens a rule the operator never wrote. Both directions are ESCAPE-tagged assertions, and both were planted red: dropping the ailment-suppression guard reds 5, removing the immunity gate reds 1, flipping the survivor rounding to floor — which would let "reduced to half" kill a 1-HP target — reds 3.
+
+**Interactions recorded as inferred, not decided silently:** the affinity absolutes still gate a fractional hit (Null Light stops Thunderclap; nothing reflects off a Repel because there is no power), while weak/strong and resistance do not scale a fraction; and rounding resolves in the target's favor. The book states none of this; each carries an `[inferred]` comment at the code site.
+
 ### SPEC relayed-payloads-carry-ids-only
 
 *(Added 2026-08-01 with the remote-play relay.)*

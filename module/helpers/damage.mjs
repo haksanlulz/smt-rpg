@@ -149,3 +149,50 @@ export function halveDamageResult({ hpBefore, hpNow, hpMax, currentDamage, divis
 
   return { newDamage, hpAfter: Math.min(Math.max(base, 0), max) };
 }
+
+// Fractional-HP attacks (p.102-103): the target's CURRENT HP decides the outcome.
+// Returns the HP the target ends on. Rounding is the book's silence, resolved UP —
+// "reduced to half" of 1 HP stays 1 rather than becoming a kill, because the skills
+// that kill say "reduced to 1 HP" in as many words and nothing else should do it by
+// rounding. [inferred — the book prints no rounding rule]
+export function fractionalEnd(hpBefore, kind, pct = 20) {
+  const hp = _sanitize(hpBefore);
+  if (hp <= 0) return 0;
+  switch (kind) {
+    case "half": return Math.ceil(hp / 2);
+    case "toPercent": {
+      const p = Number.isFinite(pct) ? Math.min(Math.max(Math.floor(pct), 1), 99) : 20;
+      return Math.min(Math.ceil((hp * p) / 100), hp);
+    }
+    case "toOne": return 1;
+    default: return hp;
+  }
+}
+
+// Whether the Halve Damage button may be OFFERED on a damage card. One predicate so
+// the render gate and the resolver guard cannot drift apart: "Fate points cannot
+// reduce this amount" (p.102-103) is a property of the card, not of the clicker.
+export function canOfferHalve({ fpImmune, resolved, currentDamage, fatePoints } = {}) {
+  if (fpImmune) return false;
+  if (resolved) return false;
+  if (!(_sanitize(currentDamage) > 0)) return false;
+  return _sanitize(fatePoints) > 0;
+}
+
+// Conditional instant kill riding an attack (Zan group p.98, Eternal Rest): fires
+// only when the target's ailment BEFORE the hit matches the printed condition.
+export function killConditionMet(condition, targetAilmentBefore) {
+  const ailment = condition?.ailment ?? "none";
+  const rate = Number.isFinite(condition?.rate) ? condition.rate : 0;
+  if (ailment === "none" || rate <= 0) return false;
+  return ailment === String(targetAilmentBefore ?? "none");
+}
+
+// Drain skills (p.103): the caster recovers what the target ACTUALLY lost, per the
+// p.98 worked example (recovery measured after resistance, and an overkill drains
+// only the HP that was there). MP has no overkill concept beyond its floor at 0.
+export function drainAmounts({ hpDealt = 0, mpBefore = 0, finalDamage = 0, drainsHP = false, drainsMP = false }) {
+  const hpDrained = drainsHP ? _sanitize(hpDealt) : 0;
+  const mpDrained = drainsMP ? Math.min(_sanitize(mpBefore), _sanitize(finalDamage)) : 0;
+  return { hpDrained, mpDrained };
+}

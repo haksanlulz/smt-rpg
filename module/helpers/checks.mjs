@@ -44,10 +44,13 @@ export function multiActionTn(tn, actions) {
 // a success produced nothing at all. The un-rerolled path in SMTItem#use has always
 // had the second branch; the Fate Point path never did.
 //
-// Returns "powerRoll" | "ailmentOnly" | "cancel" | "none".
+// Returns "powerRoll" | "fractionalAttack" | "ailmentOnly" | "cancel" | "none".
 export function cascadePlan(checkData, { oldSuccess, newSuccess }) {
   if (!oldSuccess && newSuccess) {
     if (checkData?.hasPowerRoll) return "powerRoll";
+    // A fractional-HP skill (p.102-103) rolls no power — the pending attack itself
+    // is its whole effect, so a rerolled success must still post it.
+    if (checkData?.riders?.fractional) return "fractionalAttack";
     const type = checkData?.ailmentType ?? "none";
     const rate = Number(checkData?.ailmentRate) || 0;
     return (type && type !== "none" && rate > 0) ? "ailmentOnly" : "none";

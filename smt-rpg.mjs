@@ -563,10 +563,19 @@ async function _bindFateCheckButtons(message, html) {
 
 async function _bindFateDamageButtons(message, html) {
   const damageData = message.getFlag("smt-rpg", "damageData");
-  if (!damageData || damageData.resolved) return;
+  if (!damageData) return;
   const { getActorFromTokenUuid } = await import("./module/helpers/combat.mjs");
+  const { canOfferHalve } = await import("./module/helpers/damage.mjs");
   const target = getActorFromTokenUuid(damageData.targetTokenUuid);
-  if (!target || target.system.fatePoints.value <= 0 || damageData.currentDamage <= 0) return;
+  if (!target) return;
+  // One predicate decides the offer — including the p.102-103 "Fate points cannot
+  // reduce this amount" refusal — so the render gate and the resolver guard agree.
+  if (!canOfferHalve({
+    fpImmune: damageData.fpImmune,
+    resolved: damageData.resolved,
+    currentDamage: damageData.currentDamage,
+    fatePoints: target.system.fatePoints.value
+  })) return;
   // Only the GM or an owner of the damaged target may spend its Fate Points.
   if (!(game.user.isGM || target.canUserModify(game.user, "update"))) return;
   const container = html.querySelector(".fate-buttons");
