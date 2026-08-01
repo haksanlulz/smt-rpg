@@ -212,6 +212,7 @@ function _registerStatusEffects() {
 Hooks.once("ready", () => {
   import("./module/helpers/compendium.mjs").then(m => m.loadDemonStats());
   import("./module/helpers/magatama-compendium.mjs").then(m => m.loadMagatamaStats());
+  import("./module/helpers/skill-compendium.mjs").then(m => m.loadSkillStats());
 });
 
 // Chat message button handlers
