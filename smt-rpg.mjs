@@ -13,6 +13,7 @@ import ConsumableData from "./module/data/consumable-data.mjs";
 import SMTActorSheet from "./module/sheets/actor-sheet.mjs";
 import SMTNPCSheet from "./module/sheets/npc-sheet.mjs";
 import SMTItemSheet from "./module/sheets/item-sheet.mjs";
+import SMTImporterApp from "./module/importer/app.mjs";
 
 // Token-HUD ailment icons, keyed by CONFIG.SMT.ailments id (p.67-68). Mirror system.ailment; see syncAilmentStatus.
 const AILMENT_ICONS = {
@@ -103,6 +104,28 @@ Hooks.once("init", () => {
     restricted: true, // GM only
     onDown: () => {
       import("./module/helpers/magatama-compendium.mjs").then(m => m.openMagatamaPicker());
+      return true;
+    }
+  });
+
+  // The rulebook importer (1.0 ten-minute path): a settings-menu button so a new GM
+  // can FIND it, plus a keybind. The class is a plain AppV2 the menu instantiates
+  // natively; pdf.js itself stays lazy inside the app until an import actually runs.
+  game.settings.registerMenu("smt-rpg", "importer", {
+    name: "SMT.Importer.MenuName",
+    label: "SMT.Importer.MenuLabel",
+    hint: "SMT.Importer.MenuHint",
+    icon: "fa-solid fa-file-import",
+    restricted: true,
+    type: SMTImporterApp
+  });
+  game.keybindings.register("smt-rpg", "openImporter", {
+    name: "SMT.Importer.Keybind",
+    hint: "SMT.Importer.KeybindHint",
+    editable: [{ key: "KeyI", modifiers: ["Control", "Shift"] }],
+    restricted: true, // GM only
+    onDown: () => {
+      new SMTImporterApp().render(true);
       return true;
     }
   });
