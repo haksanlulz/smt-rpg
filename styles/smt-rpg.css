@@ -1342,3 +1342,75 @@ button.condition-pip.ailment-save:hover {
 .smt-demon-picker input[name="filter"] {
   width: 100%;
 }
+
+/* ---------- Rulebook importer ---------- */
+
+.smt-importer .smt-importer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.smt-importer-hint {
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* The real input stays hidden; the button proxies to it. Declared so the class is a
+   styled hook rather than an accident. */
+.smt-importer-file {
+  display: none;
+}
+
+.smt-importer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.smt-importer-controls button {
+  flex: 0 1 auto;
+  width: auto;
+}
+
+.smt-importer-filename {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.smt-importer-progress {
+  height: 10px;
+  border: 1px solid var(--smt-border, #666);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.smt-importer-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--smt-accent);
+  transition: width 120ms linear;
+}
+
+.smt-importer-status {
+  margin: 0;
+  font-size: 0.9em;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.smt-importer-report {
+  margin: 4px 0 0;
+  padding-left: 0;
+  list-style-position: inside;
+  max-height: 16rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-size: 0.9em;
+}

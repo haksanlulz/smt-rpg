@@ -1,0 +1,28 @@
+<section class="smt-importer-body">
+  <p class="smt-importer-hint">{{localize "SMT.Importer.Hint"}}</p>
+
+  <input type="file" accept=".pdf,application/pdf" class="smt-importer-file" hidden />
+
+  <div class="smt-importer-controls">
+    <button type="button" data-action="chooseFile" {{#if working}}disabled{{/if}}>
+      <i class="fa-solid fa-file-pdf"></i> {{localize "SMT.Importer.ChooseFile"}}
+    </button>
+    <span class="smt-importer-filename">{{#if hasFile}}{{fileName}}{{else}}{{localize "SMT.Importer.NoFile"}}{{/if}}</span>
+    <button type="button" data-action="runImport" {{#unless hasFile}}disabled{{/unless}} {{#if working}}disabled{{/if}}>
+      <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "SMT.Importer.Run"}}
+    </button>
+  </div>
+
+  {{#if working}}
+  <div class="smt-importer-progress">
+    <div class="smt-importer-bar"></div>
+  </div>
+  <p class="smt-importer-status">{{status}}</p>
+  {{/if}}
+
+  {{#if report.length}}
+  <ul class="smt-importer-report">
+    {{#each report}}<li>{{this}}</li>{{/each}}
+  </ul>
+  {{/if}}
+</section>

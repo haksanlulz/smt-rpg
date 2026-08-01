@@ -10,7 +10,7 @@ Authored 2026-07-26, after the escape logged in §6.
 
 ## §1 Oracle — done-definition
 
-> **Status: clauses 1–6 RATIFIED 2026-07-27.** Clauses 1–3 were read back out of the existing project notes and confirmed; clauses 4–6 were drafted here, put as explicit questions, and answered. Clause 5 was **not** kept as written — it was narrowed on the ruling (see below). The **non-goals paragraph is still ⚠ unconfirmed**: it was never put and remains inference.
+> **Status: clauses 1–6 RATIFIED 2026-07-27.** Clauses 1–3 were read back out of the existing project notes and confirmed; clauses 4–6 were drafted here, put as explicit questions, and answered. Clause 5 was **not** kept as written — it was narrowed on the ruling (see below). **Non-goals put and ruled on 2026-08-01** — three ratified (one amended), three added from free recall in the operator's own words, and the performance clause was **struck on the ruling**: performance is a quality bar, not a non-goal.
 
 **What this is.** A Foundry VTT game system for *Shin Megami Tensei: The Roleplaying Game — Tokyo Conception*, a d100 percentile TTRPG. It is **installed and played**, not read — distributed publicly via a manifest URL and run at a live table.
 
@@ -23,9 +23,29 @@ Authored 2026-07-26, after the escape logged in §6.
 5. **Rules maths is covered by a suite — GATE. Coverage of logic in general — aspirational.** Anything implementing a rulebook formula, table, or threshold needs an assertion before it counts as done, expressed as a test rather than as prose in a commit message. Coverage of everything else (sheet wiring, chat rendering, UI glue) is encouraged and never blocks — most of it cannot be reached from `node` at all. *(Ratified 2026-07-27. Narrowed from the drafted "all pure logic is covered", which would have gated work the rungs structurally cannot see.)*
 6. **User-facing strings go through `lang/en.json` — GATE.** A hardcoded English string is a defect that blocks done, even though nothing renders wrong today. *(Ratified 2026-07-27 as blocking. **Enforced since 2026-07-27 by C11**, which found 7 real violations on its first run — a hardcoded `All` in the consumable cure dropdown, and six stat/unit labels — all fixed, all against keys that already existed.)*
 
-**Non-goals.** ⚠ **Unconfirmed — never ruled on, still inference.** Not a general-purpose SMT toolkit — Tokyo Conception only. No rulebook text or licensed art ships in the repo (the PDF is gitignored and stays that way). No v12 back-compat. Performance is irrelevant at table scale.
+**Non-goals.** *(Put and ruled on 2026-08-01. Free-recall items were elicited before the drafted set was shown, so they are un-primed.)*
+
+- **Not a general-purpose SMT toolkit — but not Tokyo-Conception-only forever.** Amended on the ruling: *"technically true but only cause its all thats out right now. if they release more (i hope they do) i want to support it."* Tokyo Conception is the only supported book because it is the only book; nothing should be architected so that a second official release is structurally impossible to add.
+- **No rulebook text or licensed art ships in the repo** (the PDF is gitignored and stays that way). Ratified as written — and strengthened by the free-recall form below.
+- **The system ships raw rules only — zero data.** *"theres no data only raw rules (unless you provide the data yourself with the pdf)."* Every stat block, skill, Magatama and gear entry arrives via the user's own PDF through the importer. This subsumes the repo clause: the data does not exist anywhere but the user's machine.
+- **It is not a game and cannot run itself.** *"it is not a game. it can't run itself."* Automation means mechanical resolution — rolls, damage, costs, affinities, bookkeeping. It never means playing a side of the table.
+- **No solo-play oracle.** *"theres no solo play oracle."*
+- **No v12 back-compat.** Ratified as written.
+- **Performance is NOT a non-goal — clause struck 2026-08-01, and laddered the same day.** The drafted "performance is irrelevant at table scale" was put and rejected; the ruling is **"instant table, patient import"**: every in-session interaction (opening a sheet, rolling, applying damage, dragging from a compendium) reads as instant with no visible hang, while the PDF import may take minutes provided it shows live progress and never freezes the client. Manual rungs, dated when exercised; the importer additionally gets a measured runtime bound once it exists in-Foundry.
 
 **Explicitly out of scope for automation:** whether a fight is *balanced*, whether an encounter is *fun*, and whether a house ruling is *right*. These are manual rungs (§5) and go stale loudly.
+
+### The 1.0 release oracle *(elicited 2026-08-01, ratified verbatim the same day)*
+
+Per-feature done stays governed by clauses 1–6 above; 1.0 adds no shortcut past them. **1.0 is the public release** — "1.0 is public ready" was the ruling — and it is DONE when:
+
+1. **The ten-minute path works.** A user who owns the PDF goes fresh-install → point the in-Foundry importer at their PDF → drag a working demon onto a scene, in ten minutes or less, never leaving Foundry. No CLI, no Python, no README surgery.
+2. **The no-PDF path degrades cleanly.** Without a PDF the system is fully functional on raw rules — sheets, rolls, combat all work with hand-made actors — and every empty compendium points at how to fill it.
+3. **Import is complete and counted.** The in-Foundry importer builds world packs for Demons (194), Skills (248), Magatama (25), and Gear, counts verified against the same anchors the CLI importer enforces — and the data source is **substitutable**: a future official module shipping packs slots in without code changes. *(The stated aspiration is exactly that: approach the publisher about an official premium data module once 1.0 exists. Nothing may weld a consumer to "world pack built by our importer".)*
+4. **Every drag lands.** Compendium demon → scene is a working actor. Skill → sheet is a usable skill. Magatama → fiend equips. Gear → human equips with bonuses applied.
+5. **Every printed subsystem resolves by buttons.** Combat completeness, the exploration layer (encounters, ambush, back attack, flee, the Kagutsuchi track), fusion and creation extras, the talk table — plus the party roster, remote play (the socket relay), and the native-tabs migration. Clause 2's bar applies to each: "the GM can do that by hand" is not done.
+6. **Instant table, patient import.** Every in-session interaction reads as instant; the import may take minutes with live progress; the client never freezes.
+7. **Nothing named above is deferred.** All four subsystem groups and all four residual items were put individually and every one was gated into 1.0. The post-1.0 arc (future books, the official-module approach, deeper automation) starts after this line, not inside it.
 
 ---
 
@@ -47,6 +67,9 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | **documents the system creates** | **Foundry's DataModel validates them on create** | every field written exists on that document's schema, with the right enum value and nested shape | `test/demon-skills.test.mjs` (runtime, per-type) + `contract` C12 (static, coarse) |
 | **the installed system** | **load the world and play** | boots · a sheet opens · an attack resolves end-to-end · HP persists | **manual** — §5 `system-loads-cold`, `every-chat-button-fires` |
 | manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun. |
+| **in-Foundry importer** *(demons slice BUILT 2026-08-01; UI never observed)* | **a GM points it at their own PDF in a live client** | world pack created; entry counts match the CLI importer's verified anchors; live progress; client never freezes; a failed run writes nothing | `test/importer-parity.test.mjs` — the parse is held byte-identical to the CLI reference over the same words (194/194, red-proved twice). The pdf.js EXTRACTION layer has no node rung; it is gated at runtime by the ported verifier, which refuses to write on any count/anchor/completeness failure. The dialog itself: **manual** — §5 `the-ten-minute-path`, NEVER. |
+| **world compendiums + drag-drop** *(1.0 oracle #4 — packs NOT BUILT)* | **a user drags an entry from the sidebar onto a scene or sheet** | the dragged document is a WORKING actor/item — stats land, skills attach, bonuses apply | document-shape suites cover the payloads (`demon-skills`, `magatama-data`, `skill-learning`); the drag itself is **manual** — §5 `every-drag-lands` |
+| **socket relay (remote play)** *(gated into 1.0 — DEFERRED with a verified blocker)* | **two connected clients: a player rolls, the GM client resolves** | the roll relays and resolves identically to a local one | **manual only** — a second client cannot be automated headless. Blocker on record: unconditional recompute drops the basic-Strike `1d10x10`; thread diceTotal/skillPower through `#onStrike`/`#onShoot` first. |
 
 > **Twice now, every node suite has been green while a feature was completely broken** — halve-damage (2026-06-07) and demon creation (2026-07-27). Both times the code was correct as JavaScript and wrong as *Foundry*. That is not bad luck; it is the shape of this project's blind spot, and it is why §1 clause 4 forbids reporting an artifact-affecting change as working.
 
@@ -122,7 +145,7 @@ All fixed and re-proved. **A third lesson, from 2026-07-27: a check on field NAM
 
 ## §5 Acceptance specs
 
-> **The SET is RATIFIED 2026-07-27** — all three manual specs were put individually and all three were kept. **The WORDING is still drafted**, not authored: each Given/When/Then below was written from observed behavior. Rewriting them in your own words is still worth more than the drafts are.
+> **The SET is RATIFIED 2026-07-27** — all three manual specs were put individually and all three were kept — **and EXTENDED 2026-08-01**: four release-level manual specs were added when the 1.0 oracle was ratified (see §1). **The WORDING is still drafted**, not authored: each Given/When/Then below was written from observed behavior or from the ratified oracle. Rewriting them in your own words is still worth more than the drafts are.
 >
 > **What the manual rows mean after the clause-4 split (2026-07-27):** they are **last-known-verified markers, not obligations**. Nothing is owed on them and no work is parked waiting for them. Their whole job is to make the honesty in clause 4 concrete — when a date here is stale or reads NEVER, that is the specific thing a session is required to name as unobserved. Let them go stale loudly; a stale date is information, not a debt.
 
@@ -434,6 +457,73 @@ Check: manual — last verified: NEVER
 ```
 
 **Why this is its own row.** The 2026-06-07 escape was reported *from the card* — the symptom was HP moving wrongly, not a stack trace. The card is the only surface most defects in this system ever present on, and nothing checks that it agrees with the sheet.
+
+### SPEC browser-parse-matches-the-cli-parse
+
+*(Added 2026-08-01.)*
+```
+Given the word lists the CLI importer extracted from the operator's PDF
+When the in-Foundry parser consumes those exact words
+Then every field of every one of the 194 demons is byte-identical to the
+     CLI importer's verified output, and the ported verifier returns zero
+     errors and the same three as-printed warnings
+Check: test/importer-parity.test.mjs  (tagged  // spec: browser-parse-matches-the-cli-parse)
+```
+
+**What this covers and what it does not.** The in-Foundry importer is a port of `tools/import-rulebook.py`, and this rung holds the two parsers equal over the SAME extracted words — proven red-capable by planting a one-window geometry shift (172 assertions red) and a halved label band (16 red). **It does not cover the extraction layer**: in the browser, words come from pdf.js rather than PyMuPDF, and the engines tokenize differently. That layer is gated at runtime instead — the importer refuses to write anything unless the ported verifier (counts, per-demon completeness, four page anchors) passes over what pdf.js produced.
+
+### SPEC the-ten-minute-path
+
+*(Added 2026-08-01 — 1.0 release spec.)*
+```
+Given a fresh Foundry install, this system installed from its manifest URL,
+      and a user who owns the rulebook PDF
+When they point the in-Foundry importer at their PDF
+Then within ten minutes of first launch they drag a demon from a compendium
+     onto a scene and it is a working actor — without leaving Foundry,
+     without a CLI, without reading anything but the screen
+Check: manual — last verified: NEVER (the importer is not built)
+```
+
+### SPEC the-no-pdf-path-degrades-cleanly
+
+*(Added 2026-08-01 — 1.0 release spec.)*
+```
+Given this system installed and no PDF supplied
+When a user builds actors by hand and plays
+Then sheets, rolls, combat and every automated rule work on raw rules alone,
+     the first launch points at the importer unprompted, and every empty
+     compendium states how to fill it
+Check: manual — last verified: NEVER
+```
+
+### SPEC every-drag-lands
+
+*(Added 2026-08-01 — 1.0 release spec.)*
+```
+Given imported world compendiums
+When a demon is dragged to a scene, a skill to a sheet, a magatama to a
+     fiend, and gear to a human
+Then each produces a working document — stats land, the skill is usable,
+     the magatama equips, the gear applies its bonuses
+Check: manual — last verified: NEVER (world packs are not built)
+```
+
+### SPEC instant-table-patient-import
+
+*(Added 2026-08-01 — 1.0 release spec.)*
+```
+Given a live session
+When any in-session interaction runs (open a sheet, roll, apply damage,
+     drag from a compendium)
+Then it reads as instant with no visible hang and nothing crashes; and when
+     the importer runs, it may take minutes but shows live progress and
+     never freezes the client
+Check: manual — last verified: NEVER
+```
+
+*("nothing crashes" added 2026-08-01 from the premortem ruling — "no crashs, no freezing" — which otherwise re-ratified §1 clause 3 verbatim.)*
+```
 
 ---
 
