@@ -136,6 +136,98 @@ eq(errs, [], "ported verifier: zero errors on the real corpus");
 eq(warns.length, 3, "ported verifier: exactly the three as-printed cost warnings");
 ok(warns.every(w => w.includes("Recarmdra")), "…and all three are Recarmdra");
 
+// ------------------------------------------------- magatama parity (25 entries)
+
+const { parseMagatama, verifyMagatama, extractGrant } =
+  await import("../module/importer/magatama-parse.mjs");
+
+// Pure grant legs: same discipline as the compendium-side grammar — a decoy trigger
+// cannot shadow the real clause, and the capture must open with a keyword.
+eq(extractGrant("It grants Null Ice and Elec Weak."), "Null Ice and Elec Weak",
+  "grant: plain capture");
+eq(extractGrant("grants not only the Almighty attack spell Megido but also"),
+  "", "grant: Kailash's decoy is refused (capture must open with a keyword)");
+eq(extractGrant("It grants the power of X. It grants Strong Phys and Fire, Ice Weak."),
+  "Strong Phys and Fire, Ice Weak", "grant: the longest candidate wins over a decoy");
+
+const MAGATAMA = join(ROOT, "data-local/magatama-stats.json");
+if (existsSync(MAGATAMA)) {
+  const refMagatama = JSON.parse(readFileSync(MAGATAMA, "utf8")).magatama;
+  const { entries, errs: mErrs, ignored } = parseMagatama(dump.pages);
+
+  eq(entries.length, refMagatama.length, `port parses ${refMagatama.length} magatama`);
+  eq(mErrs, [], "magatama table parse reports no errors");
+  eq(ignored.length, 7, "the 7 page-furniture words are ignored, same as the reference");
+
+  const mByName = new Map(entries.map(d => [d.name, d]));
+  let mIdentical = 0;
+  for (const ref of refMagatama) {
+    const got = mByName.get(ref.name);
+    if (!got) { failed++; failures.push(`missing from magatama port: ${ref.name}`); continue; }
+    if (JSON.stringify(got) === JSON.stringify(ref)) { passed++; mIdentical++; }
+    else {
+      failed++;
+      const keys = new Set([...Object.keys(got), ...Object.keys(ref)]);
+      const diffs = [...keys]
+        .filter(k => JSON.stringify(got[k]) !== JSON.stringify(ref[k]))
+        .map(k => `${k}: port=${JSON.stringify(got[k])?.slice(0, 60)} ref=${JSON.stringify(ref[k])?.slice(0, 60)}`);
+      failures.push(`magatama ${ref.name} diverges:\n      ${diffs.join("\n      ")}`);
+    }
+  }
+  console.log(`  parity: ${mIdentical}/${refMagatama.length} magatama byte-identical to the reference`);
+
+  const mv = verifyMagatama(entries);
+  eq(mv.errs, [], "ported magatama verifier: zero errors");
+  eq(mv.warns.length, 2, "…and exactly the two no-grant-as-printed warnings");
+  ok(mv.warns.every(w => /Marogareh|Kailash/.test(w)), "…which are Marogareh and Kailash");
+} else {
+  console.log("  SKIPPED: magatama-stats.json absent — magatama parity leg did not run.");
+}
+
+// ------------------------------------------------- ch4 skill-list parity (248)
+
+const { parseSkillList, verifySkillList } = await import("../module/importer/skill-parse.mjs");
+
+const SKILLS = join(ROOT, "data-local/skill-stats.json");
+if (existsSync(SKILLS)) {
+  const refSkills = JSON.parse(readFileSync(SKILLS, "utf8")).skills;
+  const { skills: portSkills, junk } = parseSkillList(dump.pages);
+
+  eq(portSkills.length, refSkills.length, `port parses ${refSkills.length} ch4 skill rows`);
+
+  const sKey = (s) => `${s.name}|p${s.page}`;
+  const sByKey = new Map(portSkills.map(s => [sKey(s), s]));
+  let sIdentical = 0;
+  for (const ref of refSkills) {
+    const got = sByKey.get(sKey(ref));
+    if (!got) { failed++; failures.push(`missing from skill port: ${sKey(ref)}`); continue; }
+    if (JSON.stringify(got) === JSON.stringify(ref)) { passed++; sIdentical++; }
+    else {
+      failed++;
+      const keys = new Set([...Object.keys(got), ...Object.keys(ref)]);
+      const diffs = [...keys]
+        .filter(k => JSON.stringify(got[k]) !== JSON.stringify(ref[k]))
+        .map(k => `${k}: port=${JSON.stringify(got[k])?.slice(0, 60)} ref=${JSON.stringify(ref[k])?.slice(0, 60)}`);
+      failures.push(`skill ${sKey(ref)} diverges:\n      ${diffs.join("\n      ")}`);
+    }
+  }
+  console.log(`  parity: ${sIdentical}/${refSkills.length} ch4 skills byte-identical to the reference`);
+
+  if (existsSync(MAGATAMA)) {
+    const refMagatama = JSON.parse(readFileSync(MAGATAMA, "utf8")).magatama;
+    const sv = verifySkillList(portSkills, reference, refMagatama, junk);
+    eq(sv.errs, [], "ported skill verifier: zero errors");
+    eq(sv.distinct, 248, "ported skill verifier: 248 distinct");
+    eq(sv.crossChecked, 863, "ported skill verifier: 863 costs cross-checked");
+    const dissent = sv.warns.filter(w => w.includes("kept as printed"));
+    eq(dissent.length, 4, "…the four outvoted book slips are warned, not errored");
+    ok(sv.warns.some(w => w.includes("Makajamaon")), "…Makajamaon resolves from the corpus");
+    ok(sv.warns.some(w => w.includes("Jive Talk")), "…and the Jive Talk gap is named");
+  }
+} else {
+  console.log("  SKIPPED: skill-stats.json absent — skill parity leg did not run.");
+}
+
 console.log(`\nsmt-rpg importer-parity tests: ${passed} passed, ${failed} failed`);
 if (failed) {
   console.log("\nFailures:");
