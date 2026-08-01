@@ -11,12 +11,24 @@
 
 import { GENERAL_PAGES, BOSS_PAGES, PRINTED_OFFSET, parseDemons, verifyDemons }
   from "./demon-parse.mjs";
+import { MAGATAMA_PAGE, MAGATAMA_PROSE, parseMagatama, verifyMagatama }
+  from "./magatama-parse.mjs";
+import { SKILL_PAGES, parseSkillList, verifySkillList } from "./skill-parse.mjs";
 import { loadPdfjs, extractPages } from "./extract.mjs";
 import { buildDemonSystem, buildDemonSkills } from "../helpers/compendium.mjs";
+import { buildMagatamaSystem } from "../helpers/magatama-compendium.mjs";
+import { buildSkillSystem, skillPackEntries } from "../helpers/skill-compendium.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-const PACK_NAME = "smt-demons";
+// The three world packs, in write order. Deleting and recreating all three together
+// keeps a re-import atomic from the user's point of view: either every pack is the
+// new import or none is.
+const PACKS = [
+  { name: "smt-demons", type: "Actor", labelKey: "SMT.Importer.PackLabel" },
+  { name: "smt-magatama", type: "Item", labelKey: "SMT.Importer.PackMagatama" },
+  { name: "smt-skills", type: "Item", labelKey: "SMT.Importer.PackSkills" },
+];
 const WRITE_CHUNK = 25;
 
 export default class SMTImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -120,16 +132,19 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     const indices = [];
     for (let p = GENERAL_PAGES[0]; p <= GENERAL_PAGES[1]; p++) indices.push(p + PRINTED_OFFSET);
     for (let p = BOSS_PAGES[0]; p <= BOSS_PAGES[1]; p++) indices.push(p + PRINTED_OFFSET);
+    for (let p = MAGATAMA_PROSE[0]; p <= MAGATAMA_PAGE; p++) indices.push(p + PRINTED_OFFSET);
+    for (let p = SKILL_PAGES[0]; p <= SKILL_PAGES[1]; p++) indices.push(p + PRINTED_OFFSET);
+    const maxIndex = Math.max(...indices);
 
     // A PDF that does not even have the pages cannot be the book. Refuse before
     // reading a single word.
-    if (doc.numPages < indices[indices.length - 1] + 1) {
+    if (doc.numPages < maxIndex + 1) {
       throw new Error(i18n.format("SMT.Importer.WrongPdf",
-        { pages: doc.numPages, needed: indices[indices.length - 1] + 1 }));
+        { pages: doc.numPages, needed: maxIndex + 1 }));
     }
 
     await this.#setStatus(i18n.localize("SMT.Importer.Extracting"));
-    const { pages, splitTotal } = await extractPages(doc, indices, (done, total) => {
+    const { pages, splitTotal, rotatedTotal } = await extractPages(doc, indices, (done, total) => {
       this.#progress(done, total);
       if (done % 10 === 0) {
         this.#status = i18n.format("SMT.Importer.Page", { done, total });
@@ -140,10 +155,16 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
 
     await this.#setStatus(i18n.localize("SMT.Importer.Parsing"));
     const demons = parseDemons(pages);
+    const { entries: magatama, errs: tableErrs, ignored } = parseMagatama(pages);
+    const { skills, junk } = parseSkillList(pages);
 
-    // --- verify; a failure here has written nothing ------------------------
+    // --- verify all three; a failure ANYWHERE has written nothing -----------
     await this.#setStatus(i18n.localize("SMT.Importer.Verifying"));
-    const { errs, warns } = verifyDemons(demons);
+    const dv = verifyDemons(demons);
+    const mv = verifyMagatama(magatama);
+    const sv = verifySkillList(skills, demons, magatama, junk);
+    const errs = [...dv.errs, ...tableErrs, ...mv.errs, ...sv.errs];
+    const warns = [...dv.warns, ...mv.warns, ...sv.warns];
     if (errs.length) {
       // The shareable diagnostic: every error verbatim, count first. This is the
       // wrong-PDF path and the layout-drift path; both refuse rather than half-import.
@@ -155,30 +176,21 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
       throw new Error(i18n.localize("SMT.Importer.Refused"));
     }
 
-    // --- confirm-then-replace ----------------------------------------------
-    const packId = `world.${PACK_NAME}`;
-    const existing = game.packs.get(packId);
-    if (existing) {
+    // --- confirm-then-replace, across all three packs together -------------
+    const existing = PACKS.map(p => game.packs.get(`world.${p.name}`)).filter(Boolean);
+    if (existing.length) {
       const confirmed = await foundry.applications.api.DialogV2.confirm({
         window: { title: i18n.localize("SMT.Importer.ReplaceTitle") },
         content: `<p>${i18n.format("SMT.Importer.ReplaceBody",
-          { pack: existing.metadata.label, count: existing.index.size })}</p>`
+          { packs: existing.map(p => `"${p.metadata.label}"`).join(", ") })}</p>`
       });
       if (!confirmed) throw new Error(i18n.localize("SMT.Importer.Cancelled"));
-      await existing.deleteCompendium();
+      for (const pack of existing) await pack.deleteCompendium();
     }
 
-    // --- write --------------------------------------------------------------
-    await this.#setStatus(i18n.localize("SMT.Importer.CreatingPack"));
-    const CompendiumCollection = foundry.documents.collections.CompendiumCollection;
-    const pack = await CompendiumCollection.createCompendium({
-      label: i18n.localize("SMT.Importer.PackLabel"),
-      name: PACK_NAME,
-      type: "Actor"
-    });
-
+    // --- build payloads (still nothing written) -----------------------------
     const caveats = [];
-    const payloads = demons.map(stats => {
+    const demonPayloads = demons.map(stats => {
       const { system, affinity, anomalies } = buildDemonSystem(stats);
       if (affinity.unparsed.length) {
         caveats.push(`${stats.name}: affinities not applied: "${affinity.unparsed[0]}"`);
@@ -186,22 +198,55 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
       for (const a of anomalies) caveats.push(`${stats.name}: book prints ${a} — kept as printed`);
       return { name: stats.name, type: "demon", system, items: buildDemonSkills(stats) };
     });
+    const magatamaPayloads = magatama.map(entry => {
+      const { system, grant } = buildMagatamaSystem(entry);
+      if (grant.unparsed.length) {
+        caveats.push(`${entry.name}: grant not applied: "${grant.unparsed[0]}"`);
+      }
+      return { name: entry.name, type: "magatama", system };
+    });
+    const skillPayloads = skillPackEntries(skills, demons).map(entry =>
+      ({ name: entry.name, type: "skill", system: buildSkillSystem(entry) }));
 
-    for (let i = 0; i < payloads.length; i += WRITE_CHUNK) {
-      await Actor.createDocuments(payloads.slice(i, i + WRITE_CHUNK), { pack: pack.collection });
-      this.#progress(Math.min(i + WRITE_CHUNK, payloads.length), payloads.length);
-      await this.#setStatus(i18n.format("SMT.Importer.Writing",
-        { done: Math.min(i + WRITE_CHUNK, payloads.length), total: payloads.length }));
+    // --- write, pack by pack ------------------------------------------------
+    const CompendiumCollection = foundry.documents.collections.CompendiumCollection;
+    const summaries = [];
+    const jobs = [
+      [PACKS[0], "Actor", demonPayloads],
+      [PACKS[1], "Item", magatamaPayloads],
+      [PACKS[2], "Item", skillPayloads],
+    ];
+    for (const [meta, docType, payloads] of jobs) {
+      await this.#setStatus(i18n.localize("SMT.Importer.CreatingPack"));
+      const pack = await CompendiumCollection.createCompendium({
+        label: i18n.localize(meta.labelKey),
+        name: meta.name,
+        type: meta.type
+      });
+      const cls = docType === "Actor" ? Actor : Item;
+      for (let i = 0; i < payloads.length; i += WRITE_CHUNK) {
+        await cls.createDocuments(payloads.slice(i, i + WRITE_CHUNK), { pack: pack.collection });
+        const done = Math.min(i + WRITE_CHUNK, payloads.length);
+        this.#progress(done, payloads.length);
+        await this.#setStatus(i18n.format("SMT.Importer.Writing",
+          { pack: pack.metadata.label, done, total: payloads.length }));
+      }
+      summaries.push(i18n.format("SMT.Importer.PackSummary",
+        { count: payloads.length, pack: pack.metadata.label }));
     }
 
     // --- report -------------------------------------------------------------
-    this.#report = [
-      i18n.format("SMT.Importer.Done", { count: payloads.length, pack: pack.metadata.label })
-    ];
+    this.#report = [i18n.format("SMT.Importer.Done", { summary: summaries.join(", ") })];
     if (warns.length) this.#report.push(...warns.map(w => i18n.format("SMT.Importer.AsPrinted", { note: w })));
     if (caveats.length) this.#report.push(...caveats);
+    if (ignored.length) {
+      this.#report.push(i18n.format("SMT.Importer.IgnoredFurniture", { count: ignored.length }));
+    }
     if (splitTotal) {
       this.#report.push(i18n.format("SMT.Importer.SplitNote", { count: splitTotal }));
+    }
+    if (rotatedTotal) {
+      this.#report.push(i18n.format("SMT.Importer.RotatedNote", { count: rotatedTotal }));
     }
     if (CONFIG.SMT.debug) console.log("smt-rpg | importer report", this.#report);
   }
