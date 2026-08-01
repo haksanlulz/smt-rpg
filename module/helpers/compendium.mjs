@@ -291,7 +291,7 @@ export function buildDemonSkills(stats) {
 // Every enum below is resolved against CONFIG rather than restated. The 2026-07-27
 // escape was invented values (`magicalAttack` for `magical-attack`), and a literal
 // list here would be free to drift out of the schema exactly the same way.
-function mapSkillType(t) {
+export function mapSkillType(t) {
   const keys = Object.keys(CONFIG.SMT.skillTypes);
   const s = String(t ?? "").toLowerCase().replace(/\s+/g, "-");
   return keys.find(k => k === s)
@@ -300,7 +300,7 @@ function mapSkillType(t) {
     ?? "support";
 }
 
-function mapElement(e) {
+export function mapElement(e) {
   const keys = Object.keys(CONFIG.SMT.elements);
   const s = String(e ?? "").toLowerCase();
   if (s === "healing") return keys.includes("recovery") ? "recovery" : "none";
@@ -321,7 +321,7 @@ function parseCost(cost) {
 
 // Effect text like "Panic 30%" or "Restrain 20%" carries an ailment and its rate.
 // "Instant Kill 70%" is Death; "HP 1/5" and similar are not ailments.
-function parseAilment(effect) {
+export function parseAilment(effect) {
   const s = String(effect ?? "").trim();
   if (!s) return null;
   const m = s.match(/^(.*?)\s*(\d+)\s*%$/);

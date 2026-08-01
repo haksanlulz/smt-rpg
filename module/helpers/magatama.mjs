@@ -22,3 +22,34 @@ export function blocksMagatamaSwitch({ current, incoming, inCombat = false } = {
 export function maxIngestedMagatama() {
   return CONFIG.SMT.magatama.maxIngested;
 }
+
+// Which of the active Magatama's skills a fiend should know at this level (p.42).
+//
+// Stated as a STATE, not as a diff against the previous level: everything at or below
+// the current level that is not already owned. That matters because level is not only
+// reached by levelling — `setLevel` writes it directly, and p.39 lets a fiend swap
+// Magatama out of combat, after which the new one's whole earned progression is owed at
+// once. A previous-vs-current diff would silently skip both cases.
+//
+// The 8-skill cap (p.80) is applied in learn-level order, so the earliest unlearned
+// skill is the one that fits. Anything the cap turns away is RETURNED rather than
+// dropped, because a fiend quietly not learning its Magatama's skill is precisely the
+// failure this whole path exists to end.
+export function magatamaLearnPlan({ skillList = [], level = 0, ownedNames = [], cap = null } = {}) {
+  const limit = Number.isFinite(cap) ? cap : CONFIG.SMT.skillCap;
+  const owned = new Set(ownedNames.map(n => String(n ?? "").trim().toLowerCase()));
+
+  const earned = (skillList ?? [])
+    .filter(s => s?.skillName && Number(s.learnLevel) <= Number(level))
+    .sort((a, b) => (a.learnLevel - b.learnLevel) || a.skillName.localeCompare(b.skillName));
+
+  const learn = [];
+  const blocked = [];
+  let room = limit - owned.size;
+  for (const s of earned) {
+    if (owned.has(s.skillName.trim().toLowerCase())) continue;
+    if (room > 0) { learn.push(s); room -= 1; }
+    else blocked.push(s);
+  }
+  return { learn, blocked, cap: limit };
+}

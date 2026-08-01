@@ -2,7 +2,7 @@ import { calculateDamage, applyDamageToHp } from "../helpers/damage.mjs";
 import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
 import { incomingDamageMultiplier } from "../helpers/ailments.mjs";
-import { blocksMagatamaSwitch } from "../helpers/magatama.mjs";
+import { blocksMagatamaSwitch, magatamaLearnPlan } from "../helpers/magatama.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -115,8 +115,71 @@ export default class SMTActor extends Actor {
       return null;
     }
     const actor = await this.setLevel(this.system.level + 1);
-    if (actor) await actor.#applyStatGrowth();
+    if (actor) {
+      await actor.#applyStatGrowth();
+      await actor.learnMagatamaSkills();
+    }
     return actor;
+  }
+
+  // Skills a fiend's active Magatama teaches at its level (p.42). Until 2026-07-31 the
+  // p.42 progression existed nowhere: a fiend equipped Marogareh and simply never got
+  // Hell Thrust at 4, because nothing consumed the Magatama's skill list.
+  //
+  // Safe to call at any time, not only on level-up: the plan is computed from the
+  // CURRENT level against what is already owned, so switching Magatama out of combat
+  // (p.39) grants the new one's earned skills rather than only its future ones.
+  async learnMagatamaSkills({ notify = true } = {}) {
+    if (this.type !== "fiend") return [];
+    const magatama = this.items.get(this.system.activeMagatama);
+    if (!magatama) return [];
+
+    const plan = magatamaLearnPlan({
+      skillList: magatama.system.skillList,
+      level: this.system.level,
+      ownedNames: this.items.filter(i => i.type === "skill").map(i => i.name)
+    });
+    if (!plan.learn.length && !plan.blocked.length) return [];
+
+    const { loadSkillStats, buildSkillItems } = await import("../helpers/skill-compendium.mjs");
+    await loadSkillStats();
+    const { items, unknown } = buildSkillItems(plan.learn.map(s => s.skillName));
+    const created = items.length
+      ? await this.createEmbeddedDocuments("Item", items)
+      : [];
+
+    // Everything the plan could not deliver is said out loud. A skill silently missing
+    // from a level-up reads exactly like a Magatama that grants nothing at that level.
+    const caveats = [];
+    if (plan.blocked.length) {
+      caveats.push(game.i18n.format("SMT.Magatama.LearnBlocked", {
+        cap: plan.cap, skills: plan.blocked.map(s => s.skillName).join(", ")
+      }));
+    }
+    if (unknown.length) {
+      caveats.push(game.i18n.format("SMT.Magatama.LearnUnknown", { skills: unknown.join(", ") }));
+    }
+
+    if (notify && (created.length || caveats.length)) {
+      const learned = created.length
+        ? game.i18n.format("SMT.Magatama.Learned",
+          { name: magatama.name, skills: created.map(i => i.name).join(", ") })
+        : "";
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: this }),
+        content: `<div class="smt-chat"><strong>${this.name}</strong>`
+          + (learned ? ` — ${learned}` : "")
+          + caveats.map(c => `<div class="smt-caveat">${c}</div>`).join("")
+          + "</div>"
+      });
+    }
+
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Magatama skills", {
+      actor: this.name, magatama: magatama.name, level: this.system.level,
+      learned: created.map(i => i.name), blocked: plan.blocked, unknown
+    });
+
+    return created;
   }
 
   // The level-up stat point (p.34). Demons "apply the point randomly": roll 1d10 on

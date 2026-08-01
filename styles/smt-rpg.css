@@ -546,6 +546,18 @@
   overflow-wrap: anywhere;
 }
 
+/* What a card could NOT do — a skill the cap turned away, or one no printing defines.
+   Set apart from the result above it so it reads as a caveat rather than as part of
+   the good news, and muted so it does not compete with it. */
+.smt-caveat {
+  margin-top: 4px;
+  padding-left: 6px;
+  border-left: 2px solid var(--smt-accent);
+  font-size: 0.9em;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
 .effects-list {
   display: flex;
   flex-wrap: wrap;
