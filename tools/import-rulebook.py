@@ -32,6 +32,7 @@ Magatama is a COLUMN at a fixed x and each field is a horizontal band anchored b
 label down the right-hand side. See MagatamaImporter.
 """
 import argparse
+import collections
 import json
 import os
 import re
@@ -574,6 +575,332 @@ def extract_grant(paragraph):
     return best
 
 
+SKILL_PAGES = (97, 110)                # the skill list proper; talk (p.112) and gear
+                                       # (p.115+) are different tables and not skills
+# Every column set the skill list uses, keyed by the cost resource it declares. The
+# shape IS the resource: spells print an MP column, physical skills an HP one, and
+# passives cost nothing and print neither.
+SKILL_HEADERS = {
+    ("Name", "MP", "Potency", "Element", "Effect", "Note"): "mp",
+    ("Name", "HP", "Potency", "Element", "Effect", "Note"): "hp",
+    ("Name", "Effect"): None,
+}
+SKILL_COL_TOL = 3.0
+# A table's rows are evenly pitched. A gap wider than this many pitches ends it, which
+# is what keeps a trailing group note or the next section's heading out of the last row.
+SKILL_PITCH_GAP = 1.5
+
+
+class SkillListImporter:
+    """The ch4 skill list (p.97-110): what a skill costs, how hard it hits and what it
+    does, for every skill the book prints rather than only the ones a demon happens to
+    know.
+
+    Three table shapes, and the shape declares the cost resource -- spells print an MP
+    column, physical skills an HP one, passives neither. The affinity-changer pages
+    print TWO tables side by side, so a header row can carry the column set more than
+    once and one printed row holds two skills; column groups are therefore read from
+    each "Name" onward and bounded by the next group's start.
+
+    Columns are assigned by RANGE, not by nearest anchor. Effect text runs wide enough
+    that its last words sit closer to the Note anchor than to their own, and a
+    nearest-anchor read files them under Note."""
+
+    def __init__(self, doc):
+        self.doc = doc
+
+    def words(self, idx):
+        return [(round(x, 1), round(y, 1), w)
+                for x, y, _x1, _y1, w, *_ in self.doc[idx].get_text("words")]
+
+    @staticmethod
+    def rows(ws, tol=3.0):
+        buckets = {}
+        for x, y, w in ws:
+            k = next((k for k in buckets if abs(k - y) <= tol), y)
+            buckets.setdefault(k, []).append((x, w))
+        return [(k, sorted(v)) for k, v in sorted(buckets.items())]
+
+    @staticmethod
+    def header_groups(items):
+        """Column groups on a header row: [(shape, [(label, x), ...]), ...] or []."""
+        toks = [(x, w) for x, w in items]
+        starts = [i for i, (_x, w) in enumerate(toks) if w == "Name"]
+        if not starts:
+            return []
+        groups = []
+        for gi, start in enumerate(starts):
+            end = starts[gi + 1] if gi + 1 < len(starts) else len(toks)
+            cols = toks[start:end]
+            shape = tuple(w for _x, w in cols)
+            if shape not in SKILL_HEADERS:
+                return []
+            groups.append((shape, cols))
+        return groups
+
+    @staticmethod
+    def cells(items, cols, limit):
+        """Split one printed row into this group's columns, by x range."""
+        out = ["" for _ in cols]
+        bounds = [x for x, _label in cols]
+        for x, w in items:
+            # `continue`, not `break`: the caller hands these in reading order (y then
+            # x), so a word past this group's limit is not the end of the row.
+            if x >= limit:
+                continue
+            i = None
+            for j, bx in enumerate(bounds):
+                if x >= bx - SKILL_COL_TOL:
+                    i = j
+            # A word left of the first column still belongs to it: the name cell starts
+            # a point or two before its own header label on some pages.
+            if i is None:
+                i = 0 if x >= bounds[0] - 12 else None
+            if i is None:
+                continue
+            out[i] = (out[i] + " " + w).strip()
+        return out
+
+    def page_skills(self, printed):
+        ws = self.words(printed + PRINTED_OFFSET)
+        rows = self.rows(ws)
+        headers = [(i, y, self.header_groups(items))
+                   for i, (y, items) in enumerate(rows) if self.header_groups(items)]
+
+        skills, junk = [], []
+        for hi, (idx, hy, groups) in enumerate(headers):
+            stop = headers[hi + 1][1] if hi + 1 < len(headers) else 10_000.0
+            body = [(y, items) for y, items in rows if hy + 4 < y < stop]
+            if not body:
+                continue
+
+            for gi, (shape, cols) in enumerate(groups):
+                limit = groups[gi + 1][1][0][0] if gi + 1 < len(groups) else 10_000.0
+                # Pitch is measured between rows that OPEN a record -- ones carrying a
+                # token in the name column -- not between every printed line. A wrapped
+                # Effect puts two extra lines ~4pt from its own row, and measuring those
+                # collapsed the pitch to 4pt, so the very next record read as a gap and
+                # every table ended after one row.
+                # A record OPENS at a row carrying a token in the name column, and its
+                # cells are gathered from a vertical BAND around that row rather than
+                # from the row itself. A wrapped Effect prints one line ABOVE the name
+                # and one below it, so a row-at-a-time read gave Endure an empty effect
+                # and dropped it, and silently truncated the effect text of every
+                # wrapped skill in the list.
+                name_x = cols[0][0]
+                anchors = [y for y, items in body
+                           if any(abs(x - name_x) <= 12 and x < limit for x, _w in items)]
+                if not anchors:
+                    continue
+                # Pitch is measured between those anchors, never between every printed
+                # line: wrap lines sit ~4pt apart and collapsed it, which made the next
+                # real record look like a gap and ended every table after one row.
+                gaps = sorted(b - a for a, b in zip(anchors, anchors[1:]))
+                pitch = gaps[len(gaps) // 2] if gaps else 16.0
+                resource = SKILL_HEADERS[shape]
+
+                for ai, y in enumerate(anchors):
+                    prev = anchors[ai - 1] if ai else None
+                    nxt = anchors[ai + 1] if ai + 1 < len(anchors) else None
+                    # A gap wider than SKILL_PITCH_GAP pitches means the table ended and
+                    # what follows is a group note, a heading or body prose.
+                    if prev is not None and y - prev > pitch * SKILL_PITCH_GAP:
+                        break
+                    lo = (prev + y) / 2 if prev is not None else y - pitch * 0.6
+                    hi = (y + nxt) / 2 if nxt is not None else y + pitch * 0.6
+                    # Reading order across the band is (y, then x). Sorting by x alone
+                    # interleaves the words of a two-line Effect into nonsense.
+                    band = [(x, w) for _by, x, w in
+                            sorted((by, x, w) for by, items in body if lo <= by < hi
+                                   for x, w in items)]
+                    cell = self.cells(band, cols, limit)
+                    if not cell[0]:
+                        continue
+                    row = self.skill_row(shape, resource, cell, printed)
+                    if row:
+                        skills.append(row)
+                    else:
+                        junk.append(f"p.{printed}: {' | '.join(c for c in cell if c)[:70]}")
+        return skills, junk
+
+    @staticmethod
+    def skill_row(shape, resource, cell, printed):
+        """One parsed row, or None when it is not a skill at all.
+
+        The guards are the whole reason this can run over pages that also carry prose:
+        an active row must print a numeric cost, a numeric potency and a single-word
+        element, none of which a sentence does, and a passive row must have a short name
+        that is neither an ALL-CAPS heading nor a "... Group" note."""
+        name = clean(cell[0])
+        if not name or name.isupper() or name.endswith(" Group"):
+            return None
+
+        if resource is None:                      # Name | Effect
+            if len(name.split()) > 4:
+                return None
+            effect = clean(cell[1])
+            if not effect:
+                return None
+            return {"name": title_case(name), "kind": "passive",
+                    "effect": effect, "page": printed}
+
+        cost, element, effect = clean(cell[1]), clean(cell[3]), clean(cell[4])
+        # "All" is a printed cost, not a missing one: Last Resort, Sacrifice and Kamikaze
+        # all spend the caster's entire pool. The schema has no way to hold that, so it
+        # is carried as 0 plus a flag, the same way the demon importer records it.
+        spends_all = cost.lower() == "all"
+        if spends_all:
+            cost = "0"
+        # Potency is the one cell the book leaves as a dash on purpose: the instant-kill
+        # and pure-ailment skills (Hama, Mudo, Marin Karin) deal no damage at all, so a
+        # dash is a real value and rejecting it dropped whole tables. `clean` has already
+        # turned it into "", so the RAW cell decides between "printed a dash" and "read
+        # nothing at all" -- only the latter means this is not a skill row.
+        raw_potency = (cell[2] or "").strip()
+        if num(cost) is None or not raw_potency:
+            return None
+        if num(raw_potency) is None and raw_potency not in (DASH, "-"):
+            return None
+        if not re.fullmatch(r"[A-Za-z]+", element):
+            return None
+        row = {"name": title_case(name), "kind": "active",
+               "cost": {"value": num(cost), "resource": resource},
+               "potency": num(raw_potency) or 0, "element": element,
+               "effect": effect, "page": printed}
+        if num(raw_potency) is None:
+            row["noDamage"] = True            # printed as a dash, not as a zero
+        if spends_all:
+            row["spendsAll"] = True
+        return row
+
+    def run(self):
+        skills, junk = [], []
+        for printed in range(SKILL_PAGES[0], SKILL_PAGES[1] + 1):
+            s, j = self.page_skills(printed)
+            skills.extend(s)
+            junk.extend(j)
+        return skills, junk
+
+
+# Talk skills (p.112-113) are a different table with a different schema -- a
+# negotiation modifier plus impress/offend speaker and subject types -- and are NOT
+# imported here. Two Magatama teach one, so they are named rather than left to look
+# like a parse failure.
+TALK_SKILLS_NOT_IMPORTED = {"Jive Talk", "Stone Hunt"}
+
+# The book spells two skills differently between the p.42 Magatama table and the ch4
+# list. Spacing folds out on its own; the vowel does not, so it is recorded here with
+# the printed spellings kept on both sides rather than silently rewritten.
+SKILL_NAME_VARIANTS = {"agirao": "agilao"}
+
+
+def skill_key(name):
+    """Match key for a skill name. Folds case and spacing, which is the whole of the
+    Warcry / "War Cry" difference, then applies the recorded variants."""
+    k = re.sub(r"[\s\-']", "", str(name or "")).lower()
+    return SKILL_NAME_VARIANTS.get(k, k)
+
+
+def verify_skills(skills, demons, magatama, junk):
+    """The ch4 list and the Ch.5 stat blocks are two independent printings of the same
+    skills, so the overlap between them checks itself. That is the bar this project
+    already holds transcribed data to, and here it comes free: ~1,400 demon skill rows
+    name a cost, a potency and an element for skills this list prints again."""
+    errs, warns = [], []
+
+    by_key = {}
+    for s in skills:
+        key = skill_key(s["name"])
+        if key in by_key:
+            # The book prints a few skills in more than one table. An identical repeat is
+            # fine; one that DISAGREES means two different rows collapsed onto one key.
+            prior = by_key[key]
+            if {k: v for k, v in s.items() if k != "page"} \
+                    != {k: v for k, v in prior.items() if k != "page"}:
+                errs.append(f"{s['name']}: key {key!r} collides with {prior['name']!r} "
+                            f"(p.{prior['page']} and p.{s['page']}) with different values")
+            continue
+        by_key[key] = s
+
+    if len(by_key) < 200:
+        errs.append(f"expected at least 200 distinct skills in the ch4 list, got {len(by_key)}")
+
+    for s in skills:
+        if re.fullmatch(r"\d+", s["name"]) or "Order #" in s["name"]:
+            errs.append(f"p.{s['page']}: page furniture imported as a skill: {s['name']!r}")
+        if s["kind"] == "active" and not 0 <= s["potency"] <= 999:
+            errs.append(f"{s['name']}: potency {s['potency']} out of range")
+
+    # Cross-printing check. A column landing one place right, or a row read off its
+    # neighbour, breaks agreement immediately -- and silently, otherwise.
+    #
+    # A disagreement is only an ERROR when the ch4 value is the odd one out. Where other
+    # demons printing the same skill agree with ch4, the lone dissenter is a slip in the
+    # book, and §1 clause 1 says to keep it as printed and report it rather than correct
+    # it -- the same treatment Pixie's Magic TN and Scáthach's HP already get.
+    checked = 0
+    votes = collections.defaultdict(collections.Counter)
+    dissent = collections.defaultdict(list)
+    for d in demons:
+        for row in d.get("skills", []):
+            ref = by_key.get(skill_key(row.get("name")))
+            if not ref or ref["kind"] != "active":
+                continue
+            m = re.fullmatch(r"(\d+)\s*(HP|MP)", row.get("cost", ""))
+            if not m:
+                continue
+            checked += 1
+            want = (int(m.group(1)), m.group(2).lower())
+            got = (ref["cost"]["value"], ref["cost"]["resource"])
+            votes[ref["name"]][want] += 1
+            if want != got:
+                dissent[ref["name"]].append((d["name"], d["page"], row["cost"]))
+
+    for name, cases in sorted(dissent.items()):
+        ref = by_key[skill_key(name)]
+        agree = votes[name][(ref["cost"]["value"], ref["cost"]["resource"])]
+        printed = f"{ref['cost']['value']} {ref['cost']['resource'].upper()}"
+        where = ", ".join(f"{n} (p.{p}) prints {c}" for n, p, c in cases[:3])
+        if agree:
+            warns.append(f"{name}: ch4 prints {printed} and {agree} stat block(s) agree; "
+                         f"{where} - kept as printed")
+        else:
+            errs.append(f"{name}: ch4 prints {printed} and NO stat block agrees; {where}")
+
+    if checked < 500:
+        errs.append(f"only {checked} skill costs could be cross-checked against the "
+                    f"stat blocks; expected 500+ (the overlap did not resolve)")
+
+    # Every skill a Magatama teaches must exist, or the fiend progression has a hole.
+    wanted = {s["name"] for m in magatama for s in m["skills"]}
+    # A name the ch4 list omits but the stat blocks print is a gap in the BOOK, not in
+    # the parse, and the runtime falls back to the corpus for exactly these. Reported
+    # so the omission stays visible instead of being absorbed silently.
+    in_corpus = {skill_key(row["name"]) for d in demons for row in d.get("skills", [])}
+    unknown = [n for n in wanted
+               if skill_key(n) not in by_key and n not in TALK_SKILLS_NOT_IMPORTED]
+    omitted = sorted(n for n in unknown if skill_key(n) in in_corpus)
+    missing = sorted(n for n in unknown if skill_key(n) not in in_corpus)
+    if missing:
+        errs.append(f"{len(missing)} Magatama skill(s) found in NO printing: "
+                    + ", ".join(missing[:12]))
+    if omitted:
+        warns.append(f"{len(omitted)} Magatama skill(s) the ch4 list omits but the stat "
+                     f"blocks print (resolved from the corpus): " + ", ".join(omitted))
+    skipped_talk = sorted(n for n in wanted if n in TALK_SKILLS_NOT_IMPORTED)
+    if skipped_talk:
+        recovered = [n for n in skipped_talk if skill_key(n) in in_corpus]
+        absent = [n for n in skipped_talk if skill_key(n) not in in_corpus]
+        warns.append("talk skills are a different table and are NOT imported from ch4: "
+                     + ", ".join(skipped_talk)
+                     + (f" ({', '.join(recovered)} still resolves from a stat block)" if recovered else "")
+                     + (f" - NO definition anywhere for {', '.join(absent)}" if absent else ""))
+
+    for j in junk[:8]:
+        warns.append(f"row skipped as not-a-skill: {j}")
+    return errs, warns, {"distinct": len(by_key), "crossChecked": checked}
+
+
 def verify_magatama(entries):
     """The table and the prose are two independent printings, and the eight sample
     character sheets (p.25-32) are a third. Anchors are read off the RENDERED sample
@@ -709,6 +1036,7 @@ def main():
     ap.add_argument("--pdf", required=True, help="path to your own rulebook PDF")
     ap.add_argument("--out", default="data-local/demon-stats.json")
     ap.add_argument("--out-magatama", default="data-local/magatama-stats.json")
+    ap.add_argument("--out-skills", default="data-local/skill-stats.json")
     ap.add_argument("--force", action="store_true",
                     help="write even if verification fails (not recommended)")
     args = ap.parse_args()
@@ -771,6 +1099,32 @@ def main():
 
     write_json(args.out_magatama, {"source": "Tokyo Conception Ch.2",
                                    "count": len(magatama), "magatama": magatama})
+
+    skills, junk = SkillListImporter(importer.doc).run()
+    s_errs, s_warns, stats = verify_skills(skills, demons, magatama, junk)
+
+    print(f"\nparsed {len(skills)} ch4 skill rows "
+          f"({stats['distinct']} distinct, "
+          f"{sum(1 for s in skills if s['kind'] == 'passive')} passive), "
+          f"{stats['crossChecked']} costs cross-checked against the stat blocks")
+    for w in s_warns:
+        print(f"  note: {w}")
+
+    if s_errs:
+        print(f"\nSkill-list verification FAILED ({len(s_errs)} problems):")
+        for e in s_errs[:20]:
+            print("  " + e)
+        if len(s_errs) > 20:
+            print(f"  ... +{len(s_errs) - 20} more")
+        if not args.force:
+            sys.exit("\nrefusing to write the skill list. "
+                     "Re-run with --force only if you know why.")
+    else:
+        print("verification passed: counts, page furniture, and every cost the ch4 list "
+              "and the Ch.5 stat blocks both print")
+
+    write_json(args.out_skills, {"source": "Tokyo Conception Ch.4",
+                                 "count": len(skills), "skills": skills})
 
 
 def write_json(path, payload):
