@@ -21,6 +21,11 @@
   {{/if}}
 
   {{#if report.length}}
+  <div class="smt-importer-report-bar">
+    <button type="button" data-action="copyReport">
+      <i class="fa-solid fa-copy"></i> {{localize "SMT.Importer.CopyReport"}}
+    </button>
+  </div>
   <ul class="smt-importer-report">
     {{#each report}}<li>{{this}}</li>{{/each}}
   </ul>

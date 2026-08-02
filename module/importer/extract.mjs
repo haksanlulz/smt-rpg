@@ -12,9 +12,15 @@
 // Coordinate notes, each load-bearing:
 //   * pdf.js y origin is BOTTOM-left; the parse expects top-left. Flip against the
 //     page's viewBox height.
-//   * transform[5] is the BASELINE y, PyMuPDF's y0 is the glyph-box TOP. The parse
-//     only ever compares y values to each other (row bucketing, bands), so a
-//     consistent baseline works as well as a consistent top.
+//   * transform[5] is the BASELINE y, PyMuPDF's y0 is the glyph-box TOP — and the
+//     difference is NOT constant: it is the font size. A stat-block label row mixes a
+//     6.56pt label with a 7.49pt value on one visual line, so their baselines sit
+//     0.4pt apart where their tops align. That 0.4pt was enough: Math.round in the
+//     label walk put the row's CAPS labels before its values, and the ALL-CAPS stop
+//     rule broke before reaching a single number — every second-block demon lost its
+//     HP/MP/resists, while first blocks passed on rounding luck. Unrotated text
+//     therefore subtracts the font size (|transform[3]|) to give the TOP, matching
+//     PyMuPDF to ~0.3pt.
 //   * The p.42 Magatama table is printed ROTATED; rotated text carries its rotation
 //     in transform[1]/[2] and is mapped below by swapping the advance axis. It is the
 //     extraction's sharpest untested edge and its items are counted for the report.
@@ -74,7 +80,7 @@ export async function pageWords(page) {
     }
 
     const x = e;
-    const y = height - f;
+    const y = height - f - Math.abs(item.transform[3]);
     if (parts.length === 1) {
       words.push([round1(x), round1(y), parts[0]]);
       continue;

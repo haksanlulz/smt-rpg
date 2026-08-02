@@ -646,6 +646,8 @@
   "SMT.Importer.AsPrinted": "As printed in the book: {note}",
   "SMT.Importer.SplitNote": "{count} text runs were split with estimated positions. If verification passed, this did not affect the result.",
   "SMT.Importer.RotatedNote": "{count} rotated text runs were read down-column (the p.42 table).",
+  "SMT.Importer.CopyReport": "Copy report",
+  "SMT.Importer.Copied": "Report copied to the clipboard.",
   "SMT.Magatama.Learned": "learns from {name}: {skills}",
   "SMT.Magatama.LearnBlocked": "At the cap of {cap} skills — not learned: {skills}",
   "SMT.Magatama.LearnUnknown": "No definition imported for: {skills}",
