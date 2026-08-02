@@ -22,7 +22,7 @@
             <label>{{localize "SMT.ClanLabel"}}</label>
             <select name="system.clan">
               {{#each @root.clanChoices as |label key|}}
-                <option value="{{key}}" {{#if (eq key ../system.clan)}}selected{{/if}}>{{label}}</option>
+                <option value="{{key}}" {{#if (eq key ../system.clan)}}selected{{/if}}>{{localize label}}</option>
               {{/each}}
             </select>
           </div>

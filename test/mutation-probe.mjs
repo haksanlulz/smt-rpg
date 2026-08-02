@@ -102,6 +102,13 @@ const MUTATIONS = [
       s + "\n<div><span>Hardcoded English label</span></div>\n")
   },
   {
+    // The 2026-08-01 probe-run report in one line: one option loop among ten
+    // dropping its {{localize}}, shipping raw "SMT.Clan.Night" into the dropdown.
+    rung: "C11d unlocalized option label", expect: "C11d",
+    apply: (d) => edit(d, "templates/actor/actor-sheet.hbs", s =>
+      s.replace(">{{localize label}}</option>", ">{{label}}</option>"))
+  },
+  {
     // The 2026-07-29 escape in one line: a second definition of a method that already
     // exists, which JS accepts and silently lets win.
     rung: "C14b duplicate class member", expect: "C14b",
