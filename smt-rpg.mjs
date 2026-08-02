@@ -123,7 +123,10 @@ Hooks.once("init", () => {
   game.keybindings.register("smt-rpg", "openImporter", {
     name: "SMT.Importer.Keybind",
     hint: "SMT.Importer.KeybindHint",
-    editable: [{ key: "KeyI", modifiers: ["Control", "Shift"] }],
+    // NOT Ctrl+Shift+I: that is DevTools in the Electron client, and AMD Adrenalin
+    // additionally captures it globally on many machines. Rebindable per user in
+    // Configure Controls either way.
+    editable: [{ key: "KeyU", modifiers: ["Control", "Shift"] }],
     restricted: true, // GM only
     onDown: () => {
       new SMTImporterApp().render(true);
