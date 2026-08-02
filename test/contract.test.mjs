@@ -524,6 +524,20 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
     }
   }
   eq(hardcoded, [], "C11c no hardcoded user-facing text in templates — wrap it in {{localize}} and add the key");
+
+  // (c) Config-map option loops. Every `{{#each … as |label key|}}` select renders
+  // i18n KEYS as its labels, so an option body of bare `{{label}}` shows the raw
+  // dotted key in the UI — which is exactly how the clan dropdown shipped reading
+  // "SMT.Clan.Night" while its nine sibling loops localized correctly. The chat
+  // cards' `{{label}}` headings are computed roll labels and never match this shape.
+  const rawOptions = [];
+  for (const [f, raw] of HBS_SRC) {
+    for (const m of raw.matchAll(/<option[^>]*>\{\{label\}\}<\/option>/g)) {
+      const line = raw.slice(0, m.index).split("\n").length;
+      rawOptions.push(`${rel(f)}:${line}`);
+    }
+  }
+  eq(rawOptions, [], "C11d every config-map option loop localizes its label — bare {{label}} renders the raw key");
 }
 
 // --- C12: every system.* write path is a declared schema field -------------

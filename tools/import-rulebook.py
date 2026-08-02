@@ -331,8 +331,13 @@ class Importer:
         d["affinities"] = clean(self.label_value(block_ws, ("AFFINITIES",), max_tokens=20))
         d["inheritTraits"] = clean(self.label_value(block_ws, ("INHERIT", "TRAITS"), max_tokens=10))
         d["evolve"] = clean(self.label_value(block_ws, ("EVOLVE?",), stop_x=hi_x))
-        d["behavior"] = clean(self.label_value(block_ws, ("BEHAVIOR",), stop_x=425, max_tokens=6))
-        d["dropItems"] = clean(self.label_value(block_ws, ("DROP", "ITEMS"), stop_x=425, max_tokens=8))
+        # The x-stop protects the GENERAL layout from its flavour column. Boss labels
+        # already sit right of x 355, so there the same stop amputates real values —
+        # Black Frost dropped "Magatama", not "Magatama (Satan)", and the sealed probe
+        # caught it where parity could not: both parsers shared the clip.
+        prose_stop = None if is_boss else 425
+        d["behavior"] = clean(self.label_value(block_ws, ("BEHAVIOR",), stop_x=prose_stop, max_tokens=6))
+        d["dropItems"] = clean(self.label_value(block_ws, ("DROP", "ITEMS"), stop_x=prose_stop, max_tokens=8))
         d["skills"] = self.parse_skills(self.skill_body(block_ws), anchors)
         d["page"] = printed
         return d
@@ -1270,6 +1275,10 @@ def verify(demons):
         "Manikin 1": dict(level=13, clan="corpus", hp=84, mp=54, exp=5),
         "Baal Avatar": dict(level=85, clan="deity", hp=13000, mp=5000, exp=10000),
         "Specter (3rd Time)": dict(level=440, clan="foul", hp=700, mp=500, exp=1500),
+        # From the first sealed-probe run: the boss-side x-stop had amputated this to
+        # "Magatama". A parenthetical drop value is now load-bearing.
+        "Black Frost": dict(level=70, clan="night", hp=2950, mp=2500,
+                            dropItems="Magatama (Satan)"),
     }
     by_name = {d["name"]: d for d in demons}
     for name, want in anchors.items():

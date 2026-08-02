@@ -313,8 +313,11 @@ export function parseBlock(head, blockWs, isBoss, printed, fallbackAnchors) {
   d.affinities = clean(labelValue(blockWs, ["AFFINITIES"], { maxTokens: 20 }));
   d.inheritTraits = clean(labelValue(blockWs, ["INHERIT", "TRAITS"], { maxTokens: 10 }));
   d.evolve = clean(labelValue(blockWs, ["EVOLVE?"], { stopX: hiX }));
-  d.behavior = clean(labelValue(blockWs, ["BEHAVIOR"], { stopX: 425, maxTokens: 6 }));
-  d.dropItems = clean(labelValue(blockWs, ["DROP", "ITEMS"], { stopX: 425, maxTokens: 8 }));
+  // The x-stop protects the GENERAL layout from its flavour column; on the boss
+  // layout the same stop amputates real values (Black Frost's "Magatama (Satan)").
+  const proseStop = isBoss ? null : 425;
+  d.behavior = clean(labelValue(blockWs, ["BEHAVIOR"], { stopX: proseStop, maxTokens: 6 }));
+  d.dropItems = clean(labelValue(blockWs, ["DROP", "ITEMS"], { stopX: proseStop, maxTokens: 8 }));
   d.skills = parseSkills(skillBody(blockWs), anchors);
   d.page = printed;
   return d;
@@ -428,6 +431,10 @@ export function verifyDemons(demons) {
     "Manikin 1": { level: 13, clan: "corpus", hp: 84, mp: 54, exp: 5 },
     "Baal Avatar": { level: 85, clan: "deity", hp: 13000, mp: 5000, exp: 10000 },
     "Specter (3rd Time)": { level: 440, clan: "foul", hp: 700, mp: 500, exp: 1500 },
+    // From the first sealed-probe run: the boss-side x-stop had amputated this to
+    // "Magatama". A parenthetical drop value is now load-bearing.
+    "Black Frost": { level: 70, clan: "night", hp: 2950, mp: 2500,
+      dropItems: "Magatama (Satan)" },
   };
   const byName = new Map(demons.map(d => [d.name, d]));
   for (const [name, want] of Object.entries(anchors)) {
