@@ -44,7 +44,8 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     classes: ["smt-importer"],
     actions: {
       chooseFile: SMTImporterApp.#onChooseFile,
-      runImport: SMTImporterApp.#onRunImport
+      runImport: SMTImporterApp.#onRunImport,
+      copyReport: SMTImporterApp.#onCopyReport
     }
   };
 
@@ -85,6 +86,14 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
 
   static #onChooseFile() {
     this.element.querySelector("input[type=file]")?.click();
+  }
+
+  // The report is the shareable diagnostic; a button beats fighting the app's
+  // user-select rules for a 30-line list.
+  static async #onCopyReport() {
+    if (!this.#report.length) return;
+    await navigator.clipboard.writeText(this.#report.join("\n"));
+    ui.notifications.info(game.i18n.localize("SMT.Importer.Copied"));
   }
 
   static async #onRunImport() {
@@ -174,6 +183,10 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
     if (errs.length) {
       // The shareable diagnostic: every error verbatim, count first. This is the
       // wrong-PDF path and the layout-drift path; both refuse rather than half-import.
+      // The FULL list also goes to the console — the first live refusal was
+      // undebuggable because the rendered list was the only copy anywhere.
+      console.warn(`smt-rpg | importer verification failed with ${errs.length} problem(s):`);
+      for (const e of errs) console.warn("smt-rpg |   " + e);
       this.#report = [
         i18n.format("SMT.Importer.VerifyFailed", { count: errs.length }),
         ...errs.slice(0, 30),

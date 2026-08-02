@@ -1423,3 +1423,21 @@ button.condition-pip.ailment-save:hover {
   opacity: 0.85;
   margin-top: 2px;
 }
+
+/* The report is the shareable diagnostic — selectable despite the app-wide
+   user-select rules, with a copy button so nobody has to fight a drag-select. */
+.smt-importer-report,
+.smt-importer-status {
+  user-select: text;
+}
+
+.smt-importer-report-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.smt-importer-report-bar button {
+  flex: 0 1 auto;
+  width: auto;
+  font-size: 0.85em;
+}
