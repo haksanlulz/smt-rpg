@@ -540,6 +540,38 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   eq(rawOptions, [], "C11d every config-map option loop localizes its label — bare {{label}} renders the raw key");
 }
 
+// --- C15: every input TYPE the templates render is styled -------------------
+// Reported from play 2026-08-01: the Magatama "Active" radio was INVISIBLE while
+// unchecked. Only `text` and `number` had ever been styled, so all fifteen
+// radio/checkbox controls in the system rendered as empty space until something
+// happened to be ticked — the equip toggles, isBoss, negotiable, every item-sheet
+// flag. C13 could not see it: these controls carry no class at all, so there was
+// nothing for a class↔rule check to link.
+//
+// Narrow like C11 and C13: only the input types the system ACTUALLY renders are
+// required, so the set grows with the templates and never demands rules for markup
+// that does not exist. A bare `<input>` with no type attribute defaults to text and
+// is counted as such.
+{
+  const rendered = new Set();
+  for (const [, raw] of HBS_SRC) {
+    for (const m of raw.matchAll(/<input\b([^>]*)>/g)) {
+      const type = /type\s*=\s*["']([a-z]+)["']/i.exec(m[1]);
+      rendered.add(type ? type[1].toLowerCase() : "text");
+    }
+  }
+  ok(rendered.size >= 3, `C15a input types rendered by templates (${rendered.size} >= 3)`);
+
+  const css = readFileSync(join(ROOT, "styles/smt-rpg.css"), "utf8");
+  const unstyled = [...rendered]
+    .filter(t => t !== "file" && t !== "hidden")   // never visible to a player
+    .filter(t => !new RegExp(`input\\[type\\s*=\\s*["']${t}["']\\]`).test(css))
+    .sort();
+  eq(unstyled, [],
+    "C15b every input type the system renders has a style rule — an unstyled control "
+    + "inherits whatever the sheet gives it, which is how a radio ended up invisible");
+}
+
 // --- C12: every system.* write path is a declared schema field -------------
 // The 2026-07-27 escape wrote `target`, `description` and `behavior` into a
 // document and Foundry rejected every one. Nothing in this suite could see it,

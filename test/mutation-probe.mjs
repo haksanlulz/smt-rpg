@@ -109,6 +109,13 @@ const MUTATIONS = [
       s.replace(">{{localize label}}</option>", ">{{label}}</option>"))
   },
   {
+    // The 2026-08-01 play report in one line: a control the system renders with no
+    // rule anywhere, invisible in one of its two states.
+    rung: "C15b unstyled input type", expect: "C15b",
+    apply: (d) => edit(d, "styles/smt-rpg.css", s =>
+      s.replace(/input\[type="radio"\]/g, 'input[type="unstyled-on-purpose"]'))
+  },
+  {
     // The 2026-07-29 escape in one line: a second definition of a method that already
     // exists, which JS accepts and silently lets win.
     rung: "C14b duplicate class member", expect: "C14b",

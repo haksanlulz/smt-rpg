@@ -1441,3 +1441,86 @@ button.condition-pip.ailment-save:hover {
   width: auto;
   font-size: 0.85em;
 }
+
+/* ---- Checkboxes and radios ----
+   Reported from play 2026-08-01: the Magatama "Active" radio was INVISIBLE while
+   unchecked — a dark control on a dark sheet with no rule anywhere. Only `text` and
+   `number` inputs had ever been styled, so all fifteen radio/checkbox controls in the
+   system shared the hole: equip toggles, isBoss, negotiable, and every item-sheet flag
+   read as empty space until something happened to be ticked.
+
+   Drawn explicitly rather than left to the browser: Foundry's own resets strip the
+   native appearance in places, so relying on the platform default is what produced an
+   invisible control in the first place. Both states must be visible on their own. */
+.smt-rpg input[type="checkbox"],
+.smt-rpg input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  background: var(--smt-bg-light);
+  border: 2px solid var(--smt-text-dim);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 80ms linear, background-color 80ms linear;
+}
+
+.smt-rpg input[type="checkbox"] { border-radius: 3px; }
+.smt-rpg input[type="radio"] { border-radius: 50%; }
+
+.smt-rpg input[type="checkbox"]:hover,
+.smt-rpg input[type="radio"]:hover {
+  border-color: var(--smt-text);
+}
+
+.smt-rpg input[type="checkbox"]:focus-visible,
+.smt-rpg input[type="radio"]:focus-visible {
+  outline: 2px solid var(--smt-accent);
+  outline-offset: 1px;
+}
+
+.smt-rpg input[type="checkbox"]:checked,
+.smt-rpg input[type="radio"]:checked {
+  border-color: var(--smt-accent);
+  background: var(--smt-accent);
+}
+
+/* The tick and the dot: drawn on the control so the checked state reads at a glance
+   against the filled background. */
+.smt-rpg input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.smt-rpg input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.smt-rpg input[type="checkbox"]:disabled,
+.smt-rpg input[type="radio"]:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The Magatama "Active" cell — the whole cell is the hit target, not the 16px dot. */
+.smt-active-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  cursor: pointer;
+}

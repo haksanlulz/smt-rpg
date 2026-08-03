@@ -112,8 +112,12 @@
         <div class="item" data-item-id="{{mag._id}}">
           <span class="item-name clickable" data-action="viewItem">{{mag.name}}</span>
           <span class="item-detail">
-            <input type="radio" name="system.activeMagatama" value="{{mag._id}}"
-              {{#if (eq mag._id ../system.activeMagatama)}}checked{{/if}} />
+            {{!-- Wrapped in a label so the whole cell is a hit target, not just the
+                  ~13px control. --}}
+            <label class="smt-active-toggle">
+              <input type="radio" name="system.activeMagatama" value="{{mag._id}}"
+                {{#if (eq mag._id ../system.activeMagatama)}}checked{{/if}} />
+            </label>
           </span>
           <span class="item-controls">
             <a class="item-control" data-action="editItem" title="Edit"><i class="fas fa-edit"></i></a>
