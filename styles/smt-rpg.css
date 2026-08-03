@@ -1456,9 +1456,12 @@ button.condition-pip.ailment-save:hover {
 .smt-rpg input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
+  /* Explicit: the sheet inherits Foundry's box model, and a control whose declared
+     size is not its rendered size puts its own marker off-centre. */
+  box-sizing: border-box;
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   margin: 0;
   padding: 0;
   background: var(--smt-bg-light);
@@ -1485,29 +1488,38 @@ button.condition-pip.ailment-save:hover {
 .smt-rpg input[type="checkbox"]:checked,
 .smt-rpg input[type="radio"]:checked {
   border-color: var(--smt-accent);
+}
+
+/* A checkbox fills and carries a white tick; a radio keeps its dark centre and takes
+   an accent dot. Both markers are centred by transform rather than by inset or edge
+   offsets — those resolve against whichever box model wins, which is what put the
+   first attempt's dot in the corner. */
+.smt-rpg input[type="checkbox"]:checked {
   background: var(--smt-accent);
 }
 
-/* The tick and the dot: drawn on the control so the checked state reads at a glance
-   against the filled background. */
 .smt-rpg input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
-  left: 3px;
-  top: 0;
-  width: 4px;
-  height: 8px;
+  left: 50%;
+  top: 45%;
+  width: 3px;
+  height: 7px;
   border: solid #fff;
   border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .smt-rpg input[type="radio"]:checked::after {
   content: "";
   position: absolute;
-  inset: 3px;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--smt-accent);
+  transform: translate(-50%, -50%);
 }
 
 .smt-rpg input[type="checkbox"]:disabled,
