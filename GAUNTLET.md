@@ -66,7 +66,7 @@ The founding gap: every rung that existed before 2026-07-26 ran in `node`, and *
 | sheet + chat buttons | **a user clicks them** | every `data-action` has a handler; every flag read has a writer | `test/contract.test.mjs` C7–C8 (proxy) |
 | **documents the system creates** | **Foundry's DataModel validates them on create** | every field written exists on that document's schema, with the right enum value and nested shape | `test/demon-skills.test.mjs` (runtime, per-type) + `contract` C12 (static, coarse) |
 | **the installed system** | **load the world and play** | boots · a sheet opens · an attack resolves end-to-end · HP persists | **manual** — §5 `system-loads-cold`, `every-chat-button-fires` |
-| manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun. |
+| manifest install | **Foundry installs from the manifest URL** | `system.json` at the raw URL parses and points at a downloadable archive | **partly checked 2026-07-26 (v0.1.12)** — raw manifest 200 with correct id/version/compat, archive 200 `application/zip`. Foundry actually *installing* from it is still unrun, and **v0.1.13's manifest has not been re-checked at the URL**. |
 | **in-Foundry importer** *(all four packs BUILT 2026-08-01 — Demons, Magatama, Skills, Gear & Items; UI never observed)* | **a GM points it at their own PDF in a live client** | four world packs created atomically; entry counts match the CLI importer's verified anchors; live progress; client never freezes; a failed run writes nothing | `test/importer-parity.test.mjs` — all four parsers held byte-identical to the CLI reference over the same words (194/194 demons, 25/25 Magatama incl. prose grants, 248/248 skills, 68/68 gear+items; red-proved four ways). The p.39-41 prose is reconstructed from WORDS with a fixed column split so both sides derive grants identically; p.118 is a second ROTATED table with multi-line cells reading right-to-left. The pdf.js EXTRACTION layer has no node rung; it is gated at runtime by the ported verifiers, which refuse to write on any failure — the two rotated pages are extraction's sharpest untested edge. The dialog itself: **manual** — §5 `the-ten-minute-path`, NEVER. |
 | **world compendiums + drag-drop** *(1.0 oracle #4 — packs NOT BUILT)* | **a user drags an entry from the sidebar onto a scene or sheet** | the dragged document is a WORKING actor/item — stats land, skills attach, bonuses apply | document-shape suites cover the payloads (`demon-skills`, `magatama-data`, `skill-learning`); the drag itself is **manual** — §5 `every-drag-lands` |
 | **socket relay (remote play)** *(BUILT 2026-08-01; never run with a second client)* | **two connected clients: a player clicks, the active GM's client resolves** | every cross-permission action (dodge/apply, halve, counter, negotiation, buff/dispel/provoke) resolves identically to a solo-GM click; ids-only payloads; refused loudly with no GM connected | `test/socket-relay.test.mjs` — the pure core (routing, registry, payload rule) with the ids-only invariant red-proved both ways. **The recorded blocker was found already closed**: `resolveAttack` reads `rawPower` from the flag and the 07-28 refactor threaded `basePower: rw.power` through both strike paths — the OPEN line had gone stale again. The two-client exchange itself: **manual only**, NEVER run. |
@@ -427,8 +427,10 @@ Check: test/ailment-rules.test.mjs  (tagged  // spec: rerolling-into-success-rol
 Given a Foundry world with this system installed
 When it is launched from cold
 Then the world loads, an actor sheet opens, and no error appears in the console
-Check: manual — last verified: 2026-07-28 (v0.1.12)
+Check: manual — last verified: 2026-08-01 (v0.1.13)
 ```
+
+**Re-verified 2026-08-01, twice, from the operator's own console.** Cold load clean on both runs: every template compiled, all three compendiums loaded (`194 stat blocks` / `25 entries` / `248 skills`), zero errors. That load carried the **seven schema fields added on 08-01** — `fractionalHP`, `fractionalPercent`, `fpImmune`, `drainsHP`, `drainsMP`, `killCondition` on skills, and `slot` on gear — plus the new `ammo` consumable type, and existing documents migrated without complaint.
 
 **Re-verified 2026-07-28.** Cold load clean: 194 stat blocks, every template compiled, no errors. That load carried **six schema fields added across 07-27 and 07-28** — `behavior`, `inheritTraits`, `evolvePath`, `categoryAffinities`, `hpMaxOverride`/`mpMaxOverride` — and existing actors migrated without complaint.
 
@@ -527,8 +529,10 @@ When they point the in-Foundry importer at their PDF
 Then within ten minutes of first launch they drag a demon from a compendium
      onto a scene and it is a working actor — without leaving Foundry,
      without a CLI, without reading anything but the screen
-Check: manual — last verified: NEVER (the importer is not built)
+Check: manual — last verified: 2026-08-01 (v0.1.13) — PARTIAL, see below
 ```
+
+**Walked 2026-08-01, and the partial is the honest half.** The operator opened the importer from the Settings menu, pointed it at his own PDF, and it built four world compendiums — SMT Demons (194), SMT Magatama (25), SMT Skills (293), SMT Gear & Items (68) — after which Black Frost dragged onto a scene as a working actor whose exported JSON matched the printed page field for field. Never left Foundry; no CLI; the only reading was the app's own report. **Three honest qualifications.** (1) Not a *fresh install* — an existing dev world with the system already present, so first-launch discoverability is untested. (2) The **first attempt refused** on a real extraction defect (§6, baseline-vs-top) and the second succeeded; ten minutes covers the working path only. (3) The walk that succeeded was the operator's own, on the machine the parser was written against — the PDF-variance rabbit hole in `ATTACK.md` is untouched by it.
 
 ### SPEC the-no-pdf-path-degrades-cleanly
 
@@ -551,8 +555,10 @@ When a demon is dragged to a scene, a skill to a sheet, a magatama to a
      fiend, and gear to a human
 Then each produces a working document — stats land, the skill is usable,
      the magatama equips, the gear applies its bonuses
-Check: manual — last verified: NEVER (world packs are not built)
+Check: manual — last verified: 2026-08-01 (v0.1.13) — PARTIAL, see below
 ```
+
+**Two of four legs verified 2026-08-01.** **Demon → scene: PASSES**, and hardest — Black Frost's exported JSON was read field by field against the printed page: stats, TNs, the HP/MP max-overrides beating the derived formula, all five affinity ratings plus the Ailment category axis, macca, EXP, the drop line, and four skills with their riders. **Magatama → fiend: the drop lands**, but activating it was blocked until the same day's invisible-control fix (§6) and **the post-fix activation is unconfirmed** — so whether the stat bonuses and affinity grant actually apply is still unobserved. **Skill → sheet and gear → human: NEVER.** This row stays PARTIAL until all four legs are walked.
 
 ### SPEC instant-table-patient-import
 
@@ -564,8 +570,10 @@ When any in-session interaction runs (open a sheet, roll, apply damage,
 Then it reads as instant with no visible hang and nothing crashes; and when
      the importer runs, it may take minutes but shows live progress and
      never freezes the client
-Check: manual — last verified: NEVER
+Check: manual — last verified: 2026-08-01 (v0.1.13) — import half only
 ```
+
+**The import half holds; the table half is untested.** Three full imports ran on 08-01 — 130 pages extracted, four packs written, ~535 documents created — with a live progress bar, no freeze, and no crash reported across two cold loads. Chrome logged two `[Violation] wheel handler delayed 146ms` warnings during the run, which is a busy main thread rather than a hang, and is recorded here rather than dismissed. **The in-session half of this spec — "any interaction reads as instant" — has never been measured**, because no combat has been resolved since it was written.
 
 *("nothing crashes" added 2026-08-01 from the premortem ruling — "no crashs, no freezing" — which otherwise re-ratified §1 clause 3 verbatim.)*
 ```
