@@ -293,7 +293,16 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
         destructures++;
         const declared = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(targetSrc);
         const listed = new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`).test(targetSrc);
-        if (!declared && !listed) missing.push(`${rel(file)}: '${name}' is not exported by ${m[2]}`);
+        // `const { default: Thing } = await import(...)` destructures the name
+        // `default`, which is satisfied by `export default` and never by
+        // `export class default`. Without this the scan reports a module that
+        // plainly has a default export as missing one — the sixth false positive
+        // of the shape recorded below, and the same lesson each time: a scan that
+        // cannot see a legitimate idiom manufactures work until someone deletes it.
+        const isDefault = name === "default" && /export\s+default\b/.test(targetSrc);
+        if (!declared && !listed && !isDefault) {
+          missing.push(`${rel(file)}: '${name}' is not exported by ${m[2]}`);
+        }
       }
     }
   }

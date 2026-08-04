@@ -23,15 +23,12 @@ import { buildGearItemPayloads } from "../helpers/gear-compendium.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-// The three world packs, in write order. Deleting and recreating all three together
-// keeps a re-import atomic from the user's point of view: either every pack is the
-// new import or none is.
-const PACKS = [
-  { name: "smt-demons", type: "Actor", labelKey: "SMT.Importer.PackLabel" },
-  { name: "smt-magatama", type: "Item", labelKey: "SMT.Importer.PackMagatama" },
-  { name: "smt-skills", type: "Item", labelKey: "SMT.Importer.PackSkills" },
-  { name: "smt-gear", type: "Item", labelKey: "SMT.Importer.PackGear" },
-];
+// The world packs, in write order — declared once in helpers/onboarding.mjs, which
+// also creates them empty at first launch, so a pack cannot exist in one place and not
+// the other. Deleting and recreating them together keeps a re-import atomic from the
+// user's point of view: either every pack is the new import or none is.
+import { PACK_DEFS as PACKS, packsWithContent } from "../helpers/onboarding.mjs";
+
 const WRITE_CHUNK = 25;
 
 export default class SMTImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -195,17 +192,24 @@ export default class SMTImporterApp extends HandlebarsApplicationMixin(Applicati
       throw new Error(i18n.localize("SMT.Importer.Refused"));
     }
 
-    // --- confirm-then-replace, across all three packs together -------------
+    // --- confirm-then-replace, across every pack together -------------------
+    // Only packs that actually HOLD something prompt. The four are created empty at
+    // first launch (helpers/onboarding.mjs), and asking a first-time user to confirm
+    // the replacement of four empty packs it made itself is a scary dialog about
+    // nothing — while a real re-import over real data still asks, every time.
     const existing = PACKS.map(p => game.packs.get(`world.${p.name}`)).filter(Boolean);
-    if (existing.length) {
+    const populated = packsWithContent(existing.map(p => ({ pack: p, count: p.index?.size ?? 0 })))
+      .map(e => e.pack);
+    if (populated.length) {
       const confirmed = await foundry.applications.api.DialogV2.confirm({
         window: { title: i18n.localize("SMT.Importer.ReplaceTitle") },
         content: `<p>${i18n.format("SMT.Importer.ReplaceBody",
-          { packs: existing.map(p => `"${p.metadata.label}"`).join(", ") })}</p>`
+          { packs: populated.map(p => `"${p.metadata.label}"`).join(", ") })}</p>`
       });
       if (!confirmed) throw new Error(i18n.localize("SMT.Importer.Cancelled"));
-      for (const pack of existing) await pack.deleteCompendium();
     }
+    // Every declared pack is rebuilt, populated or not, so the set stays consistent.
+    for (const pack of existing) await pack.deleteCompendium();
 
     // --- build payloads (still nothing written) -----------------------------
     const caveats = [];

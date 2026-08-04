@@ -107,6 +107,7 @@ All in `test/contract.test.mjs`. Each was mutation-proved on 2026-07-26 (see §6
 | C8b | `initiativeTieBreak` has no writer | `documents/combat.mjs` writes the computed key `` [`flags.${FLAG_SCOPE}.${TIEBREAK_KEY}`] `` — assembled at runtime |
 | C9c | dangling spec tag `tag` | the scanner matched `spec: tag` inside its own assertion label |
 | C9c | control run red on `a-tag-matching-no-declared-spec` | `mutation-probe.mjs` stores the tags it plants, and it lives under `test/` |
+| C2 | `'default' is not exported by ../importer/app.mjs` | `const { default: Thing } = await import(…)` destructures the name **`default`**, which `export default` satisfies and `export class default` never could. The module plainly had the export; the scan could not see the idiom. |
 
 All fixed and re-proved. **A third lesson, from 2026-07-27: a check on field NAMES is not a check on values or shapes.** The first version of the demon-skill rung compared key names against the schema and passed `drops`-written-as-a-string without complaint, because `drops` *is* a real field — it just is not a string. Assert the shape the schema declares, not merely that the name exists. Two more lessons worth keeping: a scan that cannot see a legitimate idiom manufactures false positives until someone deletes the rung — which is how a project ends up with no rung at all; and a scanner that reads its own source will find whatever it is looking for.
 
@@ -533,6 +534,27 @@ Check: manual — last verified: 2026-08-01 (v0.1.13) — PARTIAL, see below
 ```
 
 **Walked 2026-08-01, and the partial is the honest half.** The operator opened the importer from the Settings menu, pointed it at his own PDF, and it built four world compendiums — SMT Demons (194), SMT Magatama (25), SMT Skills (293), SMT Gear & Items (68) — after which Black Frost dragged onto a scene as a working actor whose exported JSON matched the printed page field for field. Never left Foundry; no CLI; the only reading was the app's own report. **Three honest qualifications.** (1) Not a *fresh install* — an existing dev world with the system already present, so first-launch discoverability is untested. (2) The **first attempt refused** on a real extraction defect (§6, baseline-vs-top) and the second succeeded; ten minutes covers the working path only. (3) The walk that succeeded was the operator's own, on the machine the parser was written against — the PDF-variance rabbit hole in `ATTACK.md` is untouched by it.
+
+### SPEC a-fresh-world-signposts-the-importer
+
+*(Added 2026-08-01.)*
+```
+Given a world with this system installed and nothing imported
+When a GM launches it
+Then the four compendiums already exist, named and empty; the GM is told
+     once, with a button that opens the importer; and opening an empty
+     pack says how to fill it
+And nobody is told twice, a player is never told, a world that already
+     holds data is never told, and a first import over the empty packs
+     does not ask to replace anything
+Check: test/onboarding.test.mjs  (tagged  // spec: a-fresh-world-signposts-the-importer)
+```
+
+**This is the code behind a promise the spec below had already made.** `the-no-pdf-path-degrades-cleanly` said the first launch points at the importer unprompted; nothing did. A stranger installing v0.1.13 saw an empty sidebar with no way to know the importer existed — premortem #8's bounce, verbatim.
+
+**⚑ One clause of the older spec cannot be satisfied as written, and is recorded rather than quietly dropped:** *"every empty compendium states how to fill it."* Foundry's pack metadata schema has **no description field** — v14's `packs` accepts `name`/`label`/`banner`/`path`/`type`/`system`/`ownership`/`flags` and nothing else — so the guidance cannot live on the pack. It fires on `renderCompendium` instead, which lands it at the moment the confusion actually happens.
+
+**The sharp edge is the interaction with re-import.** Creating the packs empty at launch would otherwise make every first-time import open with a destructive-sounding "replace all four?" dialog about nothing. `packsWithContent` is the one predicate both paths share: empty packs are not content, a populated pack always is, and the suite ESCAPE-tags both directions.
 
 ### SPEC the-no-pdf-path-degrades-cleanly
 

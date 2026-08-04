@@ -15,6 +15,9 @@ import SMTNPCSheet from "./module/sheets/npc-sheet.mjs";
 import SMTItemSheet from "./module/sheets/item-sheet.mjs";
 import SMTImporterApp from "./module/importer/app.mjs";
 import { registerRelay, runRelayed } from "./module/helpers/socket.mjs";
+import {
+  SETTING_ONBOARDED, ensureWorldPacks, needsOnboarding, showOnboarding, noticeEmptyPack
+} from "./module/helpers/onboarding.mjs";
 
 // Token-HUD ailment icons, keyed by CONFIG.SMT.ailments id (p.67-68). Mirror system.ailment; see syncAilmentStatus.
 const AILMENT_ICONS = {
@@ -38,6 +41,15 @@ Hooks.once("init", () => {
 
   CONFIG.SMT = SMT;
   SMT.debug = false; // toggle: CONFIG.SMT.debug = true
+
+  // Whether the first-launch importer prompt has been shown. Hidden from the settings
+  // UI: it is bookkeeping, not a preference, and the importer has its own menu entry.
+  game.settings.register("smt-rpg", SETTING_ONBOARDED, {
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false
+  });
 
   game.settings.register("smt-rpg", "targetingMode", {
     name: "SMT.Settings.TargetingMode",
@@ -236,14 +248,29 @@ function _registerStatusEffects() {
 // Preload the imported demon stat blocks and Magatama once the world is up. Both are
 // absent by design on a fresh clone (the data comes from the user's own rulebook PDF
 // via tools/import-rulebook.py), so each logs and moves on rather than failing.
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
   import("./module/helpers/compendium.mjs").then(m => m.loadDemonStats());
   import("./module/helpers/magatama-compendium.mjs").then(m => m.loadMagatamaStats());
   import("./module/helpers/skill-compendium.mjs").then(m => m.loadSkillStats());
   // The GM-proxy relay for remote play: player clicks on cross-permission buttons
   // are executed by the active GM's client. See helpers/socket.mjs for the payload rule.
   registerRelay();
+
+  // The no-PDF path signposts itself (1.0 oracle #2). The packs exist from the first
+  // launch so the sidebar is populated and named; a GM with nothing imported is told
+  // once, with a button that opens the importer.
+  await ensureWorldPacks();
+  if (needsOnboarding({
+    isGM: game.user.isGM,
+    dismissed: game.settings.get("smt-rpg", SETTING_ONBOARDED),
+    packs: game.packs.map(p => ({ collection: p.collection, count: p.index?.size ?? 0 }))
+  })) await showOnboarding();
 });
+
+// Opening one of our own empty packs says how to fill it — Foundry's pack metadata has
+// no description field, so this is the closest the API allows to putting the guidance
+// on the pack, and it lands exactly where the confusion does.
+Hooks.on("renderCompendium", (app) => noticeEmptyPack(app.collection));
 
 // Chat message button handlers
 Hooks.on("renderChatMessageHTML", (message, html) => {

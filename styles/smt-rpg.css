@@ -1536,3 +1536,13 @@ button.condition-pip.ailment-save:hover {
   min-height: 22px;
   cursor: pointer;
 }
+
+/* First-launch signpost (1.0 oracle #2). */
+.smt-onboarding p {
+  margin: 0 0 8px;
+}
+
+.smt-onboarding-note {
+  opacity: 0.85;
+  font-size: 0.9em;
+}
