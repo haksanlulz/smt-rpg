@@ -9,7 +9,7 @@ import { resolveResourceMax } from "../helpers/resources.mjs";
 import { flyStatTotals } from "../helpers/ailments.mjs";
 import { statTn, dodgeTn, negotiationTn, resistance, basePower, fatePoints } from "../helpers/derived.mjs";
 
-const { SchemaField, NumberField, StringField, BooleanField, HTMLField } = foundry.data.fields;
+const { SchemaField, NumberField, StringField, BooleanField, HTMLField, ObjectField } = foundry.data.fields;
 
 export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
 
@@ -63,8 +63,16 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       // Freeze and Shock read it: p.68 gives them one failure, then a free recovery
       // at the following turn start. Reset whenever the ailment slot changes.
       ailmentSaveFailed: new BooleanField({ initial: false }),
-      // Endure is once per combat (p.110); cleared when combat ends.
+      // Endure is once per combat (p.110); cleared when combat ends. Kept as its own
+      // field rather than folded into the ledger below because it is a PASSIVE — it
+      // fires from the damage pipeline, not from a skill being used.
       endureUsed: new BooleanField({ initial: false }),
+      // Limited-skill ledger (p.96): `<period>:<skill name>` -> uses spent in the
+      // current period. Object rather than a schema because the keys are skill names,
+      // which are data. Cleared per boundary by helpers/uses.mjs clearedByBoundary.
+      useLedger: new ObjectField(),
+      // Focus (p.105): a stored doubling for the next basic strike or physical attack.
+      focusReady: new BooleanField({ initial: false }),
 
       // Buff/debuff accumulators (p.96); stored so effects have a key to target, re-zeroed each prepare.
       buffs: new SchemaField({

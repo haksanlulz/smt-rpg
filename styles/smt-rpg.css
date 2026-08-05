@@ -1546,3 +1546,10 @@ button.condition-pip.ailment-save:hover {
   opacity: 0.85;
   font-size: 0.9em;
 }
+
+/* Focus's doubling on the power card (p.105) — sits beside the critical marker,
+   which is the other thing that multiplies a total. */
+.roll-focus {
+  color: var(--smt-fate);
+  font-weight: bold;
+}

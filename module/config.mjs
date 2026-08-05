@@ -272,6 +272,16 @@ SMT.counter = { chancePct: 50, element: "phys" };
 // not a condition buried in the damage path.
 SMT.endure = { survivesAt: 1, blockedByAilments: ["stone"] };
 
+// Focus (p.105): "the caster doubles the total power of their next basic strike or
+// physical attack." A POWER multiplier, applied after the roll — not a TN bonus like
+// Concentrate and Aid, which is why it does not live in SMT.actionEffects.
+SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
+  icon: "icons/skills/melee/strike-slashes-orange.webp" };
+
+// Limited skills (p.96). The period a use budget resets on; "scenario" has no
+// automatic boundary and is cleared by the GM.
+SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
+
 // Skill-sheet passive-effect dropdown (key -> label), derived from the registry.
 SMT.passiveEffectChoices = Object.fromEntries(
   Object.entries(SMT.passiveEffects).map(([key, entry]) => [key, entry.label])

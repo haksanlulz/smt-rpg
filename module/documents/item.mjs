@@ -52,6 +52,13 @@ export default class SMTItem extends Item {
     return this.type === "skill" && CONFIG.SMT.muteBlockedSkillTypes.includes(this.system.skillType);
   }
 
+  // Focus (p.105): stores a doubling for the next basic strike or physical attack.
+  // Name-matched like Provoke — the effect is a whole mechanic of its own rather than
+  // a value on the schema, and the printed skill list names exactly one skill for it.
+  get isFocus() {
+    return this.type === "skill" && (this.name ?? "").trim().toLowerCase() === "focus";
+  }
+
   // Casts a buff/debuff or dispel (p.96).
   get isBuffSkill() {
     const e = this.system.buffEffect;
@@ -89,6 +96,10 @@ export default class SMTItem extends Item {
     // Firearm skills need an equipped, loaded gun before the action's cost is spent (p.63).
     if (this.isRangedSkill && !this._readyRangedWeapon(actor)) return;
 
+    // Use limits (p.96) are checked before the cost, like Mute above: a skill with no
+    // uses left is not attempted, so it burns no MP and triggers no per-action drain.
+    if (!(await actor.spendSkillUse(this))) return;
+
     const cost = this.system.cost;
     if (cost.resource !== "none" && cost.value > 0) {
       const resource = cost.resource;
@@ -108,6 +119,12 @@ export default class SMTItem extends Item {
     const { applyPoisonDrain, rollCurseMishap } = await import("../helpers/effects.mjs");
     await applyPoisonDrain(actor);
     await rollCurseMishap(actor);
+
+    // Focus (p.105): auto-succeeds and stores a doubling rather than attacking.
+    if (this.isFocus) {
+      await this._castFocus(actor);
+      return;
+    }
 
     // Firearm skills resolve through the ranged-weapon power path (p.63), spending ammo per shot.
     if (this.isRangedSkill) {
@@ -246,7 +263,11 @@ export default class SMTItem extends Item {
 
       if (checkResult.isSuccess && this.hasPowerRoll) {
         const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
-        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element));
+        // Focus (p.105) applies to a physical attack only, and is consumed by it. A
+        // spell rolling power in between leaves the stored doubling standing.
+        const focus = actor.focusFor(this.isPhysicalSkill);
+        const powerResult = await actor.rollPower(basePower, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`, checkResult.isCritical, this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice, actor.system.boostFor(this.system.element), focus.multiplier);
+        if (focus.consumed) await actor.clearFocus();
         await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
       }
 
@@ -516,6 +537,21 @@ export default class SMTItem extends Item {
       targetTokenUuids: uuids,
       key
     });
+  }
+
+  // Focus (p.105): "The caster doubles the total power of their next basic strike or
+  // physical attack. The check for this auto-succeeds." Stores a flag; the doubling is
+  // applied and consumed by whichever physical action comes next.
+  async _castFocus(actor) {
+    const intro = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/auto-success.hbs",
+      { name: this.name, effectDescription: this.system.effectDescription }
+    );
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
+    await actor.update({ "system.focusReady": true });
+
+    const { postEffectNotice } = await import("../helpers/effects.mjs");
+    await postEffectNotice(actor, game.i18n.format("SMT.Focus.Ready", { name: actor.name }));
   }
 
   // Provoke (p.105): auto-success; one 1d10 debuffs every foe (−resist, +phys/mag power).

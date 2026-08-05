@@ -80,6 +80,16 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       killCondition: new SchemaField({
         ailment: new StringField({ initial: "none" }),
         rate: new NumberField({ integer: true, min: 0, max: 100, initial: 0 })
+      }),
+      // Use limits (p.96). "none" is the overwhelming majority; a skill that states
+      // no limit gets none, because inventing one forbids a legal action. The ledger
+      // lives on the actor, keyed by period and skill name — see helpers/uses.mjs.
+      useLimit: new SchemaField({
+        period: new StringField({
+          initial: "none",
+          choices: ["none", "round", "combat", "scenario"]
+        }),
+        count: new NumberField({ integer: true, min: 1, initial: 1 })
       })
     };
   }
