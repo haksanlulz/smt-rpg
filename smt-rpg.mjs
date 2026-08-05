@@ -132,6 +132,18 @@ Hooks.once("init", () => {
     restricted: true,
     type: SMTImporterApp
   });
+  // Scenario-scoped use budgets (p.96) have no automatic boundary — Fortune, Luck
+  // Smiles and Once a Snake reset when the GM says the scenario ended and at no other
+  // moment. A button is the honest interface for a rule the book hands to a person.
+  game.settings.registerMenu("smt-rpg", "clearScenarioUses", {
+    name: "SMT.ClearScenarioUses",
+    label: "SMT.ClearScenarioUses",
+    hint: "SMT.ClearScenarioUsesHint",
+    icon: "fa-solid fa-rotate-left",
+    restricted: true,
+    type: SMTScenarioResetMenu
+  });
+
   game.keybindings.register("smt-rpg", "openImporter", {
     name: "SMT.Importer.Keybind",
     hint: "SMT.Importer.KeybindHint",
@@ -411,6 +423,16 @@ async function _syncAilmentStatus(actor) {
 // start-of-turn effect. Defend clears first. Funnelled through the responsible client.
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!("turn" in changed || "round" in changed)) return;
+
+  // A new ROUND retires every round-scoped use budget (p.96's boss skills: Icy Death
+  // may not go twice back to back). Done for the whole encounter by one elected GM,
+  // because it is not the acting combatant's own bookkeeping.
+  if ("round" in changed && game.user.isGM && _isResponsibleGM()) {
+    for (const combatant of combat.combatants) {
+      await combatant.actor?.clearUseLimits("round");
+    }
+  }
+
   const actor = combat.combatant?.actor;
   if (!actor) return;
   if (!_isResponsibleClient(actor)) return;
@@ -437,6 +459,11 @@ Hooks.on("deleteCombat", async (combat) => {
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor) continue;
+    // Limited skills (p.96): ending a combat retires both round- and combat-scoped
+    // budgets. Scenario-scoped ones survive — nothing but the GM knows when a
+    // scenario ends. A stored Focus does not outlive the fight either.
+    await actor.clearUseLimits("combat");
+    await actor.clearFocus();
     await clearDefend(actor);
     // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);
@@ -684,5 +711,29 @@ async function _bindNegotiationButtons(message, html) {
         await runRelayed("negotiationOutcome", { messageId: message.id, outcome: btn.dataset.outcome });
       }
     });
+  }
+}
+
+/**
+ * The scenario-reset settings menu (p.96). Scenario-scoped use budgets have no
+ * automatic boundary — the book gives that judgement to the GM, so this is a button
+ * rather than a hook. An ApplicationV2 with no UI of its own: registerMenu constructs
+ * and renders it, and the work happens on render.
+ */
+class SMTScenarioResetMenu extends foundry.applications.api.ApplicationV2 {
+  async render() {
+    if (!game.user.isGM) return this;
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize("SMT.ClearScenarioUses") },
+      content: `<p>${game.i18n.localize("SMT.ClearScenarioUsesHint")}</p>`
+    });
+    if (!confirmed) return this;
+
+    let count = 0;
+    for (const actor of game.actors) {
+      if (await actor.clearUseLimits?.("scenario")) count += 1;
+    }
+    ui.notifications.info(game.i18n.format("SMT.ClearScenarioUsesDone", { count }));
+    return this;
   }
 }

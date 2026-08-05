@@ -461,6 +461,25 @@ Check: manual — last verified: NEVER
 
 **Why this is its own row.** The 2026-06-07 escape was reported *from the card* — the symptom was HP moving wrongly, not a stack trace. The card is the only surface most defects in this system ever present on, and nothing checks that it agrees with the sheet.
 
+### SPEC limited-skills-run-out-and-focus-doubles-once
+
+*(Added 2026-08-01.)*
+```
+Given a skill whose printed text states a use limit, and a stored Focus
+When the skill is used more times than its limit allows, and when a
+     physical or magical action follows the Focus
+Then the over-limit use is refused before any cost is spent, the budget
+     returns at its own boundary and at no other, and the Focus doubles a
+     physical attack's total power exactly once
+And a skill stating no limit is never limited, a scenario budget never
+     resets automatically, and a spell neither gains nor consumes the Focus
+Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-focus-doubles-once)
+```
+
+**p.96 hands the tracking to the player** — *"Players with these skills are responsible for keeping track of when to use such skills, and how many uses they have remaining."* Clause 2 says otherwise, so the ledger is kept for them. **The whole rule is the reset boundary:** a new round retires round budgets (p.96's boss skills — Icy Death may not go twice back to back), ending a combat retires round *and* combat because a combat contains rounds, and a scenario budget survives both. Nothing but the GM knows when a scenario ended, so that one is a button and says so.
+
+**Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
+
 ### SPEC attack-effect-riders-resolve-as-printed
 
 *(Added 2026-08-01.)*

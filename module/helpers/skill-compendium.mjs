@@ -14,6 +14,7 @@
 
 import { mapSkillType, mapElement, parseAilment } from "./compendium.mjs";
 import { allDemonStats } from "./compendium.mjs";
+import { parseUseLimit } from "./uses.mjs";
 
 const DATA_PATH = "systems/smt-rpg/data-local/skill-stats.json";
 
@@ -155,6 +156,10 @@ export function attackRiders(effect) {
   else if (/Instant Kill all Sleeping targets/i.test(s) || /If target is Sleeping, Instant Kill/i.test(s)) {
     out.killCondition = { ailment: "sleep", rate: 100 };
   }
+
+  // Use limits (p.96) are stated in the effect text and nowhere else.
+  const limit = parseUseLimit(s);
+  if (limit) out.useLimit = limit;
 
   return out;
 }

@@ -12,6 +12,9 @@
     {{#if isCritical}}
       <span class="roll-outcome critical">{{localize "SMT.Roll.Critical"}} (x2)</span>
     {{/if}}
+    {{#if focusApplied}}
+      <span class="roll-focus">{{localize "SMT.Focus.Applied"}} (x2)</span>
+    {{/if}}
   </div>
   <div class="roll-result">
     <span class="roll-value">{{total}}</span>

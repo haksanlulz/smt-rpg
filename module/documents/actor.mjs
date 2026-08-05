@@ -3,6 +3,9 @@ import { evaluatePercentile } from "../helpers/checks.mjs";
 import { expThresholdForLevel, statGrowthFor } from "../helpers/advancement.mjs";
 import { incomingDamageMultiplier } from "../helpers/ailments.mjs";
 import { blocksMagatamaSwitch, magatamaLearnPlan } from "../helpers/magatama.mjs";
+import {
+  focusMultiplier, focusConsumed, spendUse, clearedByBoundary, ledgerKey
+} from "../helpers/uses.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -101,6 +104,60 @@ export default class SMTActor extends Actor {
     await this.update({ "system.level": target, "system.exp": exp });
     await this.update({ "system.hp.value": this.system.hp.max, "system.mp.value": this.system.mp.max });
     return this;
+  }
+
+  // The Focus multiplier for an action, and whether that action consumes it (p.105).
+  // Reads the stored flag; the caller applies the number and clears the flag, so a
+  // spell that rolls power in between leaves the Focus standing.
+  focusFor(isPhysical) {
+    const active = !!this.system.focusReady;
+    return {
+      multiplier: focusMultiplier({ active, isPhysical }),
+      consumed: focusConsumed({ active, isPhysical })
+    };
+  }
+
+  async clearFocus() {
+    if (this.system.focusReady) await this.update({ "system.focusReady": false });
+  }
+
+  // Spend one use of a limited skill (p.96), or refuse. The ledger counts uses per
+  // period per skill name; `copies` is how many of that skill the actor holds, because
+  // p.110 says Luck Smiles and Once a Snake grant an extra use per copy learned.
+  async spendSkillUse(skill) {
+    const limit = skill?.system?.useLimit;
+    if (!limit || limit.period === "none") return true;
+
+    const key = ledgerKey(limit.period, skill.name);
+    const ledger = foundry.utils.deepClone(this.system.useLedger ?? {});
+    const copies = this.items.filter(i => i.type === "skill" && i.name === skill.name).length;
+    const result = spendUse({
+      period: limit.period, count: limit.count, copies, spent: ledger[key] ?? 0
+    });
+
+    if (!result.allowed) {
+      ui.notifications.warn(game.i18n.format("SMT.Warnings.UseLimit", {
+        skill: skill.name,
+        period: game.i18n.localize(`SMT.UsePeriod.${limit.period}`)
+      }));
+      return false;
+    }
+    ledger[key] = result.spent;
+    await this.update({ "system.useLedger": ledger });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Use limit", { skill: skill.name, ...result, copies });
+    return true;
+  }
+
+  // Clear the ledger entries a boundary retires. "round" and "combat" fire from the
+  // combat hooks; "scenario" has no automatic boundary and is the GM's call.
+  async clearUseLimits(boundary) {
+    const ledger = this.system.useLedger ?? {};
+    const drop = clearedByBoundary(ledger, boundary);
+    if (!drop.length) return 0;
+    const next = foundry.utils.deepClone(ledger);
+    for (const key of drop) delete next[key];
+    await this.update({ "system.useLedger": next });
+    return drop.length;
   }
 
   // Advance one level when enough EXP is banked (p.48). Gated; reuses setLevel's
@@ -265,12 +322,18 @@ export default class SMTActor extends Actor {
   // `boost` is an elemental Boost passive's multiplier (p.110): it multiplies base
   // power + potency BEFORE the power roll is added, which is what the book specifies
   // and is also why it cannot simply scale the total.
-  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false, extraDice = "", boost = 1) {
+  async rollPower(basePower, skillPower = 0, label = "Power Roll", isCritical = false, extraDice = "", boost = 1, focus = 1) {
     const roll = new Roll(extraDice ? `1d10x10 + ${extraDice}` : "1d10x10");
     await roll.evaluate();
     const boosted = Math.floor((basePower + skillPower) * (Number.isFinite(boost) && boost > 0 ? boost : 1));
     let total = boosted + roll.total;
     if (isCritical) total *= 2;
+    // Focus (p.105) doubles the TOTAL power, so it lands after the dice and after the
+    // critical — a Boost multiplies the base before the roll instead, which is why the
+    // two are separate arguments rather than one multiplier.
+    const focusMult = Number.isFinite(focus) && focus > 0 ? focus : 1;
+    const focusApplied = focusMult !== 1;
+    if (focusApplied) total = Math.floor(total * focusMult);
 
     const content = await foundry.applications.handlebars.renderTemplate(
       "systems/smt-rpg/templates/chat/power-roll.hbs",
@@ -278,7 +341,8 @@ export default class SMTActor extends Actor {
         label, basePower, skillPower, diceTotal: roll.total, total, isCritical,
         // Only shown when a Boost actually moved the number — otherwise the card
         // would print the same figure twice for every attack in the game.
-        boosted, boostApplied: boosted !== basePower + skillPower
+        boosted, boostApplied: boosted !== basePower + skillPower,
+        focusApplied
       }
     );
 

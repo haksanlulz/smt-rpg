@@ -268,12 +268,18 @@ export async function performBasicStrike(actor, {
 
     if (!checkResult.isSuccess) continue;
 
+    // Focus (p.105) names the basic strike first — this is its primary consumer. It
+    // is read and cleared per PART, so a two-part multi-action doubles once, not twice.
+    const focus = actor.focusFor(true);
     const powerResult = await actor.rollPower(
       actor.system.basePhysicalPower, 0,
       `${skillName} — ${game.i18n.localize("SMT.Power")}`,
       checkResult.isCritical,
-      actor.system.physicalPowerBonusDice
+      actor.system.physicalPowerBonusDice,
+      1,
+      focus.multiplier
     );
+    if (focus.consumed) await actor.clearFocus();
     await postAttacksToTargets({
       attacker: actor,
       targets: finalTargets,
