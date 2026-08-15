@@ -297,6 +297,15 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// Defenseless (p.71): what an ambushed side carries until its first turn arrives. Its
+// whole mechanical cost is the lost dodge — see helpers/effects.mjs for why the printed
+// sentence has to be read that way to terminate at all.
+SMT.defenseless = {
+  label: "SMT.Defenseless.Label",
+  statusId: "smtDefenseless",
+  icon: "icons/magic/control/debuff-chains-shackle-movement-red.webp"
+};
+
 // Encounter check, ambush and back attack (p.70-71). The one check in the system whose
 // result belongs to the PARTY rather than to a character: every PC's Luck check
 // contributes a signed value, the totals are summed, and one band decides the situation

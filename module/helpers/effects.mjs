@@ -13,6 +13,7 @@ const CONCENTRATE_KEY = "concentrate";
 const AID_KEY = "aid";
 const DEFEND_KEY = "defend";
 const BARRIER_KEY = "barrier";
+const DEFENSELESS_KEY = "defenseless";
 
 // Once-per-turn ailment-save lock (p.69), keyed "<combatId>:<round>:<actorId>" so the
 // turn automation and a manual Save can't re-roll the same turn.
@@ -567,6 +568,41 @@ export async function applyDefend(actor) {
 // Remove Defend at the actor's turn start — it lasts only until then (p.64).
 export async function clearDefend(actor) {
   const effect = defendEffect(actor);
+  if (effect && canModifyEffects(actor)) await effect.delete();
+}
+
+// -------------------------------------------------- defenseless (p.71, ambush)
+
+export function defenselessEffect(actor) {
+  return actor?.effects.find(e => e.getFlag(FLAG_SCOPE, DEFENSELESS_KEY));
+}
+
+// p.71: "During the first round of combat, characters on the side being ambushed are
+// considered to be defenseless right up until they act for the first time. While
+// defenseless, characters cannot take any actions, dodging included."
+//
+// READ AS: it ends when their first turn ARRIVES. Taken literally the sentence is
+// circular — you are defenseless until you act, and while defenseless you cannot act,
+// which would never end. The only reading that terminates is that the initiative order
+// reaching you is the moment, and it is also the one that matches what the rule is for:
+// being ambushed means the enemy acts before you can respond, so what it actually costs
+// you is the DODGE against everything that lands before your first turn. That is why
+// this clears in the same turn-start hook as Defend.
+export async function applyDefenseless(actor) {
+  if (!actor || !canModifyEffects(actor)) return null;
+  if (defenselessEffect(actor)) return null;
+
+  const def = SMT.defenseless;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    name: game.i18n.localize(def.label), img: def.icon, changes: [], disabled: false,
+    statuses: [def.statusId],
+    flags: { [FLAG_SCOPE]: { [DEFENSELESS_KEY]: true } }
+  }]);
+  return { targetName: actor.name };
+}
+
+export async function clearDefenseless(actor) {
+  const effect = defenselessEffect(actor);
   if (effect && canModifyEffects(actor)) await effect.delete();
 }
 

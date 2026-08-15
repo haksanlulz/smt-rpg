@@ -39,7 +39,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const {
   ENCOUNTER_OUTCOMES, encounterValue, encounterSum, encounterEffect,
-  surpriseTnModifier, isAggressor, initiativeTreatment, defenseless, backAttackShock
+  surpriseTnModifier, isAggressor, initiativeTreatment, defenseless, backAttackShock,
+  combatantSide, outcomeFromCheck
 } = await import("../module/helpers/encounter.mjs");
 
 let passed = 0;
@@ -186,6 +187,61 @@ ok(SMT.encounter.backAttackAilment in SMT.ailments,
 
 const cfg = readFileSync(join(ROOT, "module/config.mjs"), "utf8");
 ok(/SMT\.encounter\s*=/.test(cfg), "the encounter table lives in CONFIG, not in the helper");
+
+// --------------------------------------------------------- side classification
+
+// p.70 says "all PCs". Ownership decides that, not token disposition — a friendly NPC
+// demon fighting alongside the party is not a PC and must not roll into the total.
+eq(combatantSide({ hasPlayerOwner: true }), "pcs", "a player-owned actor is a PC");
+eq(combatantSide({ hasPlayerOwner: false }), "demons", "an unowned one is not");
+eq(combatantSide(null), "demons", "a missing actor is not a PC");
+const src = readFileSync(join(ROOT, "module/helpers/encounter.mjs"), "utf8");
+// Property ACCESS, not the word — the helper's own comment explains why disposition is
+// the wrong signal here, and a bare word match flagged the explanation as the offence.
+ok(!/\.disposition\b/.test(src),
+  "ESCAPE: side is NOT read off token disposition — a friendly NPC demon shares the "
+  + "party's disposition and would otherwise roll into the party's encounter total");
+
+// ----------------------------------------------------- check outcome mapping
+
+eq(outcomeFromCheck({ isFumble: true, isCritical: true }), "fumble",
+  "a fumble outranks everything — a 100 is never a critical");
+eq(outcomeFromCheck({ isCritical: true, isSuccess: true }), "critical", "a critical is a critical");
+eq(outcomeFromCheck({ isSuccess: true }), "success", "a plain success");
+eq(outcomeFromCheck({ result: 97 }), "autoFail",
+  "96-99 is the auto-fail band, worth -2 rather than a failure's -1");
+eq(outcomeFromCheck({ result: 50 }), "failure", "an ordinary miss is -1");
+eq(outcomeFromCheck({ result: SMT.check.autoFailMin }), "autoFail", "the band edge reads from CONFIG");
+eq(outcomeFromCheck({ result: SMT.check.autoFailMin - 1 }), "failure", "…and one below it does not");
+
+// -------------------------------------------------- wiring (source, always runs)
+
+ok(src.includes("runEncounterCheck") && src.includes("applyEncounterEffect"),
+  "the roll and the application are separate entry points");
+// Anchored on `await`, i.e. the CALL. Without it the regex matched the function's own
+// `export async function applyEncounterEffect(combat, effect)` signature, so deleting
+// the call left the suite green — the second time today a source grep has matched a
+// declaration instead of a use.
+ok(/await applyEncounterEffect\(combat, effect\)/.test(src),
+  "ESCAPE: the roll path calls the SAME applier — p.70 lets a GM 'simply declare a "
+  + "result', and a declared result must reach identical code to a rolled one");
+ok(/system\.ailment.*shock\.ailment|"system\.ailment": shock\.ailment/.test(src),
+  "back-attack Shock is written DIRECTLY, never through resolveAilment, whose first act "
+  + "is the affinity check this sentence overrides");
+
+const combatSrc = readFileSync(join(ROOT, "module/helpers/combat.mjs"), "utf8");
+ok(/dodgeDenied[\s\S]{0,200}?defenseless/.test(combatSrc),
+  "a defenseless combatant is denied the dodge — the whole mechanical cost of an ambush");
+
+const entry = readFileSync(join(ROOT, "smt-rpg.mjs"), "utf8");
+ok(/clearDefenseless\(actor\)/.test(entry),
+  "ESCAPE: defenseless is cleared at the ambushed character's turn start — p.71's "
+  + "sentence is circular read literally ('until they act', and they cannot act), and "
+  + "without a clear the state would never end");
+ok(/encounter-check/.test(entry), "the GM fires it from a combat-tracker control");
+ok(!/Hooks\.on\("combatStart"/.test(entry) && !/runEncounterCheck\(combat\)\s*;?\s*\}\s*\)\s*;?\s*\/\/\s*auto/.test(entry),
+  "…and NOT from a combat-start hook: p.70 gives the GM the say on whether a check "
+  + "happens at all, so firing it is the decision");
 
 console.log(`\nsmt-rpg encounter tests: ${passed} passed, ${failed} failed`);
 if (failed) {
