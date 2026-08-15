@@ -523,6 +523,12 @@ Check: test/encounter.test.mjs  (tagged  // spec: the-encounter-check-is-the-par
 
 **One `[inferred]`:** both sides preparing an ambush is not printed. The two modifiers net to zero, which is the only reading that keeps the ±20% a property of the situation rather than of whichever side the GM happened to mention first.
 
+**Wired 2026-08-15, same session.** A GM-only combat-tracker control beside Pay Out Rewards, deliberately not a `combatStart` hook — p.70 gives the GM *"the say on whether or not to make an encounter check"*, so firing it IS the decision, and the suite asserts the absence of an auto-fire. Shift-click declares the PCs lying in wait, alt-click the demon side; modifier keys rather than a dialog, because the common answer is neither and a prompt on every check costs three clicks to say so. `runEncounterCheck` and `applyEncounterEffect` are separate entry points and the roll path calls the applier, so a GM who *"simply declares a result"* reaches identical code — asserted, after the first version of that assertion matched the function's own signature instead of the call.
+
+**Side is decided by OWNERSHIP, not token disposition,** and that is a correctness point rather than a style one: a friendly NPC demon fighting alongside the party shares its disposition, and p.70 says *"all PCs"*. Reading disposition would roll an NPC into the party's total and shift the band. The suite bans the property access outright.
+
+**`defenseless` needed a reading before it could be code.** Taken literally p.71 is circular — you are defenseless *"right up until they act for the first time"*, and *"while defenseless, characters cannot take any actions"*, so it would never end. It is implemented as ending when the character's first turn ARRIVES, cleared in the same turn-start hook as Defend. That is also the only reading where the rule does what it is for: being ambushed means the enemy acts before you can respond, so what it actually costs you is the dodge against everything landing before your turn. Nothing else could have happened in that window anyway.
+
 ### SPEC one-off-printed-skills-do-what-their-sentence-says
 
 *(Added 2026-08-15.)*

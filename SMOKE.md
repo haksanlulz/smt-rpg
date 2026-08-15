@@ -1,5 +1,7 @@
 # Smoke checklist — the 2026-08-15 subsystems
 
+*Sections 1–5 are the lane 3 work; section 6 is lane 4's first wired unit.*
+
 Every rung behind these changes is node-side. **Nothing below has been observed in Foundry**,
 and `GAUNTLET.md` §1 clause 4 is explicit that suites passing is not the same claim as the
 thing working. This file is the list of what to look at, with the expected result written
@@ -95,6 +97,30 @@ set A's TN low and roll until a 100 comes up, or edit the roll in the console.
 | 5.8 | Use **God's Curse** | One d10 card naming the rolled face and the ailment. Then the ordinary 60% ailment rolls per target |
 | 5.9 | Use it against several enemies | **One** d10 for the whole cast — every target that fails gets the **same** ailment, not five different ones |
 | 5.10 | Cast it a dozen times | All five ailments should appear across the samples: Charm, Panic, Sleep, Restrain, Stun |
+
+## 6. Encounter check, ambush and back attack (p.70-71)
+
+The control sits in the combat tracker next to **Pay Out Rewards**, GM only. It needs at
+least one player-owned combatant. To force a band, roll normally a few times or set Luck
+TNs high or low first — the interesting cases are the two extremes, not the middle.
+
+| # | Do | Expect |
+|---|---|---|
+| 6.1 | Look at the tracker as GM | An **Encounter Check** button on the same row as Pay Out Rewards |
+| 6.2 | Start a combat with no player-owned combatants, press it | Warning that there is nobody to roll it. No chat card |
+| 6.3 | Press it with the party present | One Luck check card **per PC**, then a summary naming each result, the party total, and the effect |
+| 6.4 | Add up the values by hand from the summary | The total matches. Critical +2, Success +1, Failure −1, Auto-Fail −2, Fumble −3 |
+| 6.5 | Include a **friendly NPC demon** on the party's side | It does **not** roll and does **not** count. Only player-owned actors are PCs |
+| 6.6 | Get a result of +3 or +4 (PCs ambush) | PC initiatives are re-rolled **with a +1d10**; enemy initiatives are re-rolled normally |
+| 6.7 | Same result — look at the enemy tokens | Each carries a **Defenseless** icon |
+| 6.8 | Attack a defenseless enemy before its first turn | **No Dodge button** on its row — it is denied, not merely likely to fail |
+| 6.9 | Let that enemy's turn arrive | The Defenseless icon **clears**. Attack it again — Dodge is back |
+| 6.10 | Get −4 or less (PCs back attacked) | Every PC's initiative is set from **Agility alone** — no d10 in it. Compare against the Agility on the sheet |
+| 6.11 | Same result — look at the PC tokens | **Shock**, not Defenseless. The two must not both be present |
+| 6.12 | Give a PC **Null Nerve** first, then force a back attack | Shock lands **anyway** — p.71 says it ignores affinity, and this is the case the sentence exists for |
+| 6.13 | Shift-click the button | The Luck TN on each card is **20 higher** than the sheet value |
+| 6.14 | Alt-click it | 20 **lower** |
+| 6.15 | Get a 0 to +2 result | Nothing applied — no icons, and initiatives re-rolled with no bonus on either side |
 
 ---
 

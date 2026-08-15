@@ -114,3 +114,105 @@ export function backAttackShock(effect, side) {
   if (effect?.severity !== "backAttack" || isAggressor(effect, side)) return null;
   return { ailment: CONFIG.SMT.encounter.backAttackAilment, ignoresAffinity: true };
 }
+
+// Which side a combatant is on. p.70 says "all PCs make a Luck check", and a PC is
+// exactly a player character — so ownership decides it, not token disposition.
+// Disposition is what the targeting helpers use, but a friendly NPC demon fighting
+// alongside the party is not a PC and must not roll into the party's total.
+export function combatantSide(actor) {
+  return actor?.hasPlayerOwner ? "pcs" : "demons";
+}
+
+// Map a percentile result to the chart's outcome vocabulary. The evaluator already
+// distinguishes all five; this only renames them, and exists so the mapping lives next
+// to the table it feeds rather than inline at the call site.
+export function outcomeFromCheck({ isFumble = false, isCritical = false, isSuccess = false, result = 0 } = {}) {
+  if (isFumble) return "fumble";
+  if (isCritical) return "critical";
+  if (isSuccess) return "success";
+  return result >= CONFIG.SMT.check.autoFailMin ? "autoFail" : "failure";
+}
+
+// ---------------------------------------------------------------- Foundry side
+
+// Run the p.70 check for a whole encounter and apply the result. GM only.
+//
+// The GM's discretion is preserved rather than automated away — p.70 is explicit that
+// "the GM has the say on whether or not to make an encounter check, and depending on the
+// story they have in mind, may simply declare a result if they so desire." That is why
+// this is a button and not a combat-start hook: firing it is the decision.
+export async function runEncounterCheck(combat, { pcsPrepared = false, demonsPrepared = false } = {}) {
+  if (!combat || !game.user.isGM) return null;
+
+  const tnShift = surpriseTnModifier({ pcsPrepared, demonsPrepared });
+  const pcs = combat.combatants.filter(c => c.actor && combatantSide(c.actor) === "pcs");
+  if (!pcs.length) {
+    ui.notifications.warn(game.i18n.localize("SMT.Encounter.NoPCs"));
+    return null;
+  }
+
+  const results = [];
+  const lines = [];
+  for (const combatant of pcs) {
+    const actor = combatant.actor;
+    const tn = Math.max(0, (actor.system.luckTN ?? 0) + tnShift);
+    const check = await actor.rollPercentile(tn, game.i18n.localize("SMT.Encounter.CheckLabel"));
+    const outcome = outcomeFromCheck(check);
+    results.push(outcome);
+    lines.push(`${actor.name}: ${game.i18n.localize(`SMT.Encounter.Outcome.${outcome}`)} (${encounterValue(outcome) >= 0 ? "+" : ""}${encounterValue(outcome)})`);
+  }
+
+  const sum = encounterSum(results);
+  const effect = encounterEffect(sum);
+
+  if (CONFIG.SMT.debug) console.log("smt-rpg | Encounter check", { tnShift, results, sum, effect });
+
+  await ChatMessage.create({
+    content: `<div class="smt-roll effect-notice"><p><strong>${game.i18n.localize("SMT.Encounter.CheckLabel")}</strong></p>`
+      + `<p>${lines.join("<br>")}</p>`
+      + `<p><strong>${game.i18n.format("SMT.Encounter.Total", { sum })}</strong> — `
+      + `${game.i18n.localize(`SMT.Encounter.Effect.${effect.id}`)}</p></div>`
+  });
+
+  await applyEncounterEffect(combat, effect);
+  return { sum, effect, results };
+}
+
+// Apply an already-decided effect. Split from the roll so a GM who "simply declares a
+// result" (p.70) reaches the same code path as one who rolled for it.
+export async function applyEncounterEffect(combat, effect) {
+  if (!combat || !game.user.isGM || !effect?.side) return 0;
+
+  const { applyDefenseless } = await import("./effects.mjs");
+  let touched = 0;
+
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor) continue;
+    const side = combatantSide(actor);
+
+    // Initiative: the aggressor adds a die, a back-attacked side loses its roll
+    // entirely (p.71). Rolled here rather than left to the tracker, because the
+    // treatment has to be in place before anyone acts.
+    const treatment = initiativeTreatment(effect, side);
+    const roll = new Roll(treatment.formula, actor.getRollData());
+    await roll.evaluate();
+    await combat.updateEmbeddedDocuments("Combatant", [{ _id: combatant.id, initiative: roll.total }]);
+
+    if (defenseless(effect, side)) {
+      await applyDefenseless(actor);
+      touched++;
+    }
+
+    const shock = backAttackShock(effect, side);
+    if (shock) {
+      // "This Shock ignores any affinity ratings that would nullify it" — so it is
+      // written directly rather than routed through resolveAilment, whose first act is
+      // to check the affinity this sentence overrides. The p.68 priority rule is
+      // deliberately NOT applied either: the book inflicts this one unconditionally.
+      await actor.update({ "system.ailment": shock.ailment, "system.ailmentSaveFailed": false });
+      touched++;
+    }
+  }
+  return touched;
+}

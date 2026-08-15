@@ -486,7 +486,13 @@ export async function resolveAttack(message, index, skipDodge = false) {
 
     // p.68's Dodge column reads N for Stone, Restrain, Freeze, Sleep and Shock —
     // those targets never get the roll, so the button must not offer them one.
-    const dodgeDenied = !canDodge(target.system.ailment ?? "none");
+    //
+    // An ambushed combatant is defenseless until its first turn (p.71: "cannot take any
+    // actions, dodging included"), which lands in the same place: no roll. The lost
+    // dodge IS the mechanical cost of being ambushed, since nothing else could have
+    // happened before their turn anyway.
+    const dodgeDenied = !canDodge(target.system.ailment ?? "none")
+      || !!target.effects.find(e => e.getFlag("smt-rpg", "defenseless"));
 
     // Pinhole (p.106): "Your target treats their resistance and dodge rate as being
     // halved FOR THIS ATTACK." Per-attack arguments, never stored effects — the card

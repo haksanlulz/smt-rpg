@@ -458,8 +458,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
   const actor = combat.combatant?.actor;
   if (!actor) return;
   if (!_isResponsibleClient(actor)) return;
-  const { clearDefend, processAilmentTurnStart, attemptAilmentSave } = await import("./module/helpers/effects.mjs");
+  const { clearDefend, clearDefenseless, processAilmentTurnStart, attemptAilmentSave } = await import("./module/helpers/effects.mjs");
   await clearDefend(actor);
+  // Defenseless ends when the ambushed character's first turn arrives (p.71). Cleared
+  // alongside Defend for the same reason: both are states that last "until you act".
+  await clearDefenseless(actor);
   await processAilmentTurnStart(actor);
   // Start-of-turn save against a save-eligible ailment (p.69); no-op otherwise.
   await attemptAilmentSave(actor);
@@ -570,6 +573,37 @@ Hooks.on("renderCombatTracker", (app, html, data) => {
   });
 
   row.appendChild(button);
+
+  // Encounter check (p.70). Same row, same private-attribute trick, same reasoning about
+  // staying live: p.70 gives the GM the say on whether a check happens at all, so this
+  // is a button they press rather than a hook that fires itself.
+  //
+  // Shift-click declares an ambush setup instead of rolling neutrally: +20% for the PCs
+  // (p.71 "lying in wait"), alt-click -20% for the demon side. Modifier keys rather than
+  // a dialog because the common case is neither, and a prompt on every check would be
+  // three clicks for the answer "no".
+  const encounter = document.createElement("button");
+  encounter.type = "button";
+  encounter.dataset.smtAction = "encounter-check";
+  encounter.className = "combat-control combat-control-lg";
+  const encIcon = document.createElement("i");
+  encIcon.className = "fa-solid fa-eye";
+  encIcon.toggleAttribute("inert", true);
+  const encLabel = document.createElement("span");
+  encLabel.textContent = game.i18n.localize("SMT.Encounter.Check");
+  encounter.append(encIcon, encLabel);
+  encounter.dataset.tooltip = game.i18n.localize("SMT.Encounter.CheckHint");
+  encounter.setAttribute("aria-label", game.i18n.localize("SMT.Encounter.Check"));
+  encounter.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const { runEncounterCheck } = await import("./module/helpers/encounter.mjs");
+    await runEncounterCheck(combat, {
+      pcsPrepared: event.shiftKey,
+      demonsPrepared: event.altKey
+    });
+  });
+
+  row.appendChild(encounter);
 });
 
 async function _bindAttackButtons(message, html) {
