@@ -73,6 +73,11 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
       useLedger: new ObjectField(),
       // Focus (p.105): a stored doubling for the next basic strike or physical attack.
       focusReady: new BooleanField({ initial: false }),
+      // Action budget (p.63) for the current turn: `{ key, spent, granted }`, where key
+      // is `<round>:<turn>`. The key IS the reset — a ledger stamped for an earlier turn
+      // reads as a full budget, so a dropped combat hook fails open rather than
+      // forbidding a legal action. See helpers/actions.mjs.
+      actionLedger: new ObjectField(),
 
       // Buff/debuff accumulators (p.96); stored so effects have a key to target, re-zeroed each prepare.
       buffs: new SchemaField({

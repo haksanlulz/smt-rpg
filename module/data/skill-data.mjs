@@ -84,6 +84,13 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       // Use limits (p.96). "none" is the overwhelming majority; a skill that states
       // no limit gets none, because inventing one forbids a legal action. The ledger
       // lives on the actor, keyed by period and skill name — see helpers/uses.mjs.
+      // Press skills (p.96): Beast Eye and Dragon Eye. "They cost one action to apply.
+      // Beast Eye spends one action to grant two actions... Dragon Eye takes one action
+      // to grant four actions." Stored GROSS — the action it costs is charged by the
+      // same budget every other action goes through, so the book's "effectively one
+      // additional action" is arithmetic rather than a second number to keep in sync.
+      // 0 = not a press skill. Resolution in helpers/actions.mjs.
+      grantsActions: new NumberField({ integer: true, min: 0, initial: 0 }),
       useLimit: new SchemaField({
         period: new StringField({
           initial: "none",

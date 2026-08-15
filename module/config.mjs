@@ -282,6 +282,12 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// The action budget (p.63): "combatants may take one action" per turn, against the boss
+// trait's "Bosses take two actions on their turn" (p.278). Press skills (p.96) add to
+// this and nothing else does — see helpers/actions.mjs for why the grant is stored
+// gross rather than as the book's "effectively one additional action" net figure.
+SMT.actions = { base: 1, boss: 2 };
+
 // Skill-sheet passive-effect dropdown (key -> label), derived from the registry.
 SMT.passiveEffectChoices = Object.fromEntries(
   Object.entries(SMT.passiveEffects).map(([key, entry]) => [key, entry.label])

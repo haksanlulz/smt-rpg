@@ -15,6 +15,7 @@
 import { mapSkillType, mapElement, parseAilment } from "./compendium.mjs";
 import { allDemonStats } from "./compendium.mjs";
 import { parseUseLimit } from "./uses.mjs";
+import { parsePressGrant } from "./actions.mjs";
 
 const DATA_PATH = "systems/smt-rpg/data-local/skill-stats.json";
 
@@ -160,6 +161,19 @@ export function attackRiders(effect) {
   // Use limits (p.96) are stated in the effect text and nowhere else.
   const limit = parseUseLimit(s);
   if (limit) out.useLimit = limit;
+
+  // Press skills (p.96). The GRANT is printed — "Gain two actions this round" — but the
+  // LIMIT is not, on either row. It comes from the prose on the same page ("using Dragon
+  // Eye in succession to gain unlimited actions just wouldn't be fair") and from the GM
+  // chapter, which states it as a rule: "skills that grant additional actions, like
+  // Dragon Eye, should be limited to being used once per turn". Stamped here because
+  // nothing downstream reads chapter prose, and an unlimited press skill is an infinite
+  // turn. A limit the row DOES state still wins — this only fills a gap.
+  const grant = parsePressGrant(s);
+  if (grant) {
+    out.grantsActions = grant;
+    if (!out.useLimit) out.useLimit = { period: "round", count: 1 };
+  }
 
   return out;
 }
