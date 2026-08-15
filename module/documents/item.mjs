@@ -148,6 +148,14 @@ export default class SMTItem extends Item {
       return;
     }
 
+    // Analyze (p.102): not a hit check at all. p.15 calls it "an auto-success skill, so
+    // no check is needed" — the contest is the POWER roll plus the user's level against
+    // the target's level, and bosses are refused outright.
+    if (this.system.analyzes) {
+      await this._castAnalyze(actor);
+      return;
+    }
+
     // Barrier skills (p.101): auto-succeed, and raise the barrier on every ally.
     if (this.isBarrierSkill) {
       await this._castBarrier(actor);
@@ -250,7 +258,11 @@ export default class SMTItem extends Item {
     if (actor.system.ailment === "stun") tn = Math.min(tn, CONFIG.SMT.stun.hitCapPct);
 
     // Might: crit threshold TN/5 instead of TN/10 (physical only).
-    const hasMight = this.isPhysicalSkill && actor.system.hasMightPassive;
+    // Deadly Fury (p.108): "For this check only, treat critical rate as 20% (1/5th) of
+    // the TN. Does not stack with Might." Both widen the band to the same fifth, so an
+    // OR is the non-stacking rule rather than a special case around it — the divisor is
+    // a min, not a product, and rollPercentile already derives the threshold from it.
+    const hasMight = (this.isPhysicalSkill && actor.system.hasMightPassive) || !!this.system.widensCrit;
 
     // Multi-action (p.59-60). The skill and target cannot change between parts, and
     // the cost is paid for each; the first payment already happened above.
@@ -341,12 +353,36 @@ export default class SMTItem extends Item {
         && this.system.ailment?.type && this.system.ailment.type !== "none" && this.system.ailment.rate > 0) {
       const { resolveAilment, resolveTargets } = await import("../helpers/combat.mjs");
       const targets = resolveTargets(actor, this.system.targets);
+
+      // God's Curse (p.103): "Roll 1d10: 1-2: Charm; 3-4: Panic; 5-6: Sleep; 7-8:
+      // Restrain; 9-10: Stun." ONE roll for the whole cast — the sentence names a single
+      // d10, and rolling per target would make an all-targets skill spray five different
+      // ailments. The printed 60% stays on ailment.rate below and resolves normally, so
+      // affinity, crit and dodge-fumble modifiers all still apply: two rolls, two jobs.
+      let ailmentType = this.system.ailment.type;
+      if (this.system.randomAilment) {
+        const { godsCurseAilment } = await import("../helpers/named-skills.mjs");
+        const d10 = await new Roll("1d10").evaluate();
+        const picked = godsCurseAilment(d10.total);
+        if (picked) {
+          ailmentType = picked;
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.GodsCurse.Rolled", {
+              roll: d10.total,
+              ailment: game.i18n.localize(CONFIG.SMT.ailments[picked] ?? picked)
+            })}</p></div>`,
+            rolls: [d10]
+          });
+        }
+      }
+
       for (const token of targets) {
         if (!token.actor) continue;
         await resolveAilment({
           target: token.actor,
           attacker: actor,
-          ailmentType: this.system.ailment.type,
+          ailmentType,
           baseRate: this.system.ailment.rate,
           element: this.system.element,
           isCritical: checkResult.isCritical,
@@ -597,6 +633,56 @@ export default class SMTItem extends Item {
     await postEffectNotice(actor, game.i18n.format("SMT.Focus.Ready", { name: actor.name }));
   }
 
+  // Analyze (p.102): "Make a power roll, adding the user's level to the roll. If this
+  // roll is equal to or higher than the target demon's level, learn all info in their
+  // statblock. This skill cannot be used on Bosses."
+  //
+  // The boss refusal is checked BEFORE the roll, because a roll that then reports
+  // nothing still tells the table something — that a roll was worth making. It is
+  // absolute, not a harder threshold.
+  async _castAnalyze(actor) {
+    const { analyzeOutcome } = await import("../helpers/named-skills.mjs");
+    const { resolveTargets } = await import("../helpers/combat.mjs");
+
+    const target = resolveTargets(actor, this.system.targets)[0]?.actor
+      ?? game.user.targets.first()?.actor;
+    if (!target) {
+      ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
+      return;
+    }
+
+    if (target.system.isBoss) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.Analyze.Boss", { name: target.name })}</p></div>`
+      });
+      return;
+    }
+
+    const powerResult = await actor.rollPower(
+      0, this.system.power, `${this.name} — ${game.i18n.localize("SMT.Power")}`
+    );
+    const outcome = analyzeOutcome({
+      roll: powerResult.total,
+      userLevel: actor.system.level,
+      targetLevel: target.system.level,
+      targetIsBoss: false
+    });
+
+    const key = outcome.success ? "SMT.Analyze.Success" : "SMT.Analyze.Failed";
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="smt-roll effect-notice"><p>${game.i18n.format(key, {
+        name: target.name, total: outcome.total, level: target.system.level
+      })}</p></div>`
+    });
+
+    // Success is READ ACCESS, not a copy: the GM shows the sheet. Rendering it for the
+    // player would need an ownership grant the book never asks for, and would persist
+    // long after the scene the skill was used in.
+    if (outcome.success && game.user.isGM) target.sheet?.render(true);
+  }
+
   // Fumble Effect Chart, Hit Check row (p.58): "Hit yourself and/or your allies."
   //
   // p.64 elaborates: "the attack then randomly hits either themselves or an ally (and
@@ -800,6 +886,11 @@ export default class SMTItem extends Item {
     if (s.killCondition?.ailment && s.killCondition.ailment !== "none" && s.killCondition.rate > 0) {
       riders.killCondition = { ailment: s.killCondition.ailment, rate: s.killCondition.rate };
     }
+    // Pinhole (p.106). Two flags rather than one, because the printed sentence names
+    // resistance and dodge separately and they are consumed at two different points in
+    // resolveAttack — halving only one is the likely half-fix.
+    if (s.halvesTargetResist) riders.halvesTargetResist = true;
+    if (s.halvesTargetDodge) riders.halvesTargetDodge = true;
     return Object.keys(riders).length ? riders : null;
   }
 

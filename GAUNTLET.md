@@ -497,6 +497,34 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC one-off-printed-skills-do-what-their-sentence-says
+
+*(Added 2026-08-15.)*
+```
+Given Deadly Fury (p.108), Pinhole (p.106), Analyze (p.102) and God's
+      Curse (p.103) — four skills whose text names a mechanic nothing
+      else in the system has
+When each is used
+Then Deadly Fury crits at a fifth of the TN and does NOT compound with
+     Might; Pinhole halves both the target's resistance AND their dodge
+     TN for that attack only; Analyze contests a power roll plus the
+     user's level against the target's level and refuses bosses
+     outright; and God's Curse rolls one d10 to pick which of five
+     ailments the cast inflicts
+And none of the four leaks onto a skill that did not print its sentence
+Check: test/named-skills.test.mjs  (tagged  // spec: one-off-printed-skills-do-what-their-sentence-says)
+```
+
+**Matched on the printed sentence, not the skill name, and not generalised into a shared rider.** Each of these rules is stated for exactly one skill in the book. A rider abstracted from a sample size of one is a rule that eventually fires on a skill that never printed it, so `attackRiders` reads the sentence — a homebrew skill copying the wording gets the mechanic, a rename does not lose it, and the final block of the suite asserts that an ordinary "20% chance to inflict Freeze" picks up none of the four.
+
+**Deadly Fury's non-stacking clause is why the crit rate is a divisor rather than a boolean.** *"Treat critical rate as 20% (1/5th) of the TN. Does not stack with Might."* Might widens the band exactly the same way, so two effects that each say "a fifth" must produce a fifth and not a twenty-fifth — an OR over a shared divisor gets that for free, where multiplying two modifiers would not. The suite also proves the band actually moves an outcome (a 9 against TN 50 is an ordinary success at a tenth and a critical at a fifth), because a divisor nothing reads is decoration.
+
+**Pinhole is two flags, deliberately.** The printed sentence names resistance *and* dodge, and the two are consumed at different points in `resolveAttack` — the dodge TN before the roll, the resistance inside `applyDamage`. One flag would have to be interpreted twice, and halving only one of them is the likely half-fix, which is what the paired assertion pins. Both are per-attack arguments and neither is ever stored: *"for this attack"* is in the text.
+
+**Analyze is not a hit check, and the boss clause is absolute.** p.15's worked example calls it *"an auto-success skill, so no check is needed"*; the contest is the POWER roll plus the user's level against the target's level, with *"equal to or higher"* read inclusively. Treating it as a percentile check would gate the skill on a stat it never names. A boss returns `blocked` rather than a hard threshold — an ESCAPE assertion, because reporting failure-by-roll against a boss would imply a better roll could read a statblock the book withholds. On success the GM is shown the sheet rather than the player being granted ownership: read access is what the skill buys, and an ownership grant would outlive the scene.
+
+**God's Curse is two rolls doing two jobs.** The d10 picks *which* ailment; the printed 60% stays on `ailment.rate` and resolves through `resolveAilment` as normal, so affinity, crit and dodge-fumble modifiers all still apply. Folding the d10 into the rate would make the ailment certain and its identity a coin flip. One roll serves the whole cast, not one per target — the sentence names a single d10, and rolling per target would spray five different ailments off one "all targets" skill. The table is swept across all ten faces in both directions: every face maps to an ailment, and all five printed ailments are reachable with none doubled in by a bad range.
+
 ### SPEC a-fumbled-attack-lands-on-your-own-side
 
 *(Added 2026-08-15.)*

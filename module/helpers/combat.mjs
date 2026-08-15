@@ -2,6 +2,7 @@ import { evaluatePercentile, cascadePlan, multiActionPlan, multiActionTn } from 
 import { halveDamageResult, affinityOutcome, killConditionMet } from "./damage.mjs";
 import { canDodge, shatterPctFor } from "./ailments.mjs";
 import { nullifyAttackEffect, attackAllApplies, drainOnStrike } from "./passives.mjs";
+import { pinholeResistance, pinholeDodgeTn } from "./named-skills.mjs";
 import { spendUse, ledgerKey } from "./uses.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
@@ -487,18 +488,23 @@ export async function resolveAttack(message, index, skipDodge = false) {
     // those targets never get the roll, so the button must not offer them one.
     const dodgeDenied = !canDodge(target.system.ailment ?? "none");
 
+    // Pinhole (p.106): "Your target treats their resistance and dodge rate as being
+    // halved FOR THIS ATTACK." Per-attack arguments, never stored effects — the card
+    // carries the two flags and both halvings are applied at the point of use.
+    const dodgeTN = pinholeDodgeTn(target.system.dodgeTN, { halves: !!live.riders?.halvesTargetDodge });
+
     if (!skipDodge && dodgeDenied) {
       await _postDodgeResult(attacker, target, live.skillName, "cannot");
     } else if (!skipDodge) {
       const dodgeResult = await target.rollPercentile(
-        target.system.dodgeTN,
+        dodgeTN,
         `${target.name} — ${game.i18n.localize("SMT.DodgeLabel")}`
       );
 
       dodgeOutcome = _resolveDodgeOutcome(isCritical, dodgeResult);
 
       if (CONFIG.SMT.debug) console.log("smt-rpg | Dodge Resolution", {
-        target: target.name, dodgeTN: target.system.dodgeTN,
+        target: target.name, dodgeTN,
         dodgeRoll: dodgeResult.result, dodgeOutcome,
         hitWasCritical: isCritical
       });
@@ -549,7 +555,12 @@ export async function resolveAttack(message, index, skipDodge = false) {
       damageMultiplier: _sanitizeAmount(live.damageMultiplier) || 1,
       fractional: riders?.fractional ?? null,
       fpImmune: !!riders?.fpImmune,
-      drains: riders?.drains ?? null
+      drains: riders?.drains ?? null,
+      // Pinhole's other half (p.106). Passed as a resolved number rather than a flag so
+      // applyDamage keeps one resistance input; the halving belongs to this attack.
+      resistanceOverride: riders?.halvesTargetResist
+        ? pinholeResistance(isPhysical ? target.system.physicalResistance : target.system.magicalResistance, { halves: true })
+        : null
     });
 
     // Drain Attack (p.110): "recover HP equal to 25% of the damage dealt to the

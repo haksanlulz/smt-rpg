@@ -176,6 +176,18 @@ export function attackRiders(effect) {
     if (!out.useLimit) out.useLimit = { period: "round", count: 1 };
   }
 
+  // Four one-off printed rules (p.102, p.103, p.106, p.108). Matched on the printed
+  // SENTENCE rather than the skill name, so a homebrew skill copying the wording gets
+  // the mechanic and a rename does not lose it. Each is stated for exactly one skill in
+  // the book, which is why none of them generalises into a shared rider above.
+  if (/treat critical rate as 20%/i.test(s)) out.widensCrit = true;
+  if (/resistance and dodge rate as being halved/i.test(s)) {
+    out.halvesTargetResist = true;
+    out.halvesTargetDodge = true;
+  }
+  if (/learn all info in their statblock/i.test(s)) out.analyzes = true;
+  if (/Roll 1d10:/i.test(s) && /chance to inflict ailment/i.test(s)) out.randomAilment = true;
+
   // Barrier skills (p.101). The kind is all the row carries; what it grants and how it
   // expires are printed rules, and live in CONFIG rather than being re-parsed per skill.
   const barrier = parseBarrier(s);

@@ -297,6 +297,19 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// God's Curse (p.103): "Roll 1d10: 1-2: Charm; 3-4: Panic; 5-6: Sleep; 7-8: Restrain;
+// 9-10: Stun." The d10 picks WHICH ailment; the printed 60% is the ordinary effect rate
+// and still runs the affinity/crit/dodge-fumble modifiers, so the two rolls stay apart.
+SMT.godsCurse = {
+  table: [
+    { min: 1, max: 2, ailment: "charm" },
+    { min: 3, max: 4, ailment: "panic" },
+    { min: 5, max: 6, ailment: "sleep" },
+    { min: 7, max: 8, ailment: "restrain" },
+    { min: 9, max: 10, ailment: "stun" }
+  ]
+};
+
 // The Fumble Effect Chart (p.58), as a chart. `automated` is whether the system
 // resolves the row itself; the two GM rows carry a prompt so a fumble the engine does
 // not act on still says what the book says, instead of passing silently.
