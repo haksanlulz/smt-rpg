@@ -151,7 +151,11 @@ async function _renderPendingCard(attackData) {
 // `damageMultiplier` is Retaliate/Avenge's ×2/×3 on the damage dealt (p.110), and
 // `noCounter` marks a hit that must not itself provoke a counterattack — the free
 // strikes from a fumbled flee (p.70) and a counterattack itself.
-export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, riders = null }) {
+// `noDodge` suppresses the dodge step for every row on the card. Only the Fumble
+// Effect Chart's hit row uses it (p.64: "an attacker cannot avoid hitting themselves"),
+// which is why it is a property of the CARD rather than of the click — the same
+// fumbled attack posts a second card for the allies, who may dodge as normal.
+export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, noDodge = false, riders = null }) {
   const valid = (targets ?? []).filter(t => t.actor);
   if (!valid.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
@@ -161,7 +165,7 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   const attackData = {
     attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
     rawPower, element, isPhysical, isCritical, skillName,
-    ailmentType, ailmentRate, damageMultiplier, noCounter,
+    ailmentType, ailmentRate, damageMultiplier, noCounter, noDodge,
     riders: riders ?? null,
     checkMessageId: checkMessageId ?? null,
     targets: valid.map(t => ({
@@ -381,6 +385,9 @@ async function _markTargetResolved(message, index, outcome) {
 export async function resolveAttack(message, index, skipDodge = false) {
   const live = message.getFlag("smt-rpg", "attackData");
   if (!live || !Array.isArray(live.targets)) return;
+  // A card marked noDodge skips it whatever the click said (p.64) — the flag is the
+  // rule, and the button it belongs to is not rendered in the first place.
+  if (live.noDodge) skipDodge = true;
   const row = live.targets[index];
   if (!row || row.resolved) return;
 
