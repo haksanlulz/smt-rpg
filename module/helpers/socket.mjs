@@ -26,6 +26,7 @@ export const SOCKET_NAME = "system.smt-rpg";
 export const RELAY_ACTIONS = {
   resolveAttack: { messageId: "string", index: "number", skipDodge: "boolean" },
   halveDamage: { messageId: "string" },
+  luckSmiles: { messageId: "string", index: "number" },
   counterAttack: { messageId: "string" },
   negotiationDemand: { messageId: "string", kind: "string" },
   negotiationOutcome: { messageId: "string", outcome: "string" },
@@ -119,6 +120,10 @@ async function dispatchRelay(action, data) {
       const damageData = message.getFlag("smt-rpg", "damageData");
       if (damageData) return resolveHalveDamage(message, damageData);
       return null;
+    }
+    case "luckSmiles": {
+      const { resolveLuckSmiles } = await combat();
+      return resolveLuckSmiles(message, data.index);
     }
     case "counterAttack": {
       const { resolveCounterAttack } = await combat();

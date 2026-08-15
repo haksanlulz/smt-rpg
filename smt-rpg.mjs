@@ -75,6 +75,23 @@ Hooks.once("init", () => {
     choices: SMT.rewards.maccaDistributionModes
   });
 
+  // Whether barriers (p.101) outlive the fight they were raised in. HOMEBREW, and off
+  // by default because the default is the reading the book supports.
+  //
+  // The book gives Makarakarn and Tetrakarn a round clock and Tetraja none at all, so a
+  // Tetraja raised outside a round has no printed way to end — read literally it would
+  // carry a free nullify into every subsequent fight, forever. Clearing at combat end is
+  // the conservative resolution of that silence. Buffs deliberately persist, so this IS
+  // an inconsistency; it is the operator's to choose, and the toggle is why.
+  game.settings.register("smt-rpg", "barriersPersistAfterCombat", {
+    name: "SMT.Settings.BarriersPersist",
+    hint: "SMT.Settings.BarriersPersistHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+
   // Auto-pay combat rewards on encounter end (p.46, p.48); off = manual via tracker control.
   game.settings.register("smt-rpg", "autoGrantRewards", {
     name: "SMT.Settings.AutoGrantRewards",
@@ -475,10 +492,11 @@ Hooks.on("deleteCombat", async (combat) => {
     // rather than the reset — it stops a spent ledger sitting on the sheet after the
     // fight, where it would read as a live restriction it is not.
     await actor.clearActionBudget();
-    // A barrier raised outside a round has no expiry to reach (p.101), so combat end
-    // is the only thing that retires it. Buffs persist by design; barriers do not,
-    // because Tetraja would otherwise carry a free nullify into the next fight.
-    await clearBarriers(actor);
+    // A barrier raised outside a round has no expiry to reach (p.101), so combat end is
+    // the only thing that retires it, and Tetraja would otherwise carry a free nullify
+    // into the next fight. Buffs persist by design, which makes this an inconsistency —
+    // so it is a homebrew toggle rather than a hardcoded call. Default clears.
+    if (!game.settings.get("smt-rpg", "barriersPersistAfterCombat")) await clearBarriers(actor);
     await clearDefend(actor);
     // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);
@@ -581,11 +599,35 @@ async function _bindAttackButtons(message, html) {
       continue;
     }
 
-    // Disable both in this row on first click so an in-flight dodge can't be raced against Apply.
+    // Luck Smiles (p.110): "Completely nullify the effects of an attack on you,
+    // 1/scenario only." INJECTED rather than templated, because the button must not
+    // appear for the overwhelming majority of targets who do not hold the passive, and
+    // must vanish once the scenario budget is spent — a template can render neither
+    // condition without the actor in hand.
+    const { luckSmilesAvailable } = await import("./module/helpers/combat.mjs");
+    let luckBtn = null;
+    if (luckSmilesAvailable(target)) {
+      luckBtn = document.createElement("button");
+      luckBtn.type = "button";
+      luckBtn.dataset.action = "luck-smiles";
+      luckBtn.dataset.index = String(index);
+      luckBtn.textContent = game.i18n.localize("SMT.LuckSmilesButton");
+      rowEl.querySelector(".attack-buttons")?.appendChild(luckBtn);
+    }
+
+    // Disable every button in this row on first click so an in-flight dodge can't be
+    // raced against Apply, or either against a Luck Smiles that spends a scenario use.
     const disableBoth = () => {
       if (dodgeBtn) dodgeBtn.disabled = true;
       if (applyBtn) applyBtn.disabled = true;
+      if (luckBtn) luckBtn.disabled = true;
     };
+
+    luckBtn?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      disableBoth();
+      await runRelayed("luckSmiles", { messageId: message.id, index });
+    });
     dodgeBtn?.addEventListener("click", async (event) => {
       event.preventDefault();
       disableBoth();

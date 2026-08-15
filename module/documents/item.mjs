@@ -891,9 +891,16 @@ export default class SMTItem extends Item {
     if (isAttackItem) {
       const { postAttacksToTargets } = await import("../helpers/combat.mjs");
       const baseMagPower = actor.system.baseMagicalPower;
+      // Item Pro (p.110): "When using items, add 1d10 to the power roll." Its own
+      // registry kind, not the physical/magical powerDie — an item is neither, so
+      // reusing that scope would have handed the die to every spell as well.
+      const { itemPowerDice } = await import("../helpers/passives.mjs");
+      const extraDice = itemPowerDice(actor.items.filter(i => i.type === "skill"),
+        CONFIG.SMT.passiveEffects).join("+");
       const powerResult = await actor.rollPower(
         baseMagPower, sys.attackPower,
-        `${this.name} — ${game.i18n.localize("SMT.Power")}`
+        `${this.name} — ${game.i18n.localize("SMT.Power")}`,
+        false, extraDice
       );
       await postAttacksToTargets({
         attacker: actor,

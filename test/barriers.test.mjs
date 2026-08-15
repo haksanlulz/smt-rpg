@@ -207,6 +207,15 @@ ok(/betterAffinity\(this\.categoryAffinities/.test(baseActor),
   "ESCAPE: the CATEGORY axis is folded too — Makarakarn is the only barrier that "
   + "lives there, and dropping it silently costs 45 MP for nothing");
 
+const entry = readFileSync(join(ROOT, "smt-rpg.mjs"), "utf8");
+ok(/barriersPersistAfterCombat/.test(entry),
+  "combat-end clearing is a homebrew toggle, not a hardcoded call");
+ok(/"barriersPersistAfterCombat",\s*\{[\s\S]{0,200}?default:\s*false/.test(entry),
+  "ESCAPE: it DEFAULTS to clearing — the book gives Tetraja no duration at all, so "
+  + "persisting by default would carry a free nullify into every later fight forever");
+ok(/if \(!game\.settings\.get\("smt-rpg", "barriersPersistAfterCombat"\)\) await clearBarriers/.test(entry),
+  "…and the toggle gates the clear rather than merely existing");
+
 const effects = readFileSync(join(ROOT, "module/helpers/effects.mjs"), "utf8");
 ok(effects.includes("applyBarrier") && effects.includes("consumeBarrierCharge"),
   "the effect layer can raise a barrier and spend a Tetraja charge");

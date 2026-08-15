@@ -7,9 +7,16 @@
 // Before 2026-07-28 the registry held nine entries — the six Amplify skills, Might,
 // Sure Shot and Powerful Strikes — against roughly twenty-five printed passives.
 // Everything else resolved to "none": the skill sat on the sheet, named itself
-// correctly, and did nothing. Ten are wired here; the reaction passives
-// (Counter / Retaliate / Avenge), Drain Attack, Attack All and the forty Affinity
-// Changers still are not, and are named in GAUNTLET.md §6 rather than implied fixed.
+// correctly, and did nothing.
+//
+// As of 2026-08-15: 26 named entries plus the 40 generated Affinity Changers. The
+// reaction passives landed 2026-07-28; Drain Attack, Attack All, Item Pro and Luck
+// Smiles landed today. FOUR remain unwired and the reason differs per passive —
+// Mind's Eye and Lucky Find are downstream of lane 4 (there is no ambush check and no
+// Item Acquisition table), while Good Instincts and Once A Snake have no mechanical
+// surface at all. GAUNTLET.md §5 carries the table; each is asserted null below,
+// because the spec's second clause is that a gap must resolve to NOTHING rather than
+// to an adjacent entry.
 
 import { SMT } from "../module/config.mjs";
 
@@ -21,7 +28,8 @@ globalThis.CONFIG = { SMT };
 const {
   resolvePassiveEffect, passiveMultiplierBonuses, hasMightEffect, shootTnBonus,
   dodgeTnBonus, powerDiceFor, elementBoosts, hasEndureEffect, combatEndRecovery, endureApplies,
-  counterEffect, counterTriggers, affinityOverrides, betterAffinity
+  counterEffect, counterTriggers, affinityOverrides, betterAffinity,
+  drainOnStrike, attackAllApplies, itemPowerDice, nullifyAttackEffect
 } = await import("../module/helpers/passives.mjs");
 const { calculateDamage } = await import("../module/helpers/damage.mjs");
 
@@ -49,17 +57,33 @@ const keyed = key => ({ name: "(renamed by a player)", system: { passiveEffect: 
     "Might", "Sure Shot", "Powerful Strikes",
     "Powerful Spells", "Expert Dodge", "Fire Boost", "Ice Boost", "Elec Boost",
     "Force Boost", "Life Aid", "Mana Aid", "Victory Cry", "Endure",
-    "Counter", "Retaliate", "Avenge"
+    "Counter", "Retaliate", "Avenge",
+    // Wired 2026-08-15. These four were the mechanically-implementable half of the
+    // eight this suite used to pin as gaps.
+    "Drain Attack", "Attack All", "Item Pro", "Luck Smiles"
   ];
   for (const name of printed) {
     ok(resolvePassiveEffect(named(name), R), `"${name}" resolves to a registry entry`);
   }
-  eq(printed.length, 22, "twenty-two printed passives are wired");
+  eq(printed.length, 26, "twenty-six printed passives are wired");
 
   // Case and padding are how a corpus row actually arrives.
   ok(resolvePassiveEffect({ name: "  fire boost ", system: {} }, R), "name matching ignores case and padding");
-  eq(resolvePassiveEffect(named("Drain Attack"), R), null, "Drain Attack is honestly unresolved");
-  eq(resolvePassiveEffect(named("Attack All"), R), null, "Attack All is honestly unresolved");
+
+  // The four that remain unwired, and the spec's second clause is why they are asserted
+  // rather than merely absent: an unimplemented passive must resolve to NOTHING, never
+  // to an adjacent entry. Two are blocked on lane 4 (no ambush check, no Item
+  // Acquisition table) and two have no mechanical surface to bonus at all.
+  eq(resolvePassiveEffect(named("Mind's Eye"), R), null,
+    "Mind's Eye is honestly unresolved — no awareness check exists to bonus (lane 4)");
+  eq(resolvePassiveEffect(named("Lucky Find"), R), null,
+    "Lucky Find is honestly unresolved — the Item Acquisition table is not imported (lane 4)");
+  eq(resolvePassiveEffect(named("Good Instincts"), R), null,
+    "Good Instincts is honestly unresolved — the system has no 'notice' action");
+  eq(resolvePassiveEffect(named("Once A Snake"), R), null,
+    "ESCAPE: Once A Snake is honestly unresolved — 'learn something useful' is GM fiat, "
+    + "and resolving it to the neighbouring Luck Smiles (same page, same 1/scenario "
+    + "wording) is exactly the adjacent-match the spec forbids");
 }
 
 // --- the forty Affinity Changers (p.109) ------------------------------------
@@ -260,6 +284,50 @@ const keyed = key => ({ name: "(renamed by a player)", system: { passiveEffect: 
     "amplify passives still take the max rather than stacking");
   ok(hasMightEffect([named("Might")], R), "Might still resolves");
   ok(hasMightEffect([keyed("might")], R), "an explicitly keyed passive still wins over the name");
+}
+
+// --- the four wired 2026-08-15 (p.110) --------------------------------------
+{
+  const drain = [named("Drain Attack")];
+
+  // "When making a basic strike, recover HP equal to 25% of the damage dealt."
+  eq(drainOnStrike(drain, R, { hpDealt: 40, isBasicStrike: true }), 10, "a quarter of the loss");
+  eq(drainOnStrike(drain, R, { hpDealt: 7, isBasicStrike: true }), 1,
+    "rounding is DOWN — a drain is a bonus, and rounding a bonus up heals off a 1-damage poke");
+  eq(drainOnStrike(drain, R, { hpDealt: 3, isBasicStrike: true }), 0, "…all the way to nothing");
+  eq(drainOnStrike(drain, R, { hpDealt: 40, isBasicStrike: false }), 0,
+    "ESCAPE: 'basic strike' is narrower than 'physical attack' — a Phys SKILL drains nothing");
+  eq(drainOnStrike(drain, R, { hpDealt: 0, isBasicStrike: true }), 0, "a hit that dealt nothing drains nothing");
+  eq(drainOnStrike(drain, R, { hpDealt: -9, isBasicStrike: true }), 0, "…and a negative cannot pay out");
+  eq(drainOnStrike([], R, { hpDealt: 40, isBasicStrike: true }), 0, "no passive, no drain");
+  eq(drainOnStrike([named("Drain Attack"), named("Drain Attack")], R, { hpDealt: 40, isBasicStrike: true }), 10,
+    "two copies do not compound — the Amplify group's 'similar abilities do not stack'");
+
+  const all = [named("Attack All")];
+  ok(attackAllApplies(all, R, { isBasicStrike: true }), "basic strikes widen to all enemies");
+  ok(!attackAllApplies(all, R, { isBasicStrike: true, isCounter: true }),
+    "ESCAPE: p.96 — 'Even if you have the Attack All skill, it may not be applied to "
+    + "this counterattack'");
+  ok(!attackAllApplies(all, R, { isBasicStrike: false }), "a skill is not a basic strike");
+  ok(!attackAllApplies([], R, { isBasicStrike: true }), "no passive, no widening");
+
+  eq(itemPowerDice([named("Item Pro")], R), ["1d10"], "Item Pro adds a die to an item's power roll");
+  eq(itemPowerDice([], R), [], "no passive, no die");
+  eq(powerDiceFor([named("Item Pro")], R, "physical"), [],
+    "ESCAPE: Item Pro's die is its OWN kind — folding it into powerDie would have "
+    + "handed it to every physical attack…");
+  eq(powerDiceFor([named("Item Pro")], R, "magical"), [], "…and to every spell");
+
+  eq(nullifyAttackEffect([named("Luck Smiles")], R),
+    { id: "luckSmiles", period: "scenario", count: 1, copies: 1 },
+    "Luck Smiles is one scenario use");
+  eq(nullifyAttackEffect([named("Luck Smiles"), named("Luck Smiles")], R).copies, 2,
+    "p.110: 'may be learned multiple times, allowing you to use it an additional time "
+    + "per scenario each' — copies is exactly what useBudget multiplies by");
+  eq(nullifyAttackEffect([], R), null, "no passive, no nullify");
+  eq(nullifyAttackEffect([named("Endure")], R), null,
+    "ESCAPE: Endure is the other survive-a-hit passive and is NOT this one — it leaves "
+    + "you at 1 HP once per combat, where Luck Smiles voids the attack once per scenario");
 }
 
 console.log(`\nsmt-rpg passive-effects tests: ${passed} passed, ${failed} failed`);

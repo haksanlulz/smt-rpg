@@ -581,6 +581,12 @@ export default class SMTActor extends Actor {
       });
     }
 
+    // The HP actually LOST, which is not finalDamage when the hit overkills. Already
+    // computed inline by the p.103 drain path above; surfaced on the result so callers
+    // that pay out a fraction of the real loss — Drain Attack (p.110) — do not have to
+    // re-derive it from a `hpBefore` they cannot see.
+    result.hpDealt = hpBefore !== null ? Math.max(0, hpBefore - this.system.hp.value) : 0;
+
     return result;
   }
 }
