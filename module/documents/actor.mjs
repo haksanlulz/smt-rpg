@@ -409,11 +409,16 @@ export default class SMTActor extends Actor {
 
   // Apply an attack: affinity/resistance -> mutate HP -> post card. Handles null/drain/repel.
   // rawPower may come from a flag, so it's clamped.
-  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false, damageMultiplier = 1, fractional = null, fpImmune = false, drains = null }) {
+  async applyDamage({ rawPower, element, isPhysical, isCritical, attacker, skillName, dodgeFumble = false, damageMultiplier = 1, fractional = null, fpImmune = false, drains = null, resistanceOverride = null }) {
     rawPower = SMTActor.#clampHpDelta(rawPower);
 
     const affinity = this.system.affinities[element] ?? "normal";
-    const resistance = isPhysical ? this.system.physicalResistance : this.system.magicalResistance;
+    // `resistanceOverride` is Pinhole (p.106), which halves the target's resistance
+    // "for this attack". Resolved by the caller and passed as a number so there is
+    // exactly one resistance input here, rather than a flag this has to interpret.
+    const resistance = Number.isFinite(resistanceOverride)
+      ? Math.max(0, resistanceOverride)
+      : (isPhysical ? this.system.physicalResistance : this.system.magicalResistance);
     // Repel uses the attacker's matching resistance (p.65).
     const attackerResistance = attacker
       ? (isPhysical ? attacker.system.physicalResistance : attacker.system.magicalResistance)

@@ -84,6 +84,21 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       // Use limits (p.96). "none" is the overwhelming majority; a skill that states
       // no limit gets none, because inventing one forbids a legal action. The ledger
       // lives on the actor, keyed by period and skill name — see helpers/uses.mjs.
+      // Deadly Fury (p.108): "For this check only, treat critical rate as 20% (1/5th)
+      // of the TN. Does not stack with Might." Same widening Might gives, which is why
+      // the resolver takes a MIN over divisors rather than multiplying them.
+      widensCrit: new BooleanField({ initial: false }),
+      // Pinhole (p.106): "Your target treats their resistance and dodge rate as being
+      // halved for this attack." Both are per-attack arguments, never stored effects.
+      halvesTargetResist: new BooleanField({ initial: false }),
+      halvesTargetDodge: new BooleanField({ initial: false }),
+      // Analyze (p.102): contests a POWER roll plus the user's level against the
+      // target's level, and refuses bosses outright. Not a percentile check — p.15
+      // calls it "an auto-success skill, so no check is needed".
+      analyzes: new BooleanField({ initial: false }),
+      // God's Curse (p.103): 1d10 picks the ailment from CONFIG.SMT.godsCurse.table.
+      // The printed rate stays on `ailment.rate` and resolves normally.
+      randomAilment: new BooleanField({ initial: false }),
       // Barrier skills (p.101): Tetraja, Makarakarn, Tetrakarn. "none" = not a barrier.
       // The rating each grants, and whether it runs on rounds or on charges, lives in
       // CONFIG.SMT.barriers — the skill only names which one it is. Resolution in
