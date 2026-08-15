@@ -168,6 +168,86 @@ export function counterTriggers({ element, dodged = false, suppressed = false } 
   return element === CONFIG.SMT.counter.element;
 }
 
+// Drain Attack (p.110): "When making a basic strike, recover HP equal to 25% of the
+// damage dealt to the target."
+//
+// Two words in that sentence do the work. "basic strike" — not a physical attack skill,
+// not a weapon attack, the basic strike specifically, so this is deliberately narrower
+// than the Might/Powerful Strikes scope one line above it. And "damage dealt", which is
+// the HP the target actually LOST, not the number the calculation produced: an overkill
+// on a 5 HP target deals 5, so it drains 1, not a quarter of the raw hit. That is the
+// same distinction the 2026-06-07 halve-damage escape turned on, and it is why this
+// takes `hpDealt` rather than `finalDamage`.
+//
+// Rounding is the book's silence, resolved DOWN — the drain is a bonus, and rounding a
+// bonus up is how a 1-damage poke starts healing a full point. [inferred]
+export function drainOnStrike(skills, registry, { hpDealt = 0, isBasicStrike = false } = {}) {
+  if (!isBasicStrike) return 0;
+  const dealt = Number.isFinite(hpDealt) && hpDealt > 0 ? Math.floor(hpDealt) : 0;
+  if (!dealt) return 0;
+
+  // Duplicates do not compound, per the Amplify group's "similar abilities do not
+  // stack" — the best fraction wins, exactly like counterEffect's chain.
+  let best = 0;
+  for (const skill of skills ?? []) {
+    const resolved = resolvePassiveEffect(skill, registry);
+    if (resolved?.entry?.kind !== "drainOnStrike") continue;
+    best = Math.max(best, Number(resolved.entry.value) || 0);
+  }
+  return Math.floor(dealt * best);
+}
+
+// Attack All (p.110): "Basic strikes always target all enemies. This effect does not
+// apply to Counter, Retaliate, or Avenge." The exclusion is p.96's too, stated there as
+// "Even if you have the Attack All skill, it may not be applied to this counterattack."
+export function attackAllApplies(skills, registry, { isBasicStrike = false, isCounter = false } = {}) {
+  if (!isBasicStrike || isCounter) return false;
+  for (const skill of skills ?? []) {
+    const resolved = resolvePassiveEffect(skill, registry);
+    if (resolved?.entry?.kind === "attackAll") return true;
+  }
+  return false;
+}
+
+// Item Pro (p.110): "When using items, add 1d10 to the power roll." Returns the dice to
+// append, as strings, mirroring powerDiceFor.
+//
+// A SEPARATE kind from powerDie on purpose: powerDie carries a physical/magical scope
+// and an item is neither, so reusing it would have handed Item Pro's die to every spell
+// the character casts.
+export function itemPowerDice(skills, registry) {
+  const dice = [];
+  for (const skill of skills ?? []) {
+    const resolved = resolvePassiveEffect(skill, registry);
+    const entry = resolved?.entry;
+    if (entry?.kind === "itemPowerDie" && entry.value) dice.push(String(entry.value));
+  }
+  return dice;
+}
+
+// Luck Smiles (p.110): "Completely nullify the effects of an attack on you, 1/scenario
+// only. May be learned multiple times, allowing you to use it an additional time per
+// scenario each."
+//
+// Returns `{ id, period, count, copies }` or null. The budget is the ordinary p.96 use
+// ledger — `copies` is literally what the second sentence describes, and useBudget
+// already multiplies by it, so this needs no counter of its own.
+//
+// "Completely nullify the EFFECTS" is broader than damage: the ailment and any rider
+// go with it, which is why the caller treats it as a null affinity outcome rather than
+// as damage set to zero.
+export function nullifyAttackEffect(skills, registry) {
+  const holders = (skills ?? []).filter(s => resolvePassiveEffect(s, registry)?.entry?.kind === "nullifyAttack");
+  if (!holders.length) return null;
+  const { entry, id } = resolvePassiveEffect(holders[0], registry);
+  return {
+    id,
+    period: entry.period ?? "scenario",
+    count: Number(entry.count) || 1,
+    copies: holders.length
+  };
+}
+
 // Endure's own guard (p.110): "No effect when Stoned."
 export function endureApplies(hasEndure, { ailment = "none", alreadyUsed = false } = {}) {
   if (!hasEndure || alreadyUsed) return false;

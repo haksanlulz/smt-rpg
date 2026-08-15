@@ -1,6 +1,8 @@
 import { evaluatePercentile, cascadePlan, multiActionPlan, multiActionTn } from "./checks.mjs";
 import { halveDamageResult, affinityOutcome, killConditionMet } from "./damage.mjs";
 import { canDodge, shatterPctFor } from "./ailments.mjs";
+import { nullifyAttackEffect, attackAllApplies, drainOnStrike } from "./passives.mjs";
+import { spendUse, ledgerKey } from "./uses.mjs";
 
 // Resolvers claim a message id here before their first await, guarding double-click/concurrent re-entry on top of the persisted `resolved` flag.
 const _inFlight = new Set();
@@ -155,7 +157,7 @@ async function _renderPendingCard(attackData) {
 // Effect Chart's hit row uses it (p.64: "an attacker cannot avoid hitting themselves"),
 // which is why it is a property of the CARD rather than of the click — the same
 // fumbled attack posts a second card for the allies, who may dodge as normal.
-export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, noDodge = false, riders = null }) {
+export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, noDodge = false, drainsStrike = false, riders = null }) {
   const valid = (targets ?? []).filter(t => t.actor);
   if (!valid.length) {
     ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
@@ -165,7 +167,7 @@ export async function postAttacksToTargets({ attacker, targets, rawPower, elemen
   const attackData = {
     attackerTokenUuid: getTokenUuid(attacker) ?? attacker.id,
     rawPower, element, isPhysical, isCritical, skillName,
-    ailmentType, ailmentRate, damageMultiplier, noCounter, noDodge,
+    ailmentType, ailmentRate, damageMultiplier, noCounter, noDodge, drainsStrike,
     riders: riders ?? null,
     checkMessageId: checkMessageId ?? null,
     targets: valid.map(t => ({
@@ -248,7 +250,17 @@ export async function performBasicStrike(actor, {
   // opportunity" to make "a basic strike", singular.
   const parts = isReaction ? 1 : await promptMultiAction(tn, multiActionPlan(tn), skillName);
   const tnEach = multiActionTn(tn, parts);
-  const finalTargets = targets ?? resolveTargets(actor, "1");
+
+  // Attack All (p.110): "Basic strikes always target all enemies." Always — so it
+  // WIDENS a caller's single target rather than filling in a missing one, which is the
+  // difference between the passive working and the passive only working when nothing
+  // was selected. The counterattack carve-out is p.96's and is checked as `isReaction`:
+  // "Even if you have the Attack All skill, it may not be applied to this counterattack."
+  const widens = attackAllApplies(actor.items.filter(i => i.type === "skill"),
+    CONFIG.SMT.passiveEffects, { isBasicStrike: true, isCounter: isReaction });
+  const finalTargets = widens
+    ? resolveTargets(actor, "All Foes")
+    : (targets ?? resolveTargets(actor, "1"));
 
   let last = null;
   for (let part = 0; part < parts; part++) {
@@ -294,7 +306,12 @@ export async function performBasicStrike(actor, {
       skillName,
       checkMessageId: checkResult.messageId,
       damageMultiplier,
-      noCounter: isReaction
+      noCounter: isReaction,
+      // Drain Attack (p.110) rides the attack card rather than firing here: the drain
+      // is a fraction of the damage DEALT, which is not known until the target's HP is
+      // written. Marking the card is what lets resolveAttack pay it from the real loss.
+      drainsStrike: drainOnStrike(actor.items.filter(i => i.type === "skill"),
+        CONFIG.SMT.passiveEffects, { hpDealt: 1, isBasicStrike: true }) > 0
     });
   }
   return last;
@@ -368,6 +385,60 @@ export async function resolveCounterAttack(message, counterData) {
     isReaction: true,
     label
   });
+}
+
+// Luck Smiles (p.110): "Completely nullify the effects of an attack on you, 1/scenario
+// only." Spends the use, then closes the row without resolving anything else.
+//
+// "the EFFECTS" is broader than the damage, which is why this short-circuits the whole
+// row rather than zeroing a number: no dodge, no damage, no ailment roll, no rider, no
+// counterattack. Rejecting after the spend would be worse than not offering it, so the
+// budget is checked and spent BEFORE the row is touched.
+export async function resolveLuckSmiles(message, index) {
+  const live = message.getFlag("smt-rpg", "attackData");
+  const row = live?.targets?.[index];
+  if (!row || row.resolved) return;
+
+  const target = getActorFromTokenUuid(row.targetTokenUuid);
+  if (!target) return;
+
+  const skills = target.items.filter(i => i.type === "skill");
+  const effect = nullifyAttackEffect(skills, CONFIG.SMT.passiveEffects);
+  if (!effect) return;
+
+  // Runs through the ordinary p.96 ledger — `copies` is p.110's "may be learned
+  // multiple times, allowing you to use it an additional time per scenario each",
+  // which useBudget already means.
+  const key = ledgerKey(effect.period, effect.id);
+  const ledger = foundry.utils.deepClone(target.system.useLedger ?? {});
+  const spend = spendUse({
+    period: effect.period, count: effect.count, copies: effect.copies, spent: ledger[key] ?? 0
+  });
+  if (!spend.allowed) {
+    ui.notifications.warn(game.i18n.format("SMT.Warnings.UseLimit", {
+      skill: game.i18n.localize(CONFIG.SMT.passiveEffects[effect.id].label),
+      period: game.i18n.localize(`SMT.UsePeriod.${effect.period}`)
+    }));
+    return;
+  }
+  ledger[key] = spend.spent;
+  await target.update({ "system.useLedger": ledger });
+
+  const { postEffectNotice } = await import("./effects.mjs");
+  await postEffectNotice(target, game.i18n.format("SMT.Passive.LuckSmiles", { name: target.name }));
+  await _markTargetResolved(message, index, game.i18n.localize("SMT.LuckSmilesButton"));
+}
+
+// Whether a target may still spend Luck Smiles. Synchronous because the render gate
+// cannot await — passives.mjs is imported statically at the top of this file for that
+// reason; the dynamic imports elsewhere here exist to break a cycle with item.mjs,
+// which passives.mjs has no part in.
+export function luckSmilesAvailable(actor) {
+  if (!actor) return false;
+  const effect = nullifyAttackEffect(actor.items.filter(i => i.type === "skill"), CONFIG.SMT.passiveEffects);
+  if (!effect) return false;
+  const spent = Number(actor.system.useLedger?.[ledgerKey(effect.period, effect.id)]) || 0;
+  return spent < effect.count * effect.copies;
 }
 
 // Mark one target row resolved with a brief outcome string, then re-render the card in place.
@@ -480,6 +551,29 @@ export async function resolveAttack(message, index, skipDodge = false) {
       fpImmune: !!riders?.fpImmune,
       drains: riders?.drains ?? null
     });
+
+    // Drain Attack (p.110): "recover HP equal to 25% of the damage dealt to the
+    // target." Paid here rather than at the strike, because "dealt" is the HP the
+    // target actually LOST — applyDamage floors at 0, so an overkill on a 5 HP target
+    // deals 5 and drains 1, not a quarter of the raw hit.
+    if (live.drainsStrike && attacker && dmgResult?.hpDealt > 0) {
+      const healed = drainOnStrike(
+        attacker.items.filter(i => i.type === "skill"),
+        CONFIG.SMT.passiveEffects,
+        { hpDealt: dmgResult.hpDealt, isBasicStrike: true }
+      );
+      if (healed > 0) {
+        const hp = attacker.system.hp;
+        const newHp = Math.min(hp.value + healed, hp.max);
+        if (newHp !== hp.value) {
+          await attacker.update({ "system.hp.value": newHp });
+          const { postEffectNotice } = await import("./effects.mjs");
+          await postEffectNotice(attacker, game.i18n.format("SMT.Passive.DrainAttack", {
+            name: attacker.name, amount: newHp - hp.value
+          }));
+        }
+      }
+    }
 
     if (shatterPct > 0 && await _resolveStoneShatter(target, shatterPct)) {
       await _markTargetResolved(message, index, game.i18n.localize("SMT.Stone.Shattered"));

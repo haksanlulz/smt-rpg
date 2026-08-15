@@ -218,7 +218,22 @@ SMT.passiveEffects = {
   // `value` multiplies the DAMAGE DEALT, not the power (p.110).
   counter: { label: "SMT.PassiveEffect.Counter", legacyNames: ["Counter"], kind: "counter", value: 1 },
   retaliate: { label: "SMT.PassiveEffect.Retaliate", legacyNames: ["Retaliate"], kind: "counter", value: 2 },
-  avenge: { label: "SMT.PassiveEffect.Avenge", legacyNames: ["Avenge"], kind: "counter", value: 3 }
+  avenge: { label: "SMT.PassiveEffect.Avenge", legacyNames: ["Avenge"], kind: "counter", value: 3 },
+  // drainOnStrike: fraction of the damage a BASIC STRIKE dealt, recovered as HP (p.110).
+  // Reads the damage actually dealt, not the damage computed, so an overkill drains only
+  // what was there — the same distinction the halve-damage escape turned on.
+  drainAttack: { label: "SMT.PassiveEffect.DrainAttack", legacyNames: ["Drain Attack"], kind: "drainOnStrike", value: 0.25 },
+  // attackAll: "Basic strikes always target all enemies." The exclusion is printed on
+  // the same line and is carried by the existing noCounter flag rather than a new one.
+  attackAll: { label: "SMT.PassiveEffect.AttackAll", legacyNames: ["Attack All"], kind: "attackAll" },
+  // itemPowerDie: an extra die on a CONSUMABLE's power roll (p.110). Distinct from
+  // powerDie, whose scope is physical/magical attacks — an item is neither, so folding
+  // the two would have given Item Pro to every spell.
+  itemPro: { label: "SMT.PassiveEffect.ItemPro", legacyNames: ["Item Pro"], kind: "itemPowerDie", value: "1d10" },
+  // nullifyAttack: "Completely nullify the effects of an attack on you, 1/scenario only."
+  // The budget is the ordinary use ledger (p.96), and p.110's "may be learned multiple
+  // times" is already what useBudget's `copies` means.
+  luckSmiles: { label: "SMT.PassiveEffect.LuckSmiles", legacyNames: ["Luck Smiles"], kind: "nullifyAttack", period: "scenario", count: 1 }
 };
 
 // Affinity Changers (p.109): ten elements x four ratings = forty skills, every one
