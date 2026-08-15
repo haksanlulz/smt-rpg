@@ -307,6 +307,13 @@ export default class SMTItem extends Item {
         await this._postPendingAttacks(actor, powerResult, checkResult.messageId);
       }
 
+      // The Fumble Effect Chart's top row (p.58, elaborated p.64). This branch did not
+      // exist: `use` tested isSuccess three times and isFumble never, so every fumbled
+      // attack in the game resolved to a chat card and no consequence.
+      if (checkResult.isFumble && this.hasPowerRoll) {
+        await this._resolveFumbledAttack(actor, checkResult);
+      }
+
       // Fractional-HP attacks (p.102-103) roll no power — the target's current HP is
       // the whole number — but they are still attacks: the hit posts a pending card
       // and the target may dodge (p.97's "make attacks" rule).
@@ -588,6 +595,86 @@ export default class SMTItem extends Item {
 
     const { postEffectNotice } = await import("../helpers/effects.mjs");
     await postEffectNotice(actor, game.i18n.format("SMT.Focus.Ready", { name: actor.name }));
+  }
+
+  // Fumble Effect Chart, Hit Check row (p.58): "Hit yourself and/or your allies."
+  //
+  // p.64 elaborates: "the attack then randomly hits either themselves or an ally (and
+  // in the case of the attack being 'all' then it hits all allies, themselves
+  // included). When hitting an ally, that ally may avoid the attack with a dodge check
+  // as normal, but an attacker cannot avoid hitting themselves."
+  //
+  // The power roll still happens — p.58: "Even if you fumble, there are times when you
+  // may still need to determine power, such as when hitting yourself/allies." It is
+  // rolled WITHOUT the critical flag and without Focus: a fumble is not a critical, and
+  // spending a stored Focus on a self-hit would punish the fumble twice.
+  async _resolveFumbledAttack(actor, checkResult) {
+    const { getAutoTargets, postAttacksToTargets } = await import("../helpers/combat.mjs");
+    const { fumbleVictims, fumbleVictimPool } = await import("../helpers/fumble.mjs");
+
+    // "Allies" here is the attacker's own side, which is the same auto-target set the
+    // party-wide buffs use — and never the attack's declared targets, who are the ones
+    // the fumble is precisely NOT hitting.
+    const allies = getAutoTargets(actor, "All Allies").filter(t => t.actor && t.actor.id !== actor.id);
+    const targetsAll = /all/i.test(String(this.system.targets ?? ""));
+
+    let pick = 0;
+    if (!targetsAll) {
+      const pool = fumbleVictimPool(allies.length);
+      // A pool of one is the lone-attacker case; rolling 1d1 would post a pointless card.
+      if (pool > 1) pick = (await new Roll(`1d${pool}`).evaluate()).total - 1;
+    }
+
+    const victims = fumbleVictims({ targetsAll, allyCount: allies.length, pick });
+    const selfToken = actor.getActiveTokens()[0];
+
+    const basePower = this.isPhysicalSkill ? actor.system.basePhysicalPower : actor.system.baseMagicalPower;
+    const powerResult = await actor.rollPower(
+      basePower, this.system.power,
+      `${this.name} — ${game.i18n.localize("SMT.Power")}`,
+      false,
+      this.isPhysicalSkill ? actor.system.physicalPowerBonusDice : actor.system.magicalPowerBonusDice,
+      actor.system.boostFor(this.system.element)
+    );
+
+    // Split by dodge eligibility, because it is per-victim: the attacker's own hit is
+    // posted with the dodge step skipped, the allies' are not. One combined post would
+    // have to pick one rule and be wrong for the other half.
+    const groups = [
+      { tokens: victims.filter(v => v.target === "ally").map(v => allies[v.index]).filter(Boolean), skipDodge: false },
+      { tokens: victims.some(v => v.target === "self") && selfToken ? [selfToken] : [], skipDodge: true }
+    ];
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="smt-roll effect-notice"><p>${game.i18n.format("SMT.Fumble.HitOwnSide", {
+        name: actor.name,
+        victims: victims.map(v => v.target === "self" ? actor.name : allies[v.index]?.actor?.name)
+          .filter(Boolean).join(", ")
+      })}</p></div>`
+    });
+
+    for (const group of groups) {
+      if (!group.tokens.length) continue;
+      await postAttacksToTargets({
+        attacker: actor,
+        targets: group.tokens,
+        rawPower: powerResult.total,
+        element: this.system.element,
+        isPhysical: this.isPhysicalSkill,
+        isCritical: false,
+        skillName: this.name,
+        checkMessageId: checkResult.messageId,
+        ailmentType: this.system.ailment?.type ?? "none",
+        ailmentRate: this.system.ailment?.rate ?? 0,
+        // p.70's fumbled flee hands out free strikes that cannot be countered; the same
+        // reasoning holds here — a fumble is the attacker's mistake, and letting an ally
+        // Counter it would turn one error into a loop between two Counter-holders.
+        noCounter: true,
+        noDodge: group.skipDodge,
+        riders: this.attackRiders
+      });
+    }
   }
 
   // Barrier skills (p.101). All three print "all allies", so the target set is the

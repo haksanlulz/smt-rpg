@@ -398,7 +398,24 @@ And a passive that is NOT implemented resolves to nothing rather than to
 Check: test/passive-effects.test.mjs  (tagged  // spec: printed-passives-have-mechanical-effect)
 ```
 
-**Nine entries against roughly twenty-five printed passives.** Nineteen are wired as of 2026-07-28. **Still unwired, deliberately and named here rather than implied fixed:** Counter / Retaliate / Avenge (a reaction system), Drain Attack, Attack All, Lucky Find, Mind's Eye, Good Instincts, Item Pro, Luck Smiles, Once a Snake, and all **forty Affinity Changers** (Anti-X, Null X, X Drain, X Repel), which have no path to modify `system.affinities` at all. The spec's second clause is what keeps that honest: an unimplemented passive must resolve to `null`, never to a neighbour.
+**Nine entries against roughly twenty-five printed passives.** Nineteen were wired as of 2026-07-28.
+
+🔴 **The paragraph that stood here until 2026-08-15 was STALE IN BOTH DIRECTIONS and had been for weeks.** It named Counter / Retaliate / Avenge and all forty Affinity Changers as unwired. Counter / Retaliate / Avenge landed **2026-07-28** with their own §6 row, and the Affinity Changers are **generated** in `config.mjs` from `SMT.affinityChangeElements` and resolved by `affinityOverrides` — 63 registry keys are live, not 23. The note was written when both were true and nothing re-read it when they stopped being true. *This is the exact failure §1 clause 4 exists to prevent, pointed the other way:* a doc claiming LESS than the code does is still a doc nobody checked, and it is the reason a session picking up "the eight small passives" had to re-derive the list from the registry rather than read it.
+
+**Still genuinely unwired, re-derived from the registry on 2026-08-15 and split by WHY, because "not implemented" was hiding three different situations:**
+
+| Passive | Printed effect | Status |
+|---|---|---|
+| Drain Attack | recover HP equal to 25% of the damage dealt (see the book) | **implementable now** — damage-pipeline hook, no dependency |
+| Attack All | basic strikes always target all enemies (see the book) | **implementable now** — targeting, and the Counter exclusion is already a flag |
+| Item Pro | when using items, add 1d10 to the power roll (see the book) | **implementable now** — consumable power path |
+| Luck Smiles | completely nullify the effects of an attack on you, 1/scenario (see the book) | **implementable now** — reaction; the scenario budget already exists |
+| Mind's Eye | +20% to an awareness check against an ambush (see the book) | **blocked on lane 4** — no ambush or awareness check exists yet |
+| Lucky Find | a Luck check to gain an item off the Item Acquisition table (see the book) | **blocked on lane 4** — the table is not imported |
+| Good Instincts | +10% to a check (usually Luck) to notice things (see the book) | **no mechanical surface** — the system has no "notice" action to bonus |
+| Once A Snake | learn something useful, 1/scenario only (see the book) | **no mechanical surface** — pure GM fiat; the use budget is the only automatable part |
+
+The spec's second clause is what keeps all eight honest: an unimplemented passive must resolve to `null`, never to a neighbour. **The four in the last two rows are not deferred work items — two are downstream of lane 4 and two have nothing to automate**, and saying so is worth more than a row that reads "todo" forever.
 
 ### SPEC a-cure-skill-cures-instead-of-healing
 ```
@@ -479,6 +496,29 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 **p.96 hands the tracking to the player** — *"Players with these skills are responsible for keeping track of when to use such skills, and how many uses they have remaining."* Clause 2 says otherwise, so the ledger is kept for them. **The whole rule is the reset boundary:** a new round retires round budgets (p.96's boss skills — Icy Death may not go twice back to back), ending a combat retires round *and* combat because a combat contains rounds, and a scenario budget survives both. Nothing but the GM knows when a scenario ended, so that one is a button and says so.
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
+
+### SPEC a-fumbled-attack-lands-on-your-own-side
+
+*(Added 2026-08-15.)*
+```
+Given the p.58 Fumble Effect Chart and its p.64 elaboration of the hit row
+When an attack's hit check fumbles
+Then the attack still rolls power and lands on the attacker's OWN side: one
+     victim drawn at random from the attacker and their allies, or — when the
+     attack targeted "all" — every ally and the attacker together
+And dodge eligibility is per victim, so an ally may dodge as normal and the
+    attacker may not; the hit is not a critical; and it can provoke no
+    counterattack
+Check: test/fumble-chart.test.mjs  (tagged  // spec: a-fumbled-attack-lands-on-your-own-side)
+```
+
+**This row was doing nothing, and it is the row that fires most often.** `SMTItem#use` branched on `isSuccess` three separate times and on `isFumble` not once, so every fumbled attack in the game produced a chat card reading "Fumble", applied the Curse, and stopped. Not wrong maths — absent maths, which is the §1 clause-2 case: the GM was left to hand-resolve the single most common bad outcome in the system. The suite's wiring assertion is deliberately blunt about it (`use` reads `isFumble` **at all**), because the defect was a missing branch rather than a wrong one and nothing subtler would have caught it.
+
+**Dodge eligibility is per victim, and that is why one fumbled attack posts two cards.** p.64: *"When hitting an ally, that ally may avoid the attack with a dodge check as normal, but an attacker cannot avoid hitting themselves."* A single `skipDodge` on the attack would have to pick one rule and be wrong for the other half of the victims, so `noDodge` became a property of the CARD — the allies' card renders the Dodge button, the attacker's does not, and `resolveAttack` honours the flag regardless of which button was clicked.
+
+**Three clauses asserted because each is a plausible wrong answer.** An "all" fumble is not rolled for — every pick returns the same victim list, so a stray die cannot turn a party-wide backfire into a single hit. A lone attacker with no allies always hits themselves, because *"themselves or an ally"* with an empty ally list is a pool of one rather than a fumble that fizzles. And power is still rolled — p.58 says so in as many words (*"Even if you fumble, there are times when you may still need to determine power"*) — but without the critical flag and without spending a stored Focus, since a fumble is not a critical and burning the Focus would punish the mistake twice.
+
+**Two of the chart's five rows were already engine behaviour and are pinned here rather than re-implemented:** the dodge row is `dodgeFumble` in the damage helper, the save row is `fumbledSaveResources`. The remaining two — negotiation's *"combat ensues"* and *"the GM is free to determine what"* — resolve to a stated prompt and are marked `automated: false`, which is the chart being honest about which rows belong to a person.
 
 ### SPEC barriers-grant-affinity-that-runs-out
 

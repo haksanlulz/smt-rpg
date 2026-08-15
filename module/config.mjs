@@ -282,6 +282,17 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// The Fumble Effect Chart (p.58), as a chart. `automated` is whether the system
+// resolves the row itself; the two GM rows carry a prompt so a fumble the engine does
+// not act on still says what the book says, instead of passing silently.
+SMT.fumbleChart = {
+  hit: { label: "SMT.Fumble.Hit", automated: true },
+  dodge: { label: "SMT.Fumble.Dodge", automated: true },
+  negotiation: { label: "SMT.Fumble.Negotiation", automated: false },
+  save: { label: "SMT.Fumble.Save", automated: true },
+  other: { label: "SMT.Fumble.Other", automated: false }
+};
+
 // Barrier skills (p.101). `rounds` is the round clock — "until the end of the next
 // round" is +1 from the cast — and `charges` is the use clock. Each kind uses exactly
 // one of the two: Tetraja is spent by nullifying, the -karn pair by time. Makarakarn

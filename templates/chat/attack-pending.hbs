@@ -14,7 +14,9 @@
         <span class="target-outcome">{{t.outcome}}</span>
       {{else}}
         <span class="attack-buttons">
-          <button type="button" data-action="dodge" data-index="{{i}}">{{localize "SMT.DodgeButton"}}</button>
+          {{#unless ../noDodge}}
+            <button type="button" data-action="dodge" data-index="{{i}}">{{localize "SMT.DodgeButton"}}</button>
+          {{/unless}}
           <button type="button" data-action="apply-damage" data-index="{{i}}">{{localize "SMT.DodgeApplyDamage"}}</button>
         </span>
       {{/if}}
