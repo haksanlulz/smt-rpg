@@ -480,6 +480,30 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC press-skills-buy-actions-not-checks
+
+*(Added 2026-08-15.)*
+```
+Given the p.63 action budget — one action per turn, two with the boss trait —
+      and the p.96 press skills Beast Eye and Dragon Eye
+When a combatant declares actions during their turn, and when a press skill
+     is used
+Then each declared action costs exactly one, whatever number of checks a
+     multi-action buys with it; the press skill costs its own action and
+     grants the printed gross figure, leaving Beast Eye's holder one more
+     action than they started with and Dragon Eye's three more
+And the budget refuses a further action before any use, cost or Poison tick
+    is spent; it resets on the turn it is keyed to rather than on a hook
+    firing; and outside a combat turn it refuses nothing at all
+Check: test/action-budget.test.mjs  (tagged  // spec: press-skills-buy-actions-not-checks)
+```
+
+**The collision this spec exists to keep apart is press skills against multi-action, which occupy the same sentence in a player's head and different axes in the book.** p.59-60 lets a 100%+ TN "perform the same action two or three times consecutively in the same turn" — same skill, same target, TN divided. That is two or three CHECKS bought with ONE action. p.96 lets a press skill buy ACTIONS, each free to be a different skill against a different target and each free to be its own multi-action. Wiring the grant into `multiActionPlan`, or charging a three-part multi-action three actions, would be wrong in both directions simultaneously, and the assertions cross the two deliberately: a 210% TN is three checks *and* one action spent.
+
+**One rule here is stamped from prose that no skill row carries.** Neither Beast Eye's nor Dragon Eye's printed effect says "once per round" — the limit is in p.96's boss-skill paragraph (*"using Dragon Eye in succession to gain unlimited actions just wouldn't be fair"*) and restated as a rule in the GM chapter (*"skills that grant additional actions, like Dragon Eye, should be limited to being used once per turn"*). `attackRiders` stamps a round limit whenever it reads a grant, because nothing downstream reads chapter prose and an unlimited press skill is an infinite turn. A limit the row *does* state still wins; the stamp only fills a gap.
+
+**The budget fails OPEN and that is a decision, not an oversight.** The ledger carries its own `<round>:<turn>` key and anything stamped for an earlier turn reads as a full budget, so a dropped `updateCombat`, a mid-fight reload, or an actor dragged into a combat already running all leave the combatant able to act. The asymmetry is the argument: a GM can see someone acting twice and cannot see someone silently forbidden to act at all. The same reasoning makes the out-of-combat case untracked rather than zero — p.63's economy exists inside a turn, so nothing outside one may be refused for lack of an action.
+
 ### SPEC attack-effect-riders-resolve-as-printed
 
 *(Added 2026-08-01.)*

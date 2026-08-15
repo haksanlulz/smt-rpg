@@ -464,6 +464,10 @@ Hooks.on("deleteCombat", async (combat) => {
     // scenario ends. A stored Focus does not outlive the fight either.
     await actor.clearUseLimits("combat");
     await actor.clearFocus();
+    // The action budget (p.63) resets on its own turn key, so this is housekeeping
+    // rather than the reset — it stops a spent ledger sitting on the sheet after the
+    // fight, where it would read as a live restriction it is not.
+    await actor.clearActionBudget();
     await clearDefend(actor);
     // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);

@@ -59,6 +59,14 @@ export default class SMTItem extends Item {
     return this.type === "skill" && (this.name ?? "").trim().toLowerCase() === "focus";
   }
 
+  // Press skill (p.96): Beast Eye and Dragon Eye, which "increase how many actions one
+  // can take per turn". Schema-driven rather than name-matched like Focus and Provoke —
+  // the grant is a NUMBER the printed rows state ("Gain two actions this round"), so
+  // there is a value to carry, and a homebrew press skill works without a code change.
+  get isPressSkill() {
+    return this.type === "skill" && (this.system.grantsActions ?? 0) > 0;
+  }
+
   // Casts a buff/debuff or dispel (p.96).
   get isBuffSkill() {
     const e = this.system.buffEffect;
@@ -96,6 +104,14 @@ export default class SMTItem extends Item {
     // Firearm skills need an equipped, loaded gun before the action's cost is spent (p.63).
     if (this.isRangedSkill && !this._readyRangedWeapon(actor)) return;
 
+    // The action budget (p.63) is checked FIRST of the three deductions, because it is
+    // the only one whose refusal must cost nothing at all: a skill declined for having
+    // no action left this turn has not been used, so it must not burn a once-per-combat
+    // use, MP, or a Poison tick. Press skills bank their grant (p.96) in the same
+    // write, since "they cost one action to apply" — the grant and the charge are one
+    // transaction, and splitting them lets a failed update hand out free actions.
+    if (!(await actor.spendAction({ grants: this.system.grantsActions ?? 0, label: this.name }))) return;
+
     // Use limits (p.96) are checked before the cost, like Mute above: a skill with no
     // uses left is not attempted, so it burns no MP and triggers no per-action drain.
     if (!(await actor.spendSkillUse(this))) return;
@@ -123,6 +139,14 @@ export default class SMTItem extends Item {
     // Focus (p.105): auto-succeeds and stores a doubling rather than attacking.
     if (this.isFocus) {
       await this._castFocus(actor);
+      return;
+    }
+
+    // Press skills (p.96): auto-succeed, and the whole effect is the grant already
+    // banked by spendAction above. Announce what the actor now has left, because the
+    // number is the entire point of the skill and lives nowhere a player can see mid-turn.
+    if (this.isPressSkill) {
+      await this._castPress(actor);
       return;
     }
 
@@ -552,6 +576,27 @@ export default class SMTItem extends Item {
 
     const { postEffectNotice } = await import("../helpers/effects.mjs");
     await postEffectNotice(actor, game.i18n.format("SMT.Focus.Ready", { name: actor.name }));
+  }
+
+  // Press skills (p.96): Beast Eye and Dragon Eye. The grant was banked by spendAction
+  // before any cost was paid, so this only reports it — but reporting is not cosmetic
+  // here. The budget is otherwise invisible, and a table that cannot see how many
+  // actions are left is back to tracking it by hand, which is what clause 2 rules out.
+  async _castPress(actor) {
+    const intro = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/auto-success.hbs",
+      { name: this.name, effectDescription: this.system.effectDescription }
+    );
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
+
+    const { remaining } = actor.actionState();
+    const { postEffectNotice } = await import("../helpers/effects.mjs");
+    await postEffectNotice(actor, game.i18n.format("SMT.Press.Granted", {
+      name: actor.name,
+      // Outside a combat turn the budget is untracked and remaining is Infinity; the
+      // grant is real either way, so report the printed figure rather than a symbol.
+      remaining: Number.isFinite(remaining) ? remaining : this.system.grantsActions
+    }));
   }
 
   // Provoke (p.105): auto-success; one 1d10 debuffs every foe (−resist, +phys/mag power).

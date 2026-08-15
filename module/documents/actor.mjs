@@ -6,6 +6,7 @@ import { blocksMagatamaSwitch, magatamaLearnPlan } from "../helpers/magatama.mjs
 import {
   focusMultiplier, focusConsumed, spendUse, clearedByBoundary, ledgerKey
 } from "../helpers/uses.mjs";
+import { actionState, spendActions, turnKey } from "../helpers/actions.mjs";
 
 // Cap on any single HP delta, guarding against NaN/Infinity or corrupted flag values.
 const MAX_HP_DELTA = 1_000_000;
@@ -146,6 +147,56 @@ export default class SMTActor extends Actor {
     await this.update({ "system.useLedger": ledger });
     if (CONFIG.SMT.debug) console.log("smt-rpg | Use limit", { skill: skill.name, ...result, copies });
     return true;
+  }
+
+  // ------------------------------------------------- action budget (p.63, p.96)
+
+  // Which turn this actor's budget is keyed to, or null when it is not this actor's
+  // turn in an active combat. Null is the UNTRACKED case, not an error: p.63's action
+  // economy exists inside a combat turn and nowhere else, so a skill used out of
+  // combat — or on somebody else's turn, which is the GM resolving a reaction — is
+  // never refused for lack of an action.
+  get #turnKey() {
+    const combat = game.combat;
+    if (!combat?.started) return null;
+    if (combat.combatant?.actor?.id !== this.id) return null;
+    return turnKey(combat.round, combat.turn);
+  }
+
+  // Actions left this turn: `{ total, spent, granted, remaining, tracked }`.
+  actionState() {
+    return actionState(this.system.actionLedger, {
+      key: this.#turnKey,
+      isBoss: !!this.system.isBoss
+    });
+  }
+
+  // Spend one action, optionally banking a press skill's grant (p.96). Refuses and
+  // warns when the turn's budget is out. Returns true when the action was taken.
+  async spendAction({ grants = 0, label = "" } = {}) {
+    const result = spendActions(this.system.actionLedger, {
+      key: this.#turnKey,
+      isBoss: !!this.system.isBoss,
+      grants
+    });
+
+    if (!result.allowed) {
+      ui.notifications.warn(game.i18n.format("SMT.Warnings.NoActionsLeft", {
+        name: this.name,
+        action: label || game.i18n.localize("SMT.Action.Generic")
+      }));
+      return false;
+    }
+    if (result.ledger) await this.update({ "system.actionLedger": result.ledger });
+    if (CONFIG.SMT.debug) console.log("smt-rpg | Action budget", { actor: this.name, label, grants, ...result });
+    return true;
+  }
+
+  // Drop the stored budget. Fires on combat end; the turn key already makes a stale
+  // ledger harmless mid-fight, so this is housekeeping rather than the reset itself.
+  async clearActionBudget() {
+    if (foundry.utils.isEmpty(this.system.actionLedger ?? {})) return;
+    await this.update({ "system.actionLedger": {} });
   }
 
   // Clear the ledger entries a boundary retires. "round" and "combat" fire from the
