@@ -206,9 +206,18 @@ ok(/actionLedger:\s*new ObjectField/.test(actorSchema),
   "the actor schema declares the action ledger");
 
 const actor = readFileSync(join(ROOT, "module/documents/actor.mjs"), "utf8");
-ok(actor.includes("actionState(") && actor.includes("spendAction("),
-  "the actor exposes the budget read and its spend");
-ok(/isBoss/.test(actor), "…and reads the boss trait, which is the only printed base change");
+// Anchored on the METHOD DECLARATIONS, not on the identifiers. `actionState(` alone
+// matched twice — the method and the call it makes to the imported pure function — so
+// deleting the method left it green. Found by the 2026-08-15 assertion audit.
+ok(/^\s{2}actionState\(\)\s*\{/m.test(actor), "the actor exposes the budget read");
+ok(/^\s{2}async spendAction\(/m.test(actor), "…and the spend");
+// `isBoss` alone matched four times, which cannot pin anything. What matters is that
+// BOTH budget entry points pass the trait through — it is the only printed change to
+// the base, and dropping it on either path gives a boss one action.
+ok(/actionState\(this\.system\.actionLedger,[\s\S]{0,120}?isBoss: !!this\.system\.isBoss/.test(actor),
+  "the budget READ passes the boss trait");
+ok(/spendActions\(this\.system\.actionLedger,[\s\S]{0,160}?isBoss: !!this\.system\.isBoss/.test(actor),
+  "…and so does the SPEND, which is the p.278 'two actions on their turn'");
 
 const item = readFileSync(join(ROOT, "module/documents/item.mjs"), "utf8");
 const idxAction = item.indexOf("spendAction(");

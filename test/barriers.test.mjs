@@ -221,8 +221,14 @@ ok(effects.includes("applyBarrier") && effects.includes("consumeBarrierCharge"),
   "the effect layer can raise a barrier and spend a Tetraja charge");
 
 const actor = readFileSync(join(ROOT, "module/documents/actor.mjs"), "utf8");
-ok(actor.includes("consumeBarrierCharge"),
+// Anchored on the CALL. The bare identifier matched twice — the dynamic-import
+// destructure and the call — so deleting the call left the destructure behind and the
+// assertion green. Found by the 2026-08-15 assertion audit.
+ok(/await consumeBarrierCharge\(this,/.test(actor),
   "the damage pipeline is what spends the charge — nothing else sees a nullified hit");
+ok(/result\.isNull[\s\S]{0,200}?await consumeBarrierCharge/.test(actor),
+  "ESCAPE: …and it is gated on the hit having been NULLIFIED — spending Tetraja on a "
+  + "hit it did not stop is the failure the baseAffinities snapshot exists to prevent");
 
 console.log(`\nsmt-rpg barrier tests: ${passed} passed, ${failed} failed`);
 if (failed) {
