@@ -497,6 +497,32 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC the-kagutsuchi-track-wraps-and-full-changes-the-rules
+
+*(Added 2026-08-15. Lane 4, second unit.)*
+```
+Given the 16-phase Kagutsuchi Chart (p.55, p.56, p.301), phase 0 New and
+      phase 8 Full
+When the track advances — a step per scene, a step per combat completed
+Then it wraps through 15 back to 0, and EACH crossing of New owes its own
+     p.301 Luck check: all PCs failing, or any one auto-failing or
+     fumbling, means an encounter, while a critical is a boon
+And at Full the printed consequences hold — demons will not normally
+    negotiate, encounters are likelier, sacrificial fusion opens — with
+    no invented rate for "likelier" and no hard block on talking
+Check: test/kagutsuchi.test.mjs  (tagged  // spec: the-kagutsuchi-track-wraps-and-full-changes-the-rules)
+```
+
+**"Passing New" is not "landing on New", and a boolean cannot express it.** Starting *at* phase 0 and stepping off does not pass it; landing on it does; and a 16-step move passes it once while a 32-step move passes it **twice** and owes two checks. `newPassings` therefore returns a count, and the suite sweeps the whole wheel to assert exactly one phase steps onto New. A `phase === 0` test after the advance gets the step-off-New case backwards and silently drops the second passing of a long skip — both invisible at the table, since a check that never ran looks like a check that came up quiet.
+
+**Two places where the book withholds a number and none is invented.** *"Random encounter chances are higher"* states no rate, so `encountersHeightened` returns a **condition** — a fabricated multiplier would read exactly as authoritative as a printed one, and the ESCAPE assertion pins the signature to stop a later session filling the gap. Likewise the passing-New check **reports** rather than resolves: p.301 says *"the party encounters enemy demons"* and *"something beneficial happens"*, neither of which is stated in terms any system could carry out, so the rolls are automated and the consequence is the GM's.
+
+**Full does NOT hard-block negotiation, and that is the correct reading rather than a shortcut.** p.301 says demons *"won't engage in negotiations"*, but p.69 lists Full among the situations where a PC cannot choose to talk **and hands the GM an override in the same sentence**, while p.72 states that a sudden approach *"may even happen when Kagutsuchi is full"*. A hard block would break a case the book explicitly permits, so it stays out of `negotiationBlockReason` — which holds the stoppers the engine can decide — and surfaces as an advisory instead.
+
+**One `[inferred]`, reported rather than resolved:** when one PC crits and another fumbles on the same passing, both printed triggers are literally met. The book's *"instead"* reads naturally for one thing happening and says nothing about the collision, so `newPassOutcome` returns both flags. Collapsing them would decide a case the text leaves open, and deciding it wrongly is invisible.
+
+**Scope, stated rather than implied:** the per-**combat** step is automated (a world setting, on by default); the per-**scene** step is not. p.55 makes a scene *"a unit of measurement all their own"* with no relation to elapsed time, and Foundry's canvas scenes are not that — advancing on a scene change would move the track every time the GM opened a map.
+
 ### SPEC the-encounter-check-is-the-partys-roll-not-a-characters
 
 *(Added 2026-08-15. Lane 4, first unit.)*

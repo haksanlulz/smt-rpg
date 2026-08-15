@@ -75,6 +75,32 @@ Hooks.once("init", () => {
     choices: SMT.rewards.maccaDistributionModes
   });
 
+  // The Kagutsuchi phase (p.56, p.301). World state the GM owns — p.56 says outside a
+  // dungeon they "may decide the phase of Kagutsuchi as they please", so this is stored
+  // and editable rather than derived from anything.
+  game.settings.register("smt-rpg", "kagutsuchiPhase", {
+    name: "SMT.Kagutsuchi.Phase",
+    hint: "SMT.Kagutsuchi.PhaseHint",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0,
+    range: { min: 0, max: 15, step: 1 }
+  });
+
+  // p.301 advances the track "1 step per combat completed". The per-SCENE step is not
+  // automated: Foundry has no concept of a scene in the book's sense (p.55: "scenes are
+  // a unit of measurement all their own"), and advancing on a canvas scene change would
+  // move the track every time the GM looked at a map.
+  game.settings.register("smt-rpg", "advanceKagutsuchiOnCombat", {
+    name: "SMT.Kagutsuchi.AutoAdvance",
+    hint: "SMT.Kagutsuchi.AutoAdvanceHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
   // Whether barriers (p.101) outlive the fight they were raised in. HOMEBREW, and off
   // by default because the default is the reading the book supports.
   //
@@ -478,6 +504,13 @@ Hooks.on("deleteCombat", async (combat) => {
   if (_isResponsibleGM() && game.settings.get("smt-rpg", "autoGrantRewards")) {
     const { grantCombatRewards } = await import("./module/helpers/rewards.mjs");
     await grantCombatRewards(combat);
+  }
+
+  // p.301: "Move 1 step on the Kagutsuchi Chart per combat completed." One elected GM
+  // so several GM clients cannot each advance it.
+  if (_isResponsibleGM() && game.settings.get("smt-rpg", "advanceKagutsuchiOnCombat")) {
+    const { advanceKagutsuchi } = await import("./module/helpers/kagutsuchi.mjs");
+    await advanceKagutsuchi(1, { reason: "combat" });
   }
 
   const {
