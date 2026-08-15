@@ -480,6 +480,30 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC barriers-grant-affinity-that-runs-out
+
+*(Added 2026-08-15.)*
+```
+Given the p.101 barriers — Tetraja, Makarakarn, Tetrakarn — cast on all allies
+When an ally is hit while one is up
+Then the granted rating applies through p.65's ladder, so it can improve a
+     rating and can never downgrade a printed one; Makarakarn lands on the
+     MAGIC CATEGORY axis and Tetrakarn on the phys element, as printed
+And each expires on its own printed clock: the -karn pair at the end of the
+    round after the cast whether or not anything hit them, and Tetraja only
+    when THIS effect nullifies an attack — never when the ally's own Null or
+    Repel is what stopped it
+Check: test/barriers.test.mjs  (tagged  // spec: barriers-grant-affinity-that-runs-out)
+```
+
+**Two clocks that a single `duration` field would have to lie about.** Makarakarn and Tetrakarn say *"until the end of the next round"* and run out on time. Tetraja names no duration at all and runs out on use — it can sit through an entire fight untouched, then vanish the instant it works. A barrier therefore carries both fields and each kind leaves the other inert (`expiresAfterRound: null`, or `charges: 0`), which is why the suite asserts the *absence* of a round clock on Tetraja as an ESCAPE: inventing one would expire a barrier the book keeps alive.
+
+**"Repel Magic" and "Repel Phys" are not the same kind of thing, and the stat blocks print them as if they were.** p.65 makes Magic an attack CATEGORY that stacks on top of the element rating, so Makarakarn writes to `categoryAffinities.magic` while Tetrakarn writes to `affinities.phys`. Reading Makarakarn per-element would leave it doing nothing against every magical attack whose element it did not happen to name — a 45 MP spell that silently buys nothing, which is exactly the failure mode the ESCAPE assertion on the category axis pins.
+
+**The consumption rule needed a snapshot the engine did not keep.** p.101 spends Tetraja *"after this effect nullifies one attack"*, and at the damage site a target wearing Tetraja and a target who prints Null Light are indistinguishable — both read `null`. Derived data now keeps `baseAffinities`, the pre-barrier ratings, so the pipeline can ask whether the barrier was load-bearing. Three cases are asserted from both directions: a normal or weak target spends the charge, an already-Null target does not (theirs nullified it), and an already-Repel target does not (p.65's ladder means the hit was reflected, not nullified, so the barrier never applied).
+
+**One decision recorded against the relay rather than for it.** Raising a barrier on another player's actor is a cross-permission write, so it routes through the GM proxy — but the payload carries no `round`. Carrying the caster's round would be marginally more faithful to "the clock starts at the cast", and it would have meant widening `RELAY_ACTIONS`' key allowlist, which is the constraint that module exists to hold. The window it closes is milliseconds wide; the allowlist is permanent. The GM re-reads the round like it re-reads every other number.
+
 ### SPEC press-skills-buy-actions-not-checks
 
 *(Added 2026-08-15.)*

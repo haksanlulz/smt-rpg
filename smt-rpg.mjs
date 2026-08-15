@@ -428,8 +428,13 @@ Hooks.on("updateCombat", async (combat, changed) => {
   // may not go twice back to back). Done for the whole encounter by one elected GM,
   // because it is not the acting combatant's own bookkeeping.
   if ("round" in changed && game.user.isGM && _isResponsibleGM()) {
+    const { expireBarriers } = await import("./module/helpers/effects.mjs");
     for (const combatant of combat.combatants) {
       await combatant.actor?.clearUseLimits("round");
+      // Barriers whose "end of the next round" has passed (p.101). Derived data already
+      // stops reading an expired one; this clears the token icon that would otherwise
+      // keep advertising protection the ally no longer has.
+      if (combatant.actor) await expireBarriers(combatant.actor, combat.round);
     }
   }
 
@@ -455,7 +460,9 @@ Hooks.on("deleteCombat", async (combat) => {
     await grantCombatRewards(combat);
   }
 
-  const { clearDefend, dropConcentrateOnAilment, applyCombatEndRecovery } = await import("./module/helpers/effects.mjs");
+  const {
+    clearDefend, dropConcentrateOnAilment, applyCombatEndRecovery, clearBarriers
+  } = await import("./module/helpers/effects.mjs");
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor) continue;
@@ -468,6 +475,10 @@ Hooks.on("deleteCombat", async (combat) => {
     // rather than the reset — it stops a spent ledger sitting on the sheet after the
     // fight, where it would read as a live restriction it is not.
     await actor.clearActionBudget();
+    // A barrier raised outside a round has no expiry to reach (p.101), so combat end
+    // is the only thing that retires it. Buffs persist by design; barriers do not,
+    // because Tetraja would otherwise carry a free nullify into the next fight.
+    await clearBarriers(actor);
     await clearDefend(actor);
     // Despite the name, this just clears the Concentrate effect — what we want here too.
     await dropConcentrateOnAilment(actor);

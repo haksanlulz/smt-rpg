@@ -84,6 +84,14 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       // Use limits (p.96). "none" is the overwhelming majority; a skill that states
       // no limit gets none, because inventing one forbids a legal action. The ledger
       // lives on the actor, keyed by period and skill name — see helpers/uses.mjs.
+      // Barrier skills (p.101): Tetraja, Makarakarn, Tetrakarn. "none" = not a barrier.
+      // The rating each grants, and whether it runs on rounds or on charges, lives in
+      // CONFIG.SMT.barriers — the skill only names which one it is. Resolution in
+      // helpers/barriers.mjs.
+      barrier: new StringField({
+        initial: "none",
+        choices: ["none", ...Object.keys(CONFIG.SMT.barriers)]
+      }),
       // Press skills (p.96): Beast Eye and Dragon Eye. "They cost one action to apply.
       // Beast Eye spends one action to grant two actions... Dragon Eye takes one action
       // to grant four actions." Stored GROSS — the action it costs is charged by the
