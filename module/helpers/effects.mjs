@@ -5,12 +5,14 @@
 import { SMT } from "../config.mjs";
 import { evaluatePercentile } from "./checks.mjs";
 import { turnStartPlan, fumbledSaveResources } from "./ailments.mjs";
+import { barrierExpiry, barrierActive, barrierConsumed } from "./barriers.mjs";
 
 const FLAG_SCOPE = "smt-rpg";
 const BUFF_KEY = "buff";
 const CONCENTRATE_KEY = "concentrate";
 const AID_KEY = "aid";
 const DEFEND_KEY = "defend";
+const BARRIER_KEY = "barrier";
 
 // Once-per-turn ailment-save lock (p.69), keyed "<combatId>:<round>:<actorId>" so the
 // turn automation and a manual Save can't re-roll the same turn.
@@ -566,6 +568,96 @@ export async function applyDefend(actor) {
 export async function clearDefend(actor) {
   const effect = defendEffect(actor);
   if (effect && canModifyEffects(actor)) await effect.delete();
+}
+
+// ------------------------------------------------------------- barriers (p.101)
+
+export function barrierEffect(actor, kind) {
+  return actor?.effects.find(e => e.getFlag(FLAG_SCOPE, BARRIER_KEY)?.kind === kind);
+}
+
+// Raise a barrier on one ally (p.101). Re-casting refreshes rather than stacking: the
+// printed sentences describe a state ("all allies Repel Phys"), not a magnitude, so
+// there is nothing for a second copy to add. Refreshing IS the useful behaviour —
+// Makarakarn cast again on the last round should carry the ally another round.
+export async function applyBarrier(actor, kind, { round = null } = {}) {
+  const def = SMT.barriers[kind];
+  if (!actor || !def) return null;
+  if (!canModifyEffects(actor)) {
+    ui.notifications.warn(game.i18n.localize("SMT.Warnings.NoPermission"));
+    return null;
+  }
+
+  const data = {
+    kind,
+    expiresAfterRound: barrierExpiry(kind, round),
+    charges: def.charges
+  };
+  const name = game.i18n.localize(def.label);
+  const existing = barrierEffect(actor, kind);
+
+  // No `changes`: an affinity is a string on a nested schema field, which no ADD or
+  // OVERRIDE mode can reach usefully. The fold happens in derived data off this flag.
+  if (existing) await existing.update({ [`flags.${FLAG_SCOPE}.${BARRIER_KEY}`]: data });
+  else {
+    await actor.createEmbeddedDocuments("ActiveEffect", [{
+      name, img: def.icon, changes: [], disabled: false,
+      flags: { [FLAG_SCOPE]: { [BARRIER_KEY]: data } }
+    }]);
+  }
+
+  if (SMT.debug) console.log("smt-rpg | Barrier raised", { actor: actor.name, ...data });
+  return { kind, label: def.label, targetName: actor.name, ...data };
+}
+
+// Spend one charge after a barrier nullified a hit (p.101: Tetraja "returns to their
+// normal affinity" once used). Called from the damage pipeline, which is the only place
+// that can see both the base rating and the resolved one. No-op for the -karn pair,
+// whose clock is rounds.
+export async function consumeBarrierCharge(actor, { baseRating, effectiveRating } = {}) {
+  if (!actor || !canModifyEffects(actor)) return null;
+
+  for (const effect of actor.effects) {
+    const data = effect.getFlag(FLAG_SCOPE, BARRIER_KEY);
+    if (!data?.kind) continue;
+    if (!barrierConsumed({ kind: data.kind, baseRating, effectiveRating })) continue;
+
+    const charges = Math.max(0, (Number(data.charges) || 0) - 1);
+    // At zero the effect is deleted rather than left disabled: a spent barrier that
+    // still shows on the token reads as protection the ally does not have.
+    if (charges > 0) await effect.update({ [`flags.${FLAG_SCOPE}.${BARRIER_KEY}.charges`]: charges });
+    else await effect.delete();
+
+    await postEffectNotice(actor, game.i18n.format("SMT.Barrier.Spent", {
+      name: actor.name, barrier: game.i18n.localize(SMT.barriers[data.kind].label)
+    }));
+    return { kind: data.kind, charges };
+  }
+  return null;
+}
+
+// Drop every barrier. Fires at combat end alongside Defend and Focus — a barrier
+// raised outside a round has no expiry to reach, so without this it would persist
+// into the next fight.
+export async function clearBarriers(actor) {
+  if (!actor || !canModifyEffects(actor)) return 0;
+  const ids = actor.effects.filter(e => e.getFlag(FLAG_SCOPE, BARRIER_KEY)).map(e => e.id);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  return ids.length;
+}
+
+// Retire round-clocked barriers whose last round has passed (p.101). Round-boundary
+// housekeeping only — derived data already stops reading an expired barrier, so this
+// removes the token icon rather than the effect.
+export async function expireBarriers(actor, round) {
+  if (!actor || !canModifyEffects(actor)) return 0;
+  const ids = [];
+  for (const effect of actor.effects) {
+    const data = effect.getFlag(FLAG_SCOPE, BARRIER_KEY);
+    if (data?.kind && !barrierActive(data, round)) ids.push(effect.id);
+  }
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  return ids.length;
 }
 
 export async function postBuffCard(caster, summary) {

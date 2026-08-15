@@ -59,6 +59,12 @@ export default class SMTItem extends Item {
     return this.type === "skill" && (this.name ?? "").trim().toLowerCase() === "focus";
   }
 
+  // Barrier skill (p.101): Tetraja, Makarakarn, Tetrakarn.
+  get isBarrierSkill() {
+    const b = this.system.barrier;
+    return this.type === "skill" && !!b && b !== "none";
+  }
+
   // Press skill (p.96): Beast Eye and Dragon Eye, which "increase how many actions one
   // can take per turn". Schema-driven rather than name-matched like Focus and Provoke —
   // the grant is a NUMBER the printed rows state ("Gain two actions this round"), so
@@ -139,6 +145,12 @@ export default class SMTItem extends Item {
     // Focus (p.105): auto-succeeds and stores a doubling rather than attacking.
     if (this.isFocus) {
       await this._castFocus(actor);
+      return;
+    }
+
+    // Barrier skills (p.101): auto-succeed, and raise the barrier on every ally.
+    if (this.isBarrierSkill) {
+      await this._castBarrier(actor);
       return;
     }
 
@@ -576,6 +588,38 @@ export default class SMTItem extends Item {
 
     const { postEffectNotice } = await import("../helpers/effects.mjs");
     await postEffectNotice(actor, game.i18n.format("SMT.Focus.Ready", { name: actor.name }));
+  }
+
+  // Barrier skills (p.101). All three print "all allies", so the target set is the
+  // caster's own side rather than anything selected — the same auto-target path the
+  // party-wide buffs use. Routed through the relay because raising a barrier on another
+  // player's actor is a cross-permission write; ids only, and the effect itself derives
+  // from CONFIG on the GM side.
+  async _castBarrier(actor) {
+    const { getAutoTargets, getTokenUuid } = await import("../helpers/combat.mjs");
+    const { runRelayed } = await import("../helpers/socket.mjs");
+
+    const uuids = getAutoTargets(actor, "All Allies").map(t => t.document?.uuid).filter(Boolean);
+    // The caster is an ally of themselves — "all allies" includes the one casting, and
+    // a scene with no other tokens must still protect them.
+    const selfUuid = getTokenUuid(actor);
+    if (selfUuid && !uuids.includes(selfUuid)) uuids.push(selfUuid);
+    if (!uuids.length) {
+      ui.notifications.info(game.i18n.localize("SMT.Warnings.NoTargets"));
+      return;
+    }
+
+    const intro = await foundry.applications.handlebars.renderTemplate(
+      "systems/smt-rpg/templates/chat/auto-success.hbs",
+      { name: this.name, effectDescription: this.system.effectDescription }
+    );
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: intro });
+
+    await runRelayed("barrierRaise", {
+      casterTokenUuid: selfUuid ?? "",
+      targetTokenUuids: uuids,
+      kind: this.system.barrier
+    });
   }
 
   // Press skills (p.96): Beast Eye and Dragon Eye. The grant was banked by spendAction

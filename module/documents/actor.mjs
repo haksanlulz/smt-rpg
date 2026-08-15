@@ -466,6 +466,18 @@ export default class SMTActor extends Actor {
       isPhysical
     };
 
+    // Tetraja (p.101) is spent by nullifying, and this is the only place that can tell
+    // whether it was the barrier that did it — the merged rating alone cannot, because
+    // a target who prints Null Light looks identical to one wearing the barrier.
+    // `baseAffinities` is the pre-barrier snapshot derived data keeps for exactly this.
+    if (result.isNull) {
+      const { consumeBarrierCharge } = await import("../helpers/effects.mjs");
+      await consumeBarrierCharge(this, {
+        baseRating: this.system.baseAffinities?.[element] ?? "normal",
+        effectiveRating: "null"
+      });
+    }
+
     if (result.isDrain) {
       const healAmount = SMTActor.#clampHpDelta(result.drainedAmount);
       const newHp = Math.min(this.system.hp.value + healAmount, this.system.hp.max);

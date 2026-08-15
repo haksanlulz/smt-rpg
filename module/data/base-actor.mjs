@@ -8,6 +8,7 @@ import { expThresholdForLevel, canLevelUp } from "../helpers/advancement.mjs";
 import { resolveResourceMax } from "../helpers/resources.mjs";
 import { flyStatTotals } from "../helpers/ailments.mjs";
 import { statTn, dodgeTn, negotiationTn, resistance, basePower, fatePoints } from "../helpers/derived.mjs";
+import { barrierRatings } from "../helpers/barriers.mjs";
 
 const { SchemaField, NumberField, StringField, BooleanField, HTMLField, ObjectField } = foundry.data.fields;
 
@@ -125,6 +126,19 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
 
   get _skillItems() {
     return this.parent?.items?.filter(i => i.type === "skill") ?? [];
+  }
+
+  // Barrier payloads riding the actor's Active Effects (p.101). Read as flags rather
+  // than as `changes` for the same reason the buff stacks are: an affinity is a string
+  // on a nested schema field, not a number an ADD mode can move, so the fold has to
+  // happen here in derived data.
+  get _activeBarriers() {
+    const out = [];
+    for (const effect of this.parent?.effects ?? []) {
+      const data = effect.getFlag?.("smt-rpg", "barrier");
+      if (data?.kind) out.push(data);
+    }
+    return out;
   }
 
   // Might passive widens the crit threshold for strikes/physical attacks (p.110).
@@ -256,6 +270,28 @@ export default class SMTBaseActorData extends foundry.abstract.TypeDataModel {
     for (const [element, rating] of Object.entries(affinityOverrides(this._passiveSkills, CONFIG.SMT.passiveEffects))) {
       if (element in this.affinities) {
         this.affinities[element] = betterAffinity(this.affinities[element], rating);
+      }
+    }
+
+    // Barrier skills (p.101), last of the three affinity layers — magatama override,
+    // then Affinity Changer passives, then barriers. Order is documentation rather
+    // than logic: all three resolve through betterAffinity, so p.65's ladder decides
+    // and no layer can downgrade an earlier one.
+    //
+    // The BASE ratings are kept alongside, because Tetraja's charge is spent only when
+    // the barrier is what nullified the hit — a target who already Nulls Light was
+    // never saved by it. Without this snapshot the damage pipeline sees only the
+    // merged rating and cannot tell the two cases apart.
+    this.baseAffinities = { ...this.affinities };
+    const barriers = barrierRatings(this._activeBarriers, game.combat?.round ?? null);
+    for (const [element, rating] of Object.entries(barriers.affinities)) {
+      if (element in this.affinities) {
+        this.affinities[element] = betterAffinity(this.affinities[element], rating);
+      }
+    }
+    for (const [category, rating] of Object.entries(barriers.categories)) {
+      if (category in this.categoryAffinities) {
+        this.categoryAffinities[category] = betterAffinity(this.categoryAffinities[category], rating);
       }
     }
 

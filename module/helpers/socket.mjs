@@ -31,7 +31,14 @@ export const RELAY_ACTIONS = {
   negotiationOutcome: { messageId: "string", outcome: "string" },
   buffCast: { casterTokenUuid: "string", targetTokenUuids: "string[]", key: "string" },
   buffClear: { casterTokenUuid: "string", targetTokenUuids: "string[]", key: "string" },
-  provoke: { casterTokenUuid: "string", targetTokenUuids: "string[]" }
+  provoke: { casterTokenUuid: "string", targetTokenUuids: "string[]" },
+  // No `round` key, and that is a decision rather than an omission. p.101's clock
+  // starts when the barrier is CAST, so carrying the caster's round would be very
+  // slightly more correct than re-reading it GM-side — but the payload allowlist is
+  // the constraint this whole module exists to hold, and widening it permanently to
+  // close a window measured in milliseconds is the wrong trade. The GM re-reads
+  // game.combat.round like it re-reads every other number.
+  barrierRaise: { casterTokenUuid: "string", targetTokenUuids: "string[]", kind: "string" }
 };
 
 // Words that must never appear as payload keys: if one does, someone is trying to
@@ -153,6 +160,29 @@ async function dispatchRelay(action, data) {
       const label = game.i18n.localize(CONFIG.SMT.buffEffectChoices[data.key]);
       await postEffectNotice(caster,
         game.i18n.format("SMT.EffectMsg.Dispelled", { skill: label, count: cleared }));
+      return null;
+    }
+    case "barrierRaise": {
+      const { applyBarrier, postEffectNotice } = await import("./effects.mjs");
+      const { getActorFromTokenUuid } = await combat();
+      if (!CONFIG.SMT.barriers[data.kind]) return null;
+      const caster = getActorFromTokenUuid(data.casterTokenUuid);
+      // Outside a started combat there is no round for p.101's clock to count from,
+      // and the barrier then stands until combat end. See the payload note above for
+      // why this is re-read here rather than carried.
+      const round = game.combat?.started ? game.combat.round : null;
+      const names = [];
+      for (const uuid of data.targetTokenUuids) {
+        const ally = getActorFromTokenUuid(uuid);
+        if (!ally) continue;
+        if (await applyBarrier(ally, data.kind, { round })) names.push(ally.name);
+      }
+      if (names.length) {
+        await postEffectNotice(caster, game.i18n.format("SMT.Barrier.Raised", {
+          barrier: game.i18n.localize(CONFIG.SMT.barriers[data.kind].label),
+          names: names.join(", ")
+        }));
+      }
       return null;
     }
     case "provoke": {

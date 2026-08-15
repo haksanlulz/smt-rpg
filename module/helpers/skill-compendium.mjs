@@ -16,6 +16,7 @@ import { mapSkillType, mapElement, parseAilment } from "./compendium.mjs";
 import { allDemonStats } from "./compendium.mjs";
 import { parseUseLimit } from "./uses.mjs";
 import { parsePressGrant } from "./actions.mjs";
+import { parseBarrier } from "./barriers.mjs";
 
 const DATA_PATH = "systems/smt-rpg/data-local/skill-stats.json";
 
@@ -174,6 +175,11 @@ export function attackRiders(effect) {
     out.grantsActions = grant;
     if (!out.useLimit) out.useLimit = { period: "round", count: 1 };
   }
+
+  // Barrier skills (p.101). The kind is all the row carries; what it grants and how it
+  // expires are printed rules, and live in CONFIG rather than being re-parsed per skill.
+  const barrier = parseBarrier(s);
+  if (barrier) out.barrier = barrier;
 
   return out;
 }

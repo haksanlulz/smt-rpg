@@ -282,6 +282,32 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// Barrier skills (p.101). `rounds` is the round clock — "until the end of the next
+// round" is +1 from the cast — and `charges` is the use clock. Each kind uses exactly
+// one of the two: Tetraja is spent by nullifying, the -karn pair by time. Makarakarn
+// writes to the MAGIC CATEGORY axis (p.65) while Tetrakarn writes to the phys element;
+// that asymmetry is the book's, and helpers/barriers.mjs explains why it has to survive.
+SMT.barriers = {
+  tetraja: {
+    label: "SMT.Barrier.Tetraja",
+    affinities: { light: "null", dark: "null" }, categories: {},
+    charges: 1, rounds: null,
+    icon: "icons/magic/defensive/shield-barrier-glowing-blue.webp"
+  },
+  makarakarn: {
+    label: "SMT.Barrier.Makarakarn",
+    affinities: {}, categories: { magic: "repel" },
+    charges: 0, rounds: 1,
+    icon: "icons/magic/defensive/barrier-shield-dome-blue-purple.webp"
+  },
+  tetrakarn: {
+    label: "SMT.Barrier.Tetrakarn",
+    affinities: { phys: "repel" }, categories: {},
+    charges: 0, rounds: 1,
+    icon: "icons/magic/defensive/shield-barrier-flaming-diamond-orange.webp"
+  }
+};
+
 // The action budget (p.63): "combatants may take one action" per turn, against the boss
 // trait's "Bosses take two actions on their turn" (p.278). Press skills (p.96) add to
 // this and nothing else does — see helpers/actions.mjs for why the grant is stored
