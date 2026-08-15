@@ -297,6 +297,29 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// Encounter check, ambush and back attack (p.70-71). The one check in the system whose
+// result belongs to the PARTY rather than to a character: every PC's Luck check
+// contributes a signed value, the totals are summed, and one band decides the situation
+// for both sides. Bands are inclusive and printed gapless; `null` is an open end.
+SMT.encounter = {
+  values: { critical: 2, success: 1, failure: -1, autoFail: -2, fumble: -3 },
+  bands: [
+    { id: "pcsBackAttack", min: 5, max: null, side: "pcs", severity: "backAttack" },
+    { id: "pcsAmbush", min: 3, max: 4, side: "pcs", severity: "ambush" },
+    { id: "none", min: 0, max: 2, side: null, severity: null },
+    { id: "pcsAmbushed", min: -3, max: -1, side: "demons", severity: "ambush" },
+    { id: "pcsBackAttacked", min: null, max: -4, side: "demons", severity: "backAttack" }
+  ],
+  surpriseTnBonus: 20,
+  initiativeBonus: "1d10",
+  // The ordinary initiative roll (p.63) and the back-attacked side's replacement for it:
+  // "their initiative is equal to their Agility alone" (p.71) — not a modifier on the
+  // roll, a substitution for it.
+  initiativeFormula: "1d10x10 + @agilityTotal",
+  initiativeFlatFormula: "@agilityTotal",
+  backAttackAilment: "shock"
+};
+
 // God's Curse (p.103): "Roll 1d10: 1-2: Charm; 3-4: Panic; 5-6: Sleep; 7-8: Restrain;
 // 9-10: Stun." The d10 picks WHICH ailment; the printed 60% is the ordinary effect rate
 // and still runs the affinity/crit/dodge-fumble modifiers, so the two rolls stay apart.

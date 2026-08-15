@@ -497,6 +497,32 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC the-encounter-check-is-the-partys-roll-not-a-characters
+
+*(Added 2026-08-15. Lane 4, first unit.)*
+```
+Given a party making the p.70 encounter check, each PC rolling Luck
+When their outcomes are totalled and read against the printed table
+Then the SUM decides the situation for both sides at once — +5 or more
+     the PCs back attack, +3/+4 they ambush, 0 to +2 nothing, -3 to -1
+     they are ambushed, -4 or less they are back attacked
+And the aggressor gains +1d10 initiative either way; an ambushed side
+    is defenseless through round one until it acts; a back-attacked
+    side instead sets initiative from Agility alone and takes a Shock
+    that ignores any affinity that would nullify it
+Check: test/encounter.test.mjs  (tagged  // spec: the-encounter-check-is-the-partys-roll-not-a-characters)
+```
+
+**This is the only check in the system whose result belongs to a group, and that is the whole shape of the unit.** One PC critting ambushes nobody — `+2` is "no particular advantage". Five PCs each scraping a bare success reaches `+5` and back attacks. Writing it per-character and combining afterwards is how a single crit gets applied five times, so `encounterSum` is its own function and `encounterEffect` takes a sum rather than a roll. Both cases are asserted directly.
+
+**The band table gets an exhaustive integer sweep, not five hand-picked rows.** A hand-typed range table fails two ways and neither is visible by reading it: a *hole*, where no band matches and the result silently degrades to "no advantage" while looking legitimate, and an *overlap*, where two match and the winner is decided by table order that reads as intentional. The suite walks every integer from −20 to +20 and asserts exactly one band claims each. The two fence-posts the printed table makes easy to get wrong — +4/+5 and −3/−4 — are pinned on top of that.
+
+**Ambush and back attack are one axis with two magnitudes, because p.71 says so:** a back attack is *"an ambush executed with flawless efficiency"*. Both hand the aggressor +1d10 initiative; they differ only in what lands on the victim. Modelling them as four unrelated outcomes is how the shared clause drifts, so the effect carries a `side` and a `severity` instead.
+
+**Two clauses that a natural implementation would get wrong in opposite directions.** The back-attacked side's initiative is *"equal to their Agility alone"* — that removes the effect roll rather than penalising it, so it **replaces** the formula and the suite asserts no die survives in it. And the back-attacked side is **not** also defenseless: p.71 gives the ambushed side that and the back-attacked side Shock, so stacking both would double a penalty the book states once. The Shock itself *"ignores any affinity ratings that would nullify it"*, which is why it returns a shape rather than a boolean — through the ordinary ailment path a Null Nerve demon would shrug off the defining effect of being back attacked.
+
+**One `[inferred]`:** both sides preparing an ambush is not printed. The two modifiers net to zero, which is the only reading that keeps the ±20% a property of the situation rather than of whichever side the GM happened to mention first.
+
 ### SPEC one-off-printed-skills-do-what-their-sentence-says
 
 *(Added 2026-08-15.)*
