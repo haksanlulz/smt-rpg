@@ -297,6 +297,12 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// The Kagutsuchi Chart (p.56, p.301). p.55: "With 16 phases altogether, we measure
+// phase 0 (New) to phase 8 (full), then go to phase 15 before returning to phase 0
+// (New) again." Full is what changes rules — no negotiation, heightened encounters,
+// sacrificial fusion — and New is what triggers the passing check.
+SMT.kagutsuchi = { phases: 16, newPhase: 0, fullPhase: 8 };
+
 // Defenseless (p.71): what an ambushed side carries until its first turn arrives. Its
 // whole mechanical cost is the lost dodge — see helpers/effects.mjs for why the printed
 // sentence has to be read that way to terminate at all.

@@ -1,6 +1,6 @@
 # Smoke checklist — the 2026-08-15 subsystems
 
-*Sections 1–5 are the lane 3 work; section 6 is lane 4's first wired unit.*
+*Sections 1–5 are the lane 3 work; sections 6–7 are lane 4.*
 
 Every rung behind these changes is node-side. **Nothing below has been observed in Foundry**,
 and `GAUNTLET.md` §1 clause 4 is explicit that suites passing is not the same claim as the
@@ -121,6 +121,29 @@ TNs high or low first — the interesting cases are the two extremes, not the mi
 | 6.13 | Shift-click the button | The Luck TN on each card is **20 higher** than the sheet value |
 | 6.14 | Alt-click it | 20 **lower** |
 | 6.15 | Get a 0 to +2 result | Nothing applied — no icons, and initiatives re-rolled with no bonus on either side |
+
+## 7. Kagutsuchi track (p.56, p.301)
+
+The phase is a world setting, **Kagutsuchi Phase**, 0–15. Set it directly to reach the
+interesting cases rather than grinding combats.
+
+| # | Do | Expect |
+|---|---|---|
+| 7.1 | Open system settings | **Kagutsuchi Phase** (0–15 slider) and **Advance Kagutsuchi After Combat** (on) |
+| 7.2 | Set the phase to 3, finish a combat | Chat says it moved **3 → 4**, waxing. No Luck checks |
+| 7.3 | Set it to 15, finish a combat | Moves **15 → 0**, and a **Passing New** Luck check fires for every player character |
+| 7.4 | Set it to 0, finish a combat | Moves **0 → 1**. **No** check — stepping off New is not passing it |
+| 7.5 | Make every PC fail that check | "The party encounters enemy demons" |
+| 7.6 | Make one PC succeed and the rest fail | Nothing comes of it — "all PCs fail" is the condition |
+| 7.7 | Make one PC fumble while another succeeds | Encounter anyway |
+| 7.8 | Make one PC critical | "Something beneficial happens" |
+| 7.9 | Set the phase to **8** | The chat notice on the next advance says Full, and names the three consequences |
+| 7.10 | At phase 8, use a Talk skill | An **advisory** that demons will not normally negotiate — **not** a refusal. The negotiation still starts (p.72 allows a sudden approach at Full) |
+| 7.11 | Turn **Advance After Combat** off, finish a combat | Phase unchanged, no chat notice |
+| 7.12 | Wind the phase backwards in settings | No Luck check fires. Rewinding is not passing |
+
+⬜ **Not automated, by design:** the per-scene step (p.301). Foundry has no notion of a
+scene in the book's sense, so advance that by hand in the setting.
 
 ---
 

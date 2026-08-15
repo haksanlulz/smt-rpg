@@ -66,6 +66,17 @@ export async function startNegotiation({ talker, target, skillName, impressMatch
     return null;
   }
 
+  // Kagutsuchi Full (p.55, p.301: demons "won't engage in negotiations"). An ADVISORY,
+  // not a stopper, and deliberately not in negotiationBlockReason with the hard ones.
+  // p.69 lists Full among the situations where a PC cannot choose to talk and hands the
+  // GM an override in the same breath, and p.72 carves out sudden approaches, which
+  // "may even happen when Kagutsuchi is full". A hard block would break a case the book
+  // explicitly permits, so the table is told and the call stays theirs.
+  const { currentPhase, negotiationBlocked } = await import("./kagutsuchi.mjs");
+  if (negotiationBlocked(currentPhase())) {
+    ui.notifications.info(game.i18n.localize("SMT.Kagutsuchi.TalkAtFull"));
+  }
+
   // +talkBonus% (p.75/112); impress match widens crit via the hasMight path (p.76).
   const baseTN = Number(talker.system.negotiationTN) || 0;
   const tn = baseTN + talkCheckBonus(true);
