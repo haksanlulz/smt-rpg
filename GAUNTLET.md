@@ -497,6 +497,30 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC fleeing-succeeds-unless-somebody-stops-it
+
+*(Added 2026-08-15. Lane 4, third unit.)*
+```
+Given a PC attempting to escape a non-Boss encounter (p.70)
+When nobody among the opposing combatants moves to block
+Then the escape is AUTOMATIC — no check, no TN, no bonus
+And when somebody does block, it costs a dodge check at +20% if the
+    fleeing side outnumbers the other; a critical takes one ally out
+    alongside; a fumble hands every enemy a free basic strike that
+    cannot trigger Counter; and a side emptied by fleeing ends combat
+Check: test/flee.test.mjs  (tagged  // spec: fleeing-succeeds-unless-somebody-stops-it)
+```
+
+**The default is success, not a roll, and that is the whole shape of the unit.** *"If no combatant chooses to block the attempt, then fleeing is automatically successful."* A check exists only because somebody chose to stop it. Every other escape-shaped rule in this system rolls for it, so "prompt for a dodge check on every flee" is what gets built by reflex — and it invents a failure mode the book does not have. `automatic` is the first thing `fleePlan` answers, and it returns **before** any TN or bonus is computed, so the automatic path cannot acquire a roll by accident; the suite asserts the early return by source as well as by value.
+
+**Whether anyone blocks is asked, never derived.** p.70 hands that decision to the opposing combatants — *"opposing combatants may decide whether they wish to block"* — and nothing in the system can read their intent. Defaulting either way would be answering for them, so the flow opens with a dialog and a dismissed dialog attempts nothing at all.
+
+**Three clauses that a natural implementation gets wrong.** The +20% is scoped to the blocked branch (*"when this happens"* refers to the dodge check), so reading it as a general flee bonus leaves dead arithmetic on the automatic path. **Equal numbers is not "more"** — the off-by-one that hands a bonus to a fair fight. And an ordinary **failure** hands out no free strikes: only a fumble does, and conflating the two punishes every missed escape.
+
+**The fumble's free strikes are the second carve-out `a-counterattack-is-offered-not-taken` names,** and they reuse the same `isReaction` path the counterattack does — which already carries `noCounter`, pays none of the per-action costs, and cannot multi-action. p.70's *"These attacks cannot trigger the Counter skill"* would otherwise let two Counter-holders trade blows off one fumbled escape.
+
+**One `[inferred]`:** the book does not say whether the escapee counts among the "friendly combatants" being compared. They are counted — they are a combatant on that side and the sentence draws no distinction.
+
 ### SPEC the-kagutsuchi-track-wraps-and-full-changes-the-rules
 
 *(Added 2026-08-15. Lane 4, second unit.)*

@@ -1,6 +1,6 @@
 # Smoke checklist — the 2026-08-15 subsystems
 
-*Sections 1–5 are the lane 3 work; sections 6–7 are lane 4.*
+*Sections 1–5 are the lane 3 work; sections 6–8 are lane 4.*
 
 Every rung behind these changes is node-side. **Nothing below has been observed in Foundry**,
 and `GAUNTLET.md` §1 clause 4 is explicit that suites passing is not the same claim as the
@@ -144,6 +144,26 @@ interesting cases rather than grinding combats.
 
 ⬜ **Not automated, by design:** the per-scene step (p.301). Foundry has no notion of a
 scene in the book's sense, so advance that by hand in the setting.
+
+## 8. Flee (p.70)
+
+The button is on the actor sheet's Combat tab, beside Defend. Needs a started combat.
+
+| # | Do | Expect |
+|---|---|---|
+| 8.1 | Open A's Combat tab | A **Flee** button next to Defend |
+| 8.2 | Press it out of combat | Warning that there is no encounter to flee |
+| 8.3 | Press it in combat | A dialog asking whether anyone **blocks**. Dismiss it — nothing happens at all, no roll, no card |
+| 8.4 | Press it, answer **Nobody blocks** | Escapes immediately. **No dodge roll card** — if one appears, the automatic path acquired a roll |
+| 8.5 | Answer **Blocked**, with your side outnumbered | A dodge check at A's plain dodge TN |
+| 8.6 | Answer **Blocked**, with your side outnumbering theirs | The check label reads **+20%** and the TN is 20 higher |
+| 8.7 | Make it an even fight (equal combatants), answer Blocked | **No bonus.** Equal is not "more" |
+| 8.8 | Pass the check | A escapes |
+| 8.9 | Fail it normally | A does not escape, and **nothing else happens** — no free strikes |
+| 8.10 | Critical the check | Escapes, and the card says one allied combatant may go along |
+| 8.11 | Fumble it | **Every** enemy makes a free basic strike at A, one card each |
+| 8.12 | Give an enemy Counter first, then fumble | The free strikes offer **no counterattack** — p.70 says they cannot trigger it |
+| 8.13 | Try to flee an encounter containing a boss | Refused outright, before the block dialog |
 
 ---
 

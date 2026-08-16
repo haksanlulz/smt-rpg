@@ -297,6 +297,11 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// Fleeing (p.70). `bossBlocks` is "PCs may attempt to escape from any non-Boss
+// encounter"; the bonus applies only on the blocked branch, where there is a dodge check
+// to add it to.
+SMT.flee = { outnumberedBonus: 20, bossBlocks: true };
+
 // The Kagutsuchi Chart (p.56, p.301). p.55: "With 16 phases altogether, we measure
 // phase 0 (New) to phase 8 (full), then go to phase 15 before returning to phase 0
 // (New) again." Full is what changes rules — no negotiation, heightened encounters,

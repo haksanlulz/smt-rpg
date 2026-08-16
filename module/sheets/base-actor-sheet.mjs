@@ -23,6 +23,7 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
       concentrate: SMTBaseActorSheet.#onConcentrate,
       aid: SMTBaseActorSheet.#onAid,
       defend: SMTBaseActorSheet.#onDefend,
+      flee: SMTBaseActorSheet.#onFlee,
       levelUp: SMTBaseActorSheet.#onLevelUp,
       removeEffect: SMTBaseActorSheet.#onRemoveEffect,
       editEffect: SMTBaseActorSheet.#onEditEffect,
@@ -414,6 +415,13 @@ export default class SMTBaseActorSheet extends HandlebarsApplicationMixin(ActorS
     if (result) {
       await postEffectNotice(actor, game.i18n.format("SMT.EffectMsg.Defended", { amount: result.amount }));
     }
+  }
+
+  // Flee (p.70). The whole flow lives in the helper because the first question — is
+  // anyone blocking — is the opposing side's call and has to be asked, not derived.
+  static async #onFlee() {
+    const { attemptFlee } = await import("../helpers/flee.mjs");
+    await attemptFlee(this.document);
   }
 
   // Level up (p.48): confirm via DialogV2, then route through actor.levelUp (gated,
