@@ -497,6 +497,31 @@ Check: test/uses-focus.test.mjs  (tagged  // spec: limited-skills-run-out-and-fo
 
 **Focus's trap is that it resembles Concentrate.** Both are setup actions bought with an action, and both were written on adjacent pages — but Concentrate adds +20% to the hit CHECK and Focus multiplies the POWER after the roll and after the critical. Folding it into `consumeSetupBonuses`, which is where it would naturally have gone, would have made it +20% to hit and no extra damage at all. Two ESCAPE assertions hold the seam: a spell gains nothing from a stored Focus, and — the sharper one — a spell does not *consume* it either, so the doubling waits for the strike it was printed for.
 
+### SPEC encounter-groups-honour-the-printed-composition-rules
+
+*(Added 2026-08-16. Lane 4, fourth unit — and the one that closes the lane.)*
+```
+Given p.291's two random-encounter groups and a candidate demon list
+When a group is built for a party
+Then both groups hold a number of demons equal to the PCs; the weak group
+     is the SAME demon repeated; and the mixed group admits no healer, no
+     debuffer, and at most one buffer
+And the clauses the page states as intentions rather than rules — "roughly
+    3 rounds", "4-5 rounds", "just strong enough not to be obliterated" —
+    encode NO round target and NO level band
+Check: test/encounter-builder.test.mjs  (tagged  // spec: encounter-groups-honour-the-printed-composition-rules)
+```
+
+**There is no random-encounter table in this book, and finding that out is most of the unit.** The lane item read "random encounter tables", which implies tables to transcribe. p.291 is GM design advice. The two other places that touch the subject both modify a rate the book never prints — Full makes encounters *"far more likely"* (p.55), and a 150-macca item doubles *"the random encounter rate"* (p.108) — against no stated base. **Nothing here rolls for whether an encounter happens**; `kagutsuchi.mjs` reports the p.301 trigger and leaves the consequence to the GM. This module is only about what shows up once they decide, which is the part p.291 actually specifies.
+
+**The line the suite defends is between clauses that are rules and clauses that are intentions.** Group size, the healer/debuffer exclusion and the one-buffer cap are checkable and enforced. *"Fun to fight"*, *"roughly 3 rounds"*, *"4-5 rounds"* and *"just strong enough not to be obliterated"* are round-count intentions with no formula behind them, and a level band invented to hit them would read exactly as authoritative as a printed one — the same withheld-number trap as Full's encounter rate, and the third time this arc has hit it. The suite asserts the **absence**: no round count and no level reference survives in the source outside comments, and `CONFIG.SMT.encounterBuilder` carries exactly one key.
+
+**Three clauses a generic "pick N demons" would silently drop.** *"IDENTICAL, weak demons"* — the weak group is one demon repeated, not N draws. The healer/debuffer exclusion is printed **for group two only**, so applying it to both would quietly narrow the page, and the weak group is asserted to permit healers. And the buffer cap is a property of the GROUP, not of eligibility — a buffer is eligible, a *second* one is refused, which is why an all-buffer pool yields **one** demon rather than four: the size clause is a target and the buffer clause is a prohibition.
+
+**Role detection reads `SMT.buffs` rather than skill-name suffixes,** because p.96 already treats differently-named skills sharing an axis as the same effect and that registry already encodes it. Fog Breath and War Cry are debuffers; a suffix match would miss both. Asserted directly, along with the fact that both signs in the registry are reachable so neither half of the split is dead.
+
+**One `[inferred]`:** *"a mixture of weaknesses and attack methods"* is real guidance with no threshold, so it is a preference that reorders picks across two passes and never blocks filling the group. A hard distinctness filter returns a short group on a uniform candidate pool — a worse failure than a samey encounter, and one the GM cannot see. Both halves are asserted: a uniform pool still fills, and a varied pool still varies.
+
 ### SPEC fleeing-succeeds-unless-somebody-stops-it
 
 *(Added 2026-08-15. Lane 4, third unit.)*

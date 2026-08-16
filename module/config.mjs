@@ -297,6 +297,12 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 // automatic boundary and is cleared by the GM.
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
+// Random-encounter group composition (p.291). ONLY the checkable clauses live here —
+// "allow for only one buff-type demon". The page's round-count intentions ("roughly 3
+// rounds", "4-5 rounds") have no formula behind them and are deliberately absent rather
+// than turned into a level band nobody printed.
+SMT.encounterBuilder = { maxBuffers: 1 };
+
 // Fleeing (p.70). `bossBlocks` is "PCs may attempt to escape from any non-Boss
 // encounter"; the bonus applies only on the blocked branch, where there is a dodge check
 // to add it to.
