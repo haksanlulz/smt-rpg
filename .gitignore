@@ -4,3 +4,7 @@
 *.pdf
 rulebook-text/
 data-local/
+
+# compiled caches embed absolute local paths — never track
+__pycache__/
+*.pyc
