@@ -11,10 +11,10 @@
 // the consequence to the GM. This is only about what shows up once they decide.
 //
 // What p.291 does specify:
-//   Group 1 — "a group of IDENTICAL, weak demons"
+//   Group 1 — a group of identical weak demons
 //   Group 2 — "a mixture of demons ... be sure not to include any healing or debuffing
 //              demons and allow for only ONE buff-type demon"
-//   Both    — "use a number of demons equal to the PCs"
+//   Both    — a demon count matching the PCs
 //
 // THE LINE THIS SUITE DEFENDS is between the clauses that are rules and the ones that
 // are intentions. Size, the healer/debuffer exclusion and the buffer cap are checkable

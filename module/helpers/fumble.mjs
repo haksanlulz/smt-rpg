@@ -53,7 +53,7 @@ export function fumbleVictims({ targetsAll = false, allyCount = 0, pick = 0 } = 
     return out;
   }
 
-  // "randomly hits either themselves or an ally" — the attacker is one entry in the
+  // hits the attacker or a random ally — the attacker is one entry in the
   // pool, not a fallback. A lone attacker with no allies always hits themselves,
   // which is the same sentence with a pool of one.
   const pool = 1 + allies;

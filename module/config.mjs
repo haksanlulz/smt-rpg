@@ -223,14 +223,14 @@ SMT.passiveEffects = {
   // Reads the damage actually dealt, not the damage computed, so an overkill drains only
   // what was there — the same distinction the halve-damage escape turned on.
   drainAttack: { label: "SMT.PassiveEffect.DrainAttack", legacyNames: ["Drain Attack"], kind: "drainOnStrike", value: 0.25 },
-  // attackAll: "Basic strikes always target all enemies." The exclusion is printed on
+  // attackAll: basic strikes hit every enemy (p.96). The exclusion is printed on
   // the same line and is carried by the existing noCounter flag rather than a new one.
   attackAll: { label: "SMT.PassiveEffect.AttackAll", legacyNames: ["Attack All"], kind: "attackAll" },
   // itemPowerDie: an extra die on a CONSUMABLE's power roll (p.110). Distinct from
   // powerDie, whose scope is physical/magical attacks — an item is neither, so folding
   // the two would have given Item Pro to every spell.
   itemPro: { label: "SMT.PassiveEffect.ItemPro", legacyNames: ["Item Pro"], kind: "itemPowerDie", value: "1d10" },
-  // nullifyAttack: "Completely nullify the effects of an attack on you, 1/scenario only."
+  // nullifyAttack: nullifies an attack's effects on the holder, once per scenario (p.96).
   // The budget is the ordinary use ledger (p.96), and p.110's "may be learned multiple
   // times" is already what useBudget's `copies` means.
   luckSmiles: { label: "SMT.PassiveEffect.LuckSmiles", legacyNames: ["Luck Smiles"], kind: "nullifyAttack", period: "scenario", count: 1 }
@@ -298,7 +298,7 @@ SMT.focus = { multiplier: 2, statusId: "smtFocus", label: "SMT.Action.Focus",
 SMT.useLimits = { periods: ["none", "round", "combat", "scenario"] };
 
 // Random-encounter group composition (p.291). ONLY the checkable clauses live here —
-// "allow for only one buff-type demon". The page's round-count intentions ("roughly 3
+// at most one buff-type demon. The page's round-count intentions ("roughly 3
 // rounds", "4-5 rounds") have no formula behind them and are deliberately absent rather
 // than turned into a level band nobody printed.
 SMT.encounterBuilder = { maxBuffers: 1 };
@@ -339,7 +339,7 @@ SMT.encounter = {
   surpriseTnBonus: 20,
   initiativeBonus: "1d10",
   // The ordinary initiative roll (p.63) and the back-attacked side's replacement for it:
-  // "their initiative is equal to their Agility alone" (p.71) — not a modifier on the
+  // initiative equals Agility alone (p.71) — not a modifier on the
   // roll, a substitution for it.
   initiativeFormula: "1d10x10 + @agilityTotal",
   initiativeFlatFormula: "@agilityTotal",
@@ -396,8 +396,8 @@ SMT.barriers = {
   }
 };
 
-// The action budget (p.63): "combatants may take one action" per turn, against the boss
-// trait's "Bosses take two actions on their turn" (p.278). Press skills (p.96) add to
+// The action budget (p.63): one action per combatant per turn, against the boss
+// trait's two actions per turn (p.278). Press skills (p.96) add to
 // this and nothing else does — see helpers/actions.mjs for why the grant is stored
 // gross rather than as the book's "effectively one additional action" net figure.
 SMT.actions = { base: 1, boss: 2 };
@@ -413,7 +413,7 @@ SMT.passiveEffectChoices = Object.fromEntries(
 // restatements of one printed number is one edit away from disagreeing.
 SMT.statCap = 40;
 
-// p.36: "Starting Macca = Level x 50." Held as the book constant; nothing consumes it
+// p.36: starting macca is level times fifty. Held as the book constant; nothing consumes it
 // yet, because the system has no character-creation flow to attach it to. Recorded in
 // GAUNTLET.md §6 as found-not-built rather than left as an undocumented gap.
 SMT.startingMaccaPerLevel = 50;
@@ -554,7 +554,7 @@ SMT.actionEffects = {
 
 SMT.concentrate = { bonusPct: 20 }; // +20% to the named action's hit check (p.64)
 // Aid (p.64): one ally, +20% to the TN of their next NAMED action. Unlike Concentrate
-// it comes from someone else and "Aiding from multiple sources stacks", so there is no
+// it comes from someone else and aid from multiple sources stacks, so there is no
 // same-action reset — every aider adds. The p.64 block lists "Check: Luck", so the
 // aider rolls; a failed check aids nobody. [inferred — the block states the check but
 // never says what a failure does.]

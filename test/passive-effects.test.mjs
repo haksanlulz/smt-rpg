@@ -290,7 +290,7 @@ const keyed = key => ({ name: "(renamed by a player)", system: { passiveEffect: 
 {
   const drain = [named("Drain Attack")];
 
-  // "When making a basic strike, recover HP equal to 25% of the damage dealt."
+  // Drain Attack (p.96): a basic strike recovers a quarter of the damage dealt.
   eq(drainOnStrike(drain, R, { hpDealt: 40, isBasicStrike: true }), 10, "a quarter of the loss");
   eq(drainOnStrike(drain, R, { hpDealt: 7, isBasicStrike: true }), 1,
     "rounding is DOWN — a drain is a bonus, and rounding a bonus up heals off a 1-damage poke");

@@ -56,7 +56,7 @@ export function barrierGrants(kind) {
 }
 
 // The last round this barrier is alive on, or null when it has no round clock.
-// "Until the end of the next round" — cast in round R, alive through R+1.
+// Lasts through the end of the following round: cast in R, alive through R+1.
 export function barrierExpiry(kind, round) {
   const def = CONFIG.SMT.barriers[kind];
   if (!def || !Number.isFinite(def.rounds)) return null;

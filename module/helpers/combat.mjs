@@ -155,7 +155,7 @@ async function _renderPendingCard(attackData) {
 // `noCounter` marks a hit that must not itself provoke a counterattack — the free
 // strikes from a fumbled flee (p.70) and a counterattack itself.
 // `noDodge` suppresses the dodge step for every row on the card. Only the Fumble
-// Effect Chart's hit row uses it (p.64: "an attacker cannot avoid hitting themselves"),
+// Effect Chart's hit row uses it (p.64: the attacker cannot dodge hitting themselves),
 // which is why it is a property of the CARD rather than of the click — the same
 // fumbled attack posts a second card for the allies, who may dodge as normal.
 export async function postAttacksToTargets({ attacker, targets, rawPower, element, isPhysical, isCritical, skillName, checkMessageId = null, ailmentType = "none", ailmentRate = 0, damageMultiplier = 1, noCounter = false, noDodge = false, drainsStrike = false, riders = null }) {
@@ -252,11 +252,11 @@ export async function performBasicStrike(actor, {
   const parts = isReaction ? 1 : await promptMultiAction(tn, multiActionPlan(tn), skillName);
   const tnEach = multiActionTn(tn, parts);
 
-  // Attack All (p.110): "Basic strikes always target all enemies." Always — so it
+  // Attack All (p.110): basic strikes hit every enemy. Always, so it
   // WIDENS a caller's single target rather than filling in a missing one, which is the
   // difference between the passive working and the passive only working when nothing
   // was selected. The counterattack carve-out is p.96's and is checked as `isReaction`:
-  // "Even if you have the Attack All skill, it may not be applied to this counterattack."
+  // p.96 carves this out explicitly: Attack All does not extend a counterattack.
   const widens = attackAllApplies(actor.items.filter(i => i.type === "skill"),
     CONFIG.SMT.passiveEffects, { isBasicStrike: true, isCounter: isReaction });
   const finalTargets = widens
@@ -320,7 +320,7 @@ export async function performBasicStrike(actor, {
 
 // Counter / Retaliate / Avenge (p.96, p.110). Rolls the chance and, on a hit, posts
 // an OFFER rather than resolving it — the book is explicit that counterattacking is
-// not mandatory ("Should your target have Tetrakarn up, for example, you may decline").
+// not mandatory: p.97 lets the attacker decline, e.g. against a target holding Tetrakarn.
 async function _offerCounter({ defender, attacker, element, dodged, suppressed }) {
   const { counterEffect, counterTriggers } = await import("./passives.mjs");
   if (!attacker || !defender) return false;

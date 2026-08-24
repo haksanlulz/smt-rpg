@@ -356,7 +356,7 @@ export default class SMTActor extends Actor {
       sound: CONFIG.sounds.dice
     });
 
-    // p.57: "Furthermore, when you fumble, you become Cursed." The rule is stated for
+    // p.57: a fumble also inflicts Curse. The rule is stated for
     // checks in general, not just attacks, so it belongs on the shared roll.
     if (evaluated.isFumble && !this.system.curseAilment) {
       await this.update({ "system.curseAilment": true });

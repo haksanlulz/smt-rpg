@@ -13,7 +13,7 @@
 // per-character and combining afterwards is how a +2 crit ends up applied five times.
 //
 // ─── Ambush and back attack are one axis with two magnitudes ──────────────────
-// A back attack is "an ambush executed with flawless efficiency" (p.71), so the effect
+// A back attack is an ambush of flawless efficiency (p.71), so the effect
 // carries a SIDE and a SEVERITY rather than being four unrelated outcomes. Both give the
 // aggressor +1d10 initiative; they differ in what happens to the victim, and modelling
 // them as separate booleans is how the shared clause drifts.
@@ -115,7 +115,7 @@ export function backAttackShock(effect, side) {
   return { ailment: CONFIG.SMT.encounter.backAttackAilment, ignoresAffinity: true };
 }
 
-// Which side a combatant is on. p.70 says "all PCs make a Luck check", and a PC is
+// Which side a combatant is on. p.70 says every PC makes a Luck check, and a PC is
 // exactly a player character — so ownership decides it, not token disposition.
 // Disposition is what the targeting helpers use, but a friendly NPC demon fighting
 // alongside the party is not a PC and must not roll into the party's total.
@@ -206,7 +206,7 @@ export async function applyEncounterEffect(combat, effect) {
 
     const shock = backAttackShock(effect, side);
     if (shock) {
-      // "This Shock ignores any affinity ratings that would nullify it" — so it is
+      // the Shock ignores affinities that would nullify it — so it is
       // written directly rather than routed through resolveAilment, whose first act is
       // to check the affinity this sentence overrides. The p.68 priority rule is
       // deliberately NOT applied either: the book inflicts this one unconditionally.

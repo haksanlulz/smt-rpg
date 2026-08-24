@@ -16,7 +16,10 @@ This license covers the code in this repository only. Shin Megami Tensei,
 Tokyo Conception, and all game content, text, and imagery from the tabletop
 roleplaying game remain the property of their respective rights holders
 (ATLUS; English translation by LionWing Publishing). No rulebook text or
-assets are included in or licensed by this repository.
+assets are included in or licensed by this repository, apart from short cited
+excerpts in source comments that document the printed format this software
+parses. Those excerpts are identified by page and are not a substitute for the
+book.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

@@ -14,7 +14,7 @@ function _applyResistance(afterAffinity, resistance, skipResistance) {
 }
 
 // Affinity ratings that end the calculation outright, highest priority first (p.65):
-// "Repel > Drain > Null > Strong > Weak (with Repel having the highest priority)."
+// Affinity priority, highest first: Repel, Drain, Null, Strong, Weak (p.65).
 //
 // Derived from CONFIG.SMT.affinityPriority rather than restated, so this ordering and
 // the one the Affinity Changer passives resolve with cannot drift apart.

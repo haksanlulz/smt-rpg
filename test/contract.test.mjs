@@ -653,6 +653,38 @@ const HBS_SRC = new Map(HBS.map(f => [f, readFileSync(f, "utf8")]));
   } else {
     eq(tracked ? tracked.split("\n") : [], [], "C10c no rulebook PDF or extracted text is tracked by git");
   }
+
+  // C10e — no quoted excerpt in a comment is long enough to be a passage.
+  //
+  // The README and LICENSE state that no rulebook text is reproduced here beyond
+  // short cited excerpts documenting the printed format the importer parses. This
+  // holds that claim to a number, because a false statement of non-inclusion is
+  // worse than the excerpts it is wrong about.
+  //
+  // Kept by design: effect strings and affinity prose the parser MATCHES ON.
+  // Paraphrasing those would make the comment wrong about its own code, since its
+  // job is to show the input. Swept 2026-08-24: expository passages, a printed
+  // chart, and printed headings.
+  //
+  // Bounding the LONGEST excerpt rather than the total is deliberate. The book is
+  // gitignored, so no check here can ask "is this from the book"; length is the
+  // signal that separates a format reference from a passage, and it needs no
+  // ground truth. Ratchet down, never up.
+  const LONGEST_ALLOWED = 12;
+  const overlong = [];
+  for (const f of ALL) {
+    if (!f.endsWith(".mjs")) continue;
+    for (const line of readFileSync(f, "utf8").split(String.fromCharCode(10))) {
+      const s = line.trim();
+      if (!s.startsWith("//")) continue;
+      for (const m of s.matchAll(/"([^"]{20,})"/g)) {
+        const words = m[1].trim().split(/\s+/).length;
+        if (words > LONGEST_ALLOWED) overlong.push(`${rel(f)}: ${words}w — ${m[1].slice(0, 50)}`);
+      }
+    }
+  }
+  eq(overlong, [],
+    `C10e no quoted excerpt in a comment exceeds ${LONGEST_ALLOWED} words (that is a passage, not a format reference)`);
 }
 
 console.log(`\nsmt-rpg contract tests: ${passed} passed, ${failed} failed`);

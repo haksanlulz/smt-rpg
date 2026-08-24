@@ -94,7 +94,7 @@ export default class SkillData extends foundry.abstract.TypeDataModel {
       halvesTargetDodge: new BooleanField({ initial: false }),
       // Analyze (p.102): contests a POWER roll plus the user's level against the
       // target's level, and refuses bosses outright. Not a percentile check — p.15
-      // calls it "an auto-success skill, so no check is needed".
+      // calls it an auto-success skill needing no check.
       analyzes: new BooleanField({ initial: false }),
       // God's Curse (p.103): 1d10 picks the ailment from CONFIG.SMT.godsCurse.table.
       // The printed rate stays on `ailment.rate` and resolves normally.

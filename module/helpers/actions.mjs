@@ -13,7 +13,7 @@
 //
 // ─── The distinction this module exists to keep ───────────────────────────────
 // A MULTI-ACTION (p.59-60) is not an extra action. A 100%+ TN lets one declared action
-// "perform the same action two or three times consecutively in the same turn" — same
+// The multi-action rule repeats one action two or three times in a turn (p.59). Same
 // skill, same target, divided TN. That is two or three CHECKS bought with ONE action.
 // A press skill buys ACTIONS, each free to be a different skill against a different
 // target, and each free to be its own multi-action. Nothing here touches

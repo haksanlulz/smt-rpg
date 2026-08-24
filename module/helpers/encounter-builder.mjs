@@ -9,13 +9,13 @@
 // consequence to the GM, and this module is only about WHAT shows up once they decide.
 //
 // What the page does specify, and all of it is here:
-//   "prepare two separate groups of enemies, divided by the amount of threat"
-//   Group 1 — "a group of IDENTICAL, weak demons ... aim for them to last roughly 3 rounds"
+//   two enemy groups, split by threat level (p.291)
+//   Group 1: identical weak demons, sized to last about three rounds
 //   Group 2 — "a mixture of demons that are made to be fun to fight. Give them a mixture
 //              of weaknesses and attack methods ... be sure not to include any healing or
 //              debuffing demons and allow for only ONE buff-type demon ... aim for this
 //              group lasting around 4-5 rounds"
-//   Both     — "use a number of demons equal to the PCs"
+//   Both     — a demon count matching the PCs
 //
 // ─── Rules vs advice, kept apart on purpose ──────────────────────────────────
 // Three of those are checkable and are enforced: group size equals party size, the mixed
@@ -58,7 +58,7 @@ export function demonRoles(demon) {
   return { healer, buffer: signs.has(1), debuffer: signs.has(-1) };
 }
 
-// "be sure not to include any healing or debuffing demons" — a hard exclusion. The
+// Healing and debuffing demons are excluded outright. The
 // buffer cap is NOT here, because one buffer is allowed and eligibility is per-demon
 // while the cap is a property of the group.
 export function eligibleForMixed(demon) {
@@ -66,13 +66,13 @@ export function eligibleForMixed(demon) {
   return !roles.healer && !roles.debuffer;
 }
 
-// "use a number of demons equal to the PCs" — for BOTH groups.
+// a demon count matching the PCs — for BOTH groups.
 export function groupSize(partySize) {
   const n = Number.isFinite(partySize) ? Math.floor(partySize) : 0;
   return Math.max(1, n);
 }
 
-// Group 1: "a group of identical, weak demons". Identical is the whole point — one
+// Group 1: a group of identical weak demons. Identical is the whole point — one
 // demon, repeated. `pick` indexes the candidate list; the caller rolls it.
 export function buildWeakGroup(candidates, { partySize = 1, pick = 0 } = {}) {
   const list = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
@@ -117,7 +117,7 @@ export function buildMixedGroup(candidates, { partySize = 1, order = null } = {}
   const admit = (demon, requireNewWeakness) => {
     if (group.length >= size) return;
     const isBuffer = demonRoles(demon).buffer;
-    // "allow for only one buff-type demon" — the cap is on the GROUP.
+    // at most one buff-type demon — the cap is on the GROUP.
     if (isBuffer && buffers >= CONFIG.SMT.encounterBuilder.maxBuffers) return;
     const sig = weaknessSignature(demon);
     if (requireNewWeakness && seenWeakness.has(sig)) return;

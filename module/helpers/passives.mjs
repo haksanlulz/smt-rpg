@@ -79,7 +79,7 @@ export function powerDiceFor(skills, registry, scope = "physical") {
 // power of Fire attacks by 1.5x (before power roll)"). Returns { fire: 1.5, ... }
 // holding only the elements that are actually boosted.
 //
-// Duplicates do NOT compound: the Amplify group's "Similar abilities do not stack"
+// Duplicates do NOT compound: the Amplify group's similar abilities do not stack
 // is the house rule for repeated passives, and two Fire Boosts on one demon would
 // otherwise silently become 2.25x. Highest wins.
 export function elementBoosts(skills, registry) {
@@ -199,7 +199,7 @@ export function drainOnStrike(skills, registry, { hpDealt = 0, isBasicStrike = f
 
 // Attack All (p.110): "Basic strikes always target all enemies. This effect does not
 // apply to Counter, Retaliate, or Avenge." The exclusion is p.96's too, stated there as
-// "Even if you have the Attack All skill, it may not be applied to this counterattack."
+// p.96 carves this out explicitly: Attack All does not extend a counterattack.
 export function attackAllApplies(skills, registry, { isBasicStrike = false, isCounter = false } = {}) {
   if (!isBasicStrike || isCounter) return false;
   for (const skill of skills ?? []) {

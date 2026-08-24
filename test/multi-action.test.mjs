@@ -59,7 +59,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(multiActionPlan(210), { actions: 3, tnEach: 70, eligible: true },
     "p.60 example 2: a 210% magic check becomes three at 70%");
 
-  // Three is the ceiling however high the TN goes — "but no more than three".
+  // Three is the ceiling however high the TN goes: the book caps it at three.
   eq(multiActionPlan(9999).actions, 3, "three actions is the hard ceiling (p.59)");
   eq(SMT.multiAction.maxActions, 3, "and the ceiling is a named constant");
 }
@@ -88,7 +88,7 @@ function ok(cond, label) { eq(!!cond, true, label); }
 }
 
 // --- taking FEWER parts than the maximum ------------------------------------
-// p.60 divides "by the number of actions taken", not by the number available, so a
+// p.60 divides by the count of actions taken, not by the number available, so a
 // player who takes two of a possible three rolls at TN/2.
 {
   eq(multiActionTn(210, 3), 70, "three of three at 210% is 70% each");

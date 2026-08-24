@@ -5,8 +5,8 @@
 // phase 8 (full), then go to phase 15 before returning to phase 0 (New) again."
 //
 // p.301 progression, during a Dungeon Attack:
-//   "Move 1 step on the Kagutsuchi Chart per scene."
-//   "Move 1 step on the Kagutsuchi Chart per combat completed."
+//   one chart step per scene.
+//   one chart step per completed combat.
 //   "Each time you pass 'New'/Phase 0, the PCs make a Luck check. If all PCs fail, or if
 //    one PC auto-fails or fumbles, the party encounters enemy demons. If a PC rolls a
 //    critical, something beneficial happens instead."
@@ -59,12 +59,12 @@ export function phaseTrend(phase) {
 // "Demons go wild, and won't engage in negotiations. Random encounter chances are
 // higher. Sacrificial fusion is available."
 
-// p.69 lists Full among the situations where "a PC cannot choose the talking action".
+// p.69 lists Full among the situations where PCs cannot take the talk action.
 // The GM override is theirs and is not modelled: the book hands it to them in the same
 // breath, and a rule that can always be waived is a prompt, not a gate.
 export const negotiationBlocked = (phase) => isFull(phase);
 
-// p.79: "Sacrificial fusion may be performed when Kagutsuchi is Full."
+// p.79: sacrificial fusion requires a Full Kagutsuchi.
 export const sacrificialFusionAvailable = (phase) => isFull(phase);
 
 // "Random encounter chances are higher" states no number, so none is invented — this
