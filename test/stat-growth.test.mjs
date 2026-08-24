@@ -3,7 +3,8 @@
 //
 // spec: demon-level-ups-roll-their-stat-growth
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule as printed at p.34; paraphrased here, see the book for the wording.
+//
 //   1 Strength · 2 Magic · 3 Vitality · 4 Agility · 5 Luck
 //   6, 7, 8  Favored stat, as determined by demon embodied
 //   9, 0     Increase whichever stat is preferred

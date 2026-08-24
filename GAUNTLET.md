@@ -404,16 +404,16 @@ Check: test/passive-effects.test.mjs  (tagged  // spec: printed-passives-have-me
 
 **Still genuinely unwired, re-derived from the registry on 2026-08-15 and split by WHY, because "not implemented" was hiding three different situations:**
 
-| Passive | Printed effect | Status |
+| Passive | Effect (paraphrased) | Status |
 |---|---|---|
-| Drain Attack | recover HP equal to 25% of the damage dealt (see the book) | **WIRED 2026-08-15.** Paid from `hpDealt`, the HP actually lost, so an overkill on a 5 HP target drains 1 — the same distinction the halve-damage escape turned on. Rounds DOWN (`[inferred]`; the book is silent, and rounding a bonus up heals off a 1-damage poke). Scoped to the basic strike, not to physical attacks. |
-| Attack All | basic strikes always target all enemies (see the book) | **WIRED 2026-08-15.** *Always*, so it WIDENS a caller's single target rather than only filling an empty one. p.96's carve-out is checked as `isReaction`: "Even if you have the Attack All skill, it may not be applied to this counterattack." |
-| Item Pro | when using items, add 1d10 to the power roll (see the book) | **WIRED 2026-08-15.** Its own registry kind, deliberately not `powerDie` — that carries a physical/magical scope and an item is neither, so reusing it would have handed the die to every spell. Asserted from both sides. |
-| Luck Smiles | completely nullify the effects of an attack on you, 1/scenario (see the book) | **WIRED 2026-08-15.** A button injected onto the pending-attack row, only for holders with budget left. "The EFFECTS" is broader than damage, so it short-circuits the whole row — no dodge, damage, ailment, rider or counter. Budget is the ordinary p.96 ledger; p.110's "may be learned multiple times" is exactly `useBudget`'s `copies`. |
-| Mind's Eye | +20% to an awareness check against an ambush (see the book) | **blocked on lane 4** — no ambush or awareness check exists yet |
-| Lucky Find | a Luck check to gain an item off the Item Acquisition table (see the book) | **blocked on lane 4** — the table is not imported |
-| Good Instincts | +10% to a check (usually Luck) to notice things (see the book) | **no mechanical surface** — the system has no "notice" action to bonus |
-| Once A Snake | learn something useful, 1/scenario only (see the book) | **no mechanical surface** — pure GM fiat; the use budget is the only automatable part |
+| Drain Attack | recovers HP equal to a quarter of damage dealt (p.96) | **WIRED 2026-08-15.** Paid from `hpDealt`, the HP actually lost, so an overkill on a 5 HP target drains 1 — the same distinction the halve-damage escape turned on. Rounds DOWN (`[inferred]`; the book is silent, and rounding a bonus up heals off a 1-damage poke). Scoped to the basic strike, not to physical attacks. |
+| Attack All | basic strikes always hit every enemy (p.96) | **WIRED 2026-08-15.** *Always*, so it WIDENS a caller's single target rather than only filling an empty one. p.96's carve-out is checked as `isReaction`: the skill does not extend a counterattack. |
+| Item Pro | adds 1d10 to an item power roll (p.96) | **WIRED 2026-08-15.** Its own registry kind, deliberately not `powerDie` — that carries a physical/magical scope and an item is neither, so reusing it would have handed the die to every spell. Asserted from both sides. |
+| Luck Smiles | nullifies an attack's effects on the holder, once per scenario (p.96) | **WIRED 2026-08-15.** A button injected onto the pending-attack row, only for holders with budget left. "The EFFECTS" is broader than damage, so it short-circuits the whole row — no dodge, damage, ailment, rider or counter. Budget is the ordinary p.96 ledger; p.110's "may be learned multiple times" is exactly `useBudget`'s `copies`. |
+| Mind's Eye | +20% to an awareness check against an ambush (p.96) | **blocked on lane 4** — no ambush or awareness check exists yet |
+| Lucky Find | a Luck check for an item off the acquisition table (p.96) | **blocked on lane 4** — the table is not imported |
+| Good Instincts | +10% to a check, usually Luck, to notice things (p.96) | **no mechanical surface** — the system has no "notice" action to bonus |
+| Once A Snake | learn something useful, once per scenario (p.96) | **no mechanical surface** — pure GM fiat; the use budget is the only automatable part |
 
 The spec's second clause is what keeps the rest honest: an unimplemented passive must resolve to `null`, never to a neighbour. **The four still open are not deferred work items — two are downstream of lane 4 and two have nothing to automate**, and saying so is worth more than a row that reads "todo" forever. Each is asserted `null` by name in `passive-effects.test.mjs`, with Once A Snake carrying an ESCAPE tag: it shares a page and the exact "1/scenario only" wording with Luck Smiles, which makes it the one most likely to be silently absorbed into its neighbour. **Registry as of 2026-08-15: 26 named entries + 40 generated Affinity Changers.**
 

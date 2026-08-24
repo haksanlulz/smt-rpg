@@ -66,13 +66,10 @@ function ok(cond, label) { eq(!!cond, true, label); }
 
 // --- the two outright bars --------------------------------------------------
 {
-  // p.60: "Skills that automatically pass their checks cannot be used for
-  // multi-actions." Restated on p.96 for auto skills whose TN would exceed 100%.
   for (const tn of [100, 210, 500]) {
     eq(multiActionPlan(tn, { autoSuccess: true }), { actions: 1, tnEach: tn, eligible: false },
       `ESCAPE: an auto-success skill never multi-actions, even at ${tn}%`);
   }
-  // p.74: "Multi-actions cannot be taken with negotiations."
   for (const tn of [100, 210, 500]) {
     eq(multiActionPlan(tn, { isNegotiation: true }).actions, 1,
       `ESCAPE: negotiation never multi-actions, even at ${tn}%`);
@@ -109,7 +106,6 @@ function ok(cond, label) { eq(!!cond, true, label); }
 }
 
 // --- the critical value follows the divided TN ------------------------------
-// p.60: "Adjust the critical value for each based on the new TN, post-division."
 // Nothing does that adjustment explicitly — evaluatePercentile derives the crit
 // threshold from whatever TN it is handed, so handing it the divided one is the whole
 // of the rule. These assertions exist to keep that true.

@@ -3,7 +3,8 @@
 //
 // spec: the-encounter-check-is-the-partys-roll-not-a-characters
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule as printed at p.70; paraphrased here, see the book for the wording.
+//
 //   Critical +2 · Success +1 · Failure -1 · Auto-Fail -2 · Fumble -3
 //
 //   +5 or more   The PCs back attack the enemy

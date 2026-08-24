@@ -3,7 +3,6 @@
 //
 // spec: fleeing-succeeds-unless-somebody-stops-it
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
 // THE DEFAULT IS SUCCESS, NOT A ROLL, and that is the whole shape of the unit. A check
 // exists only because somebody chose to stop it. Every other escape-shaped rule in this
 // system rolls for it, so "prompt for a dodge check on every flee" is what gets built by

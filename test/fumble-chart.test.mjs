@@ -3,7 +3,13 @@
 //
 // spec: a-fumbled-attack-lands-on-your-own-side
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// The chart maps check type to outcome (see p.58 for the printed wording):
+//   Hit Check        -> the attack lands on the fumbler and/or their allies
+//   Dodge Check      -> resolved as though hit by a critical
+//   Negotiation      -> the talk target is enraged and combat begins
+//   Save             -> the ailment persists, and HP and MP are halved
+//   Any Other Check  -> GM's discretion
+//
 // Before this, a fumbled HIT CHECK did nothing at all beyond inflicting the Curse.
 // SMTItem#use branched on isSuccess three times and never on isFumble, so the whole
 // top row of the chart — the one that fires most often, on every fumbled attack in

@@ -1,6 +1,9 @@
 // Magatama loadout rules (p.39). Pure: reads CONFIG.SMT, touches no documents.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule, in brief (p.39): a Fiend may hold up to three Magatama at once but draws
+// bonuses from only one. The active one may be switched freely out of combat, and
+// not at all during it.
+//
 // Same rule as advancement.mjs and ailments.mjs: never import data/fields.mjs here.
 
 // Whether an incoming update is a genuine switch of the active Magatama that combat

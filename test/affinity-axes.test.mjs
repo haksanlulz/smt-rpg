@@ -4,10 +4,7 @@
 // spec: affinity-ratings-stack-across-axes
 //
 // A demon can hold a rating against the ELEMENT of an attack, against MAGIC as a
-// category, and against AILMENT attacks as a category.
-// Rule as printed in the book; paraphrased here, see the page cite above.
-//    is applied: Repel > Drain > Null > Strong > Weak (with Repel having the
-//    highest priority)."
+// Rule as printed at the book; paraphrased here, see the book for the wording.
 //
 //   "Weak: Damage and ailment effect rate are both doubled."
 //   "Strong: Damage and ailment effect rate are both halved."

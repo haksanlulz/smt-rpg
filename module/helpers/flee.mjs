@@ -1,6 +1,13 @@
 // Fleeing (p.70). Pure: reads CONFIG.SMT, touches no document.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule, in brief (see p.70 for the printed text): fleeing is available in any
+// non-Boss encounter. Opposing combatants choose whether to block it. Unblocked,
+// it simply succeeds; no roll. If every member of a side flees, combat ends.
+//
+// Blocked, the escapee rolls a dodge check, with +20% when their side outnumbers
+// the enemy. A critical takes one extra ally out with them. A fumble gives every
+// enemy a basic strike against them, and those strikes cannot trigger Counter.
+//
 // ─── The default is SUCCESS, not a roll ──────────────────────────────────────
 // Unblocked fleeing is automatic. A check only exists because somebody chose to stop it,
 // which makes "was it blocked" the first question and the roll the exception. Prompting

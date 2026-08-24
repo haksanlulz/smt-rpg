@@ -9,7 +9,8 @@
 // their turn" (p.278) — so the base budget is 1, or 2 with the trait, and nothing else
 // moves it except a press skill.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule as printed at p.96 PRESS SKILLS; paraphrased here, see the book for the wording.
+//
 // THE TRAP THIS SUITE EXISTS FOR is the collision with multi-action (p.59-60), which
 // looks like the same axis and is not. A multi-action spends ONE action to make two or
 // three CHECKS at a divided TN — "perform the same action two or three times

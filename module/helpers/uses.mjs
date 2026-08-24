@@ -1,6 +1,9 @@
 // Limited skills (p.96) and Focus (p.105). Pure: reads CONFIG.SMT, touches no document.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// Rule, in brief (p.96): some skills carry use limits, capping how often they fire
+// within a period -- Fortune once per scenario, Endure once per combat -- and the book
+// makes the player responsible for tracking them.
+//
 // The book hands tracking to the player; this system's clause-2 bar says otherwise —
 // "the GM can do that by hand" is not done — so the ledger is kept for them. Endure
 // already had a hand-rolled `endureUsed` boolean; this generalises that shape to any

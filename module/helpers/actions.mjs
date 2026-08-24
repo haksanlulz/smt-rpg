@@ -1,7 +1,31 @@
 // The action budget (p.63) and press skills (p.96). Pure: reads CONFIG.SMT, touches no
 // document.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// p.63 gives every combatant one turn per round and one action on that turn, where an
+// action is a basic strike, a skill, talking, aiding, concentrating, defending, or using
+// an item. The only printed change to that number is the boss trait, which grants two
+// (p.278).
+//
+// p.96 press skills raise the count: Beast Eye spends one action to grant two, and
+// Dragon Eye spends one to grant four. The grant is GROSS, not net -- the spend is
+// charged separately, so the book's "effectively one more / three more" arithmetic falls
+// out of the model rather than being hardcoded.
+//
+// ─── The distinction this module exists to keep ───────────────────────────────
+// A MULTI-ACTION (p.59-60) is not an extra action. A 100%+ TN lets one declared action
+// "perform the same action two or three times consecutively in the same turn" — same
+// skill, same target, divided TN. That is two or three CHECKS bought with ONE action.
+// A press skill buys ACTIONS, each free to be a different skill against a different
+// target, and each free to be its own multi-action. Nothing here touches
+// multiActionPlan, and nothing there touches this.
+//
+// ─── Why the ledger carries its own turn key ──────────────────────────────────
+// The budget resets every turn, and the reset is expressed as `key` mismatch rather
+// than as a hook that must fire. A ledger stamped for an earlier turn reads as a full
+// budget, so a dropped updateCombat, a mid-combat reload, or an actor dragged into a
+// fight already in progress all fail OPEN. The failure that matters here is refusing a
+// legal action, not permitting an extra one — a GM can see a combatant acting twice and
+// cannot see one who was silently forbidden to act at all.
 
 // "Gain two actions this round" / "Gain four actions this round" (p.105 table). The
 // printed rows are the only statement of the number; the ch4 prose gives the rule but

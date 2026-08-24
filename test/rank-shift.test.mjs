@@ -3,7 +3,6 @@
 //
 // spec: rank-shift-fusion-names-a-demon
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
 
 import { SMT } from "../module/config.mjs";
 

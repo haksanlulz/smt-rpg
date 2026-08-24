@@ -1,7 +1,13 @@
 // The Fumble Effect Chart (p.58) and the hit-check row's elaboration (p.64). Pure:
 // reads CONFIG.SMT, touches no document.
 //
-// Rule as printed in the book; paraphrased here, see the page cite above.
+// The chart maps the check type to an outcome (see p.58 for the printed wording):
+//   Hit Check        -> the attack lands on the fumbler and/or their allies
+//   Dodge Check      -> resolved as though hit by a critical
+//   Negotiation      -> the talk target is enraged and combat begins
+//   Save             -> the ailment persists, and HP and MP are halved
+//   Any Other Check  -> GM's discretion
+//
 // Two of the five were already engine behaviour before this file existed: the dodge
 // row is `dodgeFumble` in helpers/damage.mjs, and the save row is
 // `fumbledSaveResources` in helpers/ailments.mjs. This module owns the chart as a
