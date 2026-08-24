@@ -35,4 +35,4 @@ The rulebook PDF is not included; page references in the comments line up with i
 
 ## License
 
-Code by Abishai James. Shin Megami Tensei: Tokyo Conception and its content belong to their respective rights holders; no rulebook text is included here.
+Code is MIT (see LICENSE). Shin Megami Tensei: Tokyo Conception and its game content belong to their respective rights holders (ATLUS; English translation by LionWing Publishing); no rulebook text or assets are included here, and you need your own copy of the book to play.
