@@ -683,17 +683,16 @@ export default class SMTItem extends Item {
     if (outcome.success && game.user.isGM) target.sheet?.render(true);
   }
 
-  // Fumble Effect Chart, Hit Check row (p.58): "Hit yourself and/or your allies."
+  // Fumble Effect Chart, Hit Check row (p.58): the attack lands on the fumbler
+  // and/or their allies.
   //
-  // p.64 elaborates: "the attack then randomly hits either themselves or an ally (and
-  // in the case of the attack being 'all' then it hits all allies, themselves
-  // included). When hitting an ally, that ally may avoid the attack with a dodge check
-  // as normal, but an attacker cannot avoid hitting themselves."
+  // p.64 elaborates: the attack hits either the attacker or a random ally, and an
+  // "all" attack hits every ally plus the attacker. An ally may dodge as normal;
+  // the attacker cannot dodge hitting themselves.
   //
-  // The power roll still happens — p.58: "Even if you fumble, there are times when you
-  // may still need to determine power, such as when hitting yourself/allies." It is
-  // rolled WITHOUT the critical flag and without Focus: a fumble is not a critical, and
-  // spending a stored Focus on a self-hit would punish the fumble twice.
+  // The power roll still happens (p.58 says so for the self-hit and ally-hit cases).
+  // It is rolled WITHOUT the critical flag and without Focus: a fumble is not a
+  // critical, and spending a stored Focus on a self-hit would punish it twice.
   async _resolveFumbledAttack(actor, checkResult) {
     const { getAutoTargets, postAttacksToTargets } = await import("../helpers/combat.mjs");
     const { fumbleVictims, fumbleVictimPool } = await import("../helpers/fumble.mjs");
