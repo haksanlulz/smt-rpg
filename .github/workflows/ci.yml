@@ -1,0 +1,73 @@
+name: CI
+
+# The "a stranger clones this and runs the suite" channel. Until now this repo
+# had no CI, so 35 test files only ever ran on the author's machine. The sibling
+# mcp-fairrent shipped four red commits in a row for exactly that reason: a
+# locally-set shell variable masked a failure CI catches on the first push.
+#
+# There is no package.json here — this is a Foundry system, and the tests are
+# standalone node scripts that exit 0 on pass and 1 on fail (see the header of
+# any test/*.test.mjs). So the runner is a loop, not `npm test`, and it must
+# report which file failed rather than just a non-zero exit.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only: this workflow checks out and tests, and needs no write scope.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: run every test file
+        run: |
+          set -u
+          failed=0
+          ran=0
+          for f in test/*.test.mjs; do
+            ran=$((ran + 1))
+            if node "$f" > /tmp/out.txt 2>&1; then
+              echo "ok   $f"
+            else
+              failed=$((failed + 1))
+              echo "::error file=$f::$f failed"
+              tail -20 /tmp/out.txt
+            fi
+          done
+          # A glob that matched nothing would leave ran=1 with a literal
+          # "test/*.test.mjs" that node cannot open, so it would fail loudly
+          # rather than pass vacuously — but assert the population anyway, since
+          # a suite that silently shrinks to zero is the failure mode that looks
+          # most like success.
+          echo "ran $ran file(s), $failed failed"
+          if [ "$ran" -lt 30 ]; then
+            echo "::error::expected at least 30 test files, found $ran — did the suite collapse?"
+            exit 1
+          fi
+          [ "$failed" -eq 0 ]
+
+      - name: the rulebook must never be committed
+        # contract.test.mjs asserts this too, but it SKIPS when git is
+        # unreachable. Here git is always reachable, so this is the one place the
+        # check cannot be skipped — and it is the repo's single most important
+        # invariant.
+        run: |
+          tracked=$(git ls-files -- rulebook-text data-local '*.pdf')
+          if [ -n "$tracked" ]; then
+            echo "::error::rulebook material is tracked: $tracked"
+            exit 1
+          fi
+          echo "ok   no rulebook PDF or extracted text is tracked"
